@@ -53,10 +53,10 @@ def test_real_client_signs_on_and_round_trips():
 
     # five input fields, at the columns and lengths we drew, password hidden
     assert [(f["row"], f["col"], f["length"], f["nondisplay"]) for f in first["inputs"]] == [
-        (7, 53, 10, False), (8, 53, 10, True), (9, 53, 10, False),
-        (10, 53, 10, False), (11, 53, 10, False),
+        (5, 52, 10, False), (6, 52, 10, True), (7, 52, 10, False),
+        (8, 52, 10, False), (9, 52, 10, False),
     ]
-    assert first["cursor"] == [7, 53]
+    assert first["cursor"] == [5, 52]
 
     # the client sent exactly what was typed, at the field addresses
     assert [f["data"] for f in out["sent"]] == ["wren01", "secret"]

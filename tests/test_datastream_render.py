@@ -135,4 +135,43 @@ def test_signon_message_takes_the_bottom_row_in_white():
     [msg] = [f for f in s.fields if isinstance(f, Text) and f.row == 23]
     assert (msg.col, msg.attr, msg.text) == (0, ds.ATTR_WHITE, "CPF0000 - test")
     quiet = signon_screen("QPADEV0001")
-    assert any(isinstance(f, Text) and f.row == 23 and "Not IBM" in f.text for f in quiet.fields)
+    assert any(isinstance(f, Text) and f.row == 23 and "NOT IBM" in f.text for f in quiet.fields)
+
+
+# -- the stock sign-on layout -------------------------------------------------------
+# Reference: a photo of a default sign-on display (status bar 6/53) and a PUB400
+# capture whose right hand block is stock. Positions only, no IBM wording.
+
+def _snap():
+    from silverlake.oracle.terminal import Terminal
+    t = Terminal()
+    t.apply(render(signon_screen("QPADEV0001")))
+    return t.snapshot()
+
+
+def test_stock_signon_fields_and_cursor():
+    snap = _snap()
+    assert [(f["row"], f["col"], f["length"]) for f in snap["fields"]] == [
+        (5, 52, 10), (6, 52, 10), (7, 52, 10), (8, 52, 10), (9, 52, 10)]
+    assert snap["cursor"] == [5, 52]  # the 6/53 in the photo's status bar, 1-based
+
+
+def test_stock_signon_info_block_and_copyright_position():
+    runs = {(r["row"], r["col"]): r for r in _snap()["runs"]}
+    for row in (1, 2, 3):
+        assert (row, 47) in runs and runs[(row, 47)]["length"] == 19   # label
+        assert (row, 69) in runs                                        # value
+    assert (23, 39) in runs                                             # copyright line
+
+
+def test_stock_signon_has_no_stray_runs():
+    rows = {r["row"] for r in _snap()["runs"]}
+    assert rows == {0, 1, 2, 3, 5, 6, 7, 8, 9, 23}
+
+
+def test_dotted_labels_end_on_the_last_column_and_keep_a_space_after_the_label():
+    for label in ("User", "Password", "Program/procedure", "Current library"):
+        s = signon_screen("D")
+        text = next(f.text for f in s.fields if isinstance(f, Text) and f.text.startswith(label))
+        assert len(text) == 35 and text[-1] == "."
+        assert text[len(label)] == " "

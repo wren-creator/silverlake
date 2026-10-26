@@ -44,11 +44,15 @@ Generic facts, now built into Silverlake:
 
 Specific to PUB400, so deliberately not copied:
 
-- It runs a customized sign-on: two fields where a stock screen has five, at different positions. That is why `compare` still reports layout differences. PUB400 is a poor oracle for the stock sign-on layout.
+- It runs a customized sign-on: two fields where a stock screen has five, at different positions. That is why `compare` still reports layout differences on the left half. PUB400 is a poor oracle for the stock sign-on layout, but its right hand block and bottom row are stock.
+
+## The stock sign-on
+
+A photo of a default sign-on display (Italian language, copyright 1980, 1996) settled the layout. It was consulted, not stored in this repo, and only positions were taken from it, never wording. Its status bar read `6/53`, the cursor at row 6, column 53, 1-based. That fixes the input field column exactly at `(5, 52)` zero-based. The right hand block (labels at col 47, values at col 69) and the copyright column (39) agree with PUB400 to the cell. Label columns (14) and the title column (34) are read off the photo and good to about one column. Colors come from PUB400, since a monochrome photo cannot confirm them.
 
 ## Still open
 
-- **A stock sign-on sample.** We need a capture from a system with the default sign-on display to settle the layout.
+- **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.
 - **Authenticated screens.** Menus and commands need a real sign-on. That means the user's own profile, with the password read from the environment, and a human deciding each run.
 - **The Query path against a real host.** The client answers a 5250 Query, and a test proves it, but PUB400's sign-on never sent one. It will appear after sign-on.
 - **Orders not yet seen on real streams.** Erase To Address attribute-count handling is unverified.

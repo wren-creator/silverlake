@@ -108,7 +108,7 @@ def test_client_that_refuses_new_environ_still_gets_a_screen():
 def test_enter_round_trip_echoes_user_and_reports_not_wired():
     async def fn(c):
         await c.pump(lambda: c.records)
-        c.send_input(0xF1, [(7, 53, "wren01"), (8, 53, "secret")])
+        c.send_input(0xF1, [(5, 52, "wren01"), (6, 52, "secret")])
         await c.pump(lambda: len(c.records) >= 2)
         text = signon_text(ds.split_gds(c.records[1])[1])
         assert "WREN01" in text
@@ -121,7 +121,7 @@ def test_garbage_record_does_not_kill_the_connection():
     async def fn(c):
         await c.pump(lambda: c.records)
         c.w.write(tn.record(b"not a gds record at all"))
-        c.send_input(0xF1, [(7, 53, "bob")])
+        c.send_input(0xF1, [(5, 52, "bob")])
         await c.pump(lambda: len(c.records) >= 2)
         assert "BOB" in signon_text(ds.split_gds(c.records[1])[1])
     run(with_server(fn))

@@ -1,8 +1,19 @@
-"""The sign-on screen and its Phase 1 controller. The labels and layout follow
-the shape of a real IBM i sign-on so structure can be diffed against a capture;
-the wording around them is ours. Real sign-on checks arrive in Phase 3."""
+"""The sign-on screen and its Phase 1 controller.
 
-import time
+The layout is the stock one, taken from two sources that agree: a photo of a
+default sign-on display (the status bar read 6/53, which fixes the field column
+exactly) and a PUB400 capture, whose right hand block is stock. The wording is
+ours. Real sign-on checks arrive in Phase 3.
+
+Layout (0-based rows and columns):
+  row 0          title
+  rows 1-3       System / Subsystem / Display, labels at col 47, values at col 69
+  rows 5-9       User, Password, Program/procedure, Menu, Current library,
+                 labels at col 14, input fields at col 52
+  row 23         copyright line at col 39, or the message when there is one
+Label columns are read off a photo and good to about one column. The field
+column, the right hand block, and the copyright column are exact.
+"""
 
 from ..proto import datastream as ds
 from .model import Input, Screen, Text
@@ -10,35 +21,53 @@ from .model import Input, Screen, Text
 SYSTEM_NAME = "SILVERLK"
 SUBSYSTEM = "QINTER"
 
-_LABEL_COL = 2
-_FIELD_COL = 53
+TITLE_COL = 34         # estimated from the photo, centered about col 37
+INFO_LABEL_COL = 47
+INFO_VALUE_COL = 69
+LABEL_COL = 14
+LABEL_WIDTH = 35       # label and its dots run to col 48, the field starts at col 52
+FIELD_COL = 52
+
+# Colors from the PUB400 capture. A monochrome photo cannot confirm them.
+INFO_LABEL_ATTR = ds.ATTR_BLUE
+INFO_VALUE_ATTR = ds.ATTR_TURQUOISE
+
+
+def dotted(label: str, width: int = LABEL_WIDTH) -> str:
+    """A label followed by alternating dots, the last dot on the last column,
+    the way IBM i prompts line up."""
+    chars = list(label.ljust(width))
+    for i in range(width - 1, len(label), -2):
+        chars[i] = "."
+    return "".join(chars)
 
 
 def signon_screen(display: str, message: str = "", user: str = "") -> Screen:
-    when = time.strftime("%m/%d/%y  %H:%M:%S")
     rows: list[Text | Input] = [
-        Text(1, 30, "Sign On", ds.ATTR_WHITE),
-        Text(3, _LABEL_COL, f"System  . . . . . :   {SYSTEM_NAME}", ds.ATTR_WHITE),
-        Text(4, _LABEL_COL, f"Subsystem . . . . :   {SUBSYSTEM}", ds.ATTR_WHITE),
-        Text(5, _LABEL_COL, f"Display . . . . . :   {display}", ds.ATTR_WHITE),
-        Text(7, _LABEL_COL, "User  . . . . . . . . . . . . . . . . . . . . . . ."),
-        Input(7, _FIELD_COL, 10, "user", monocase=True, value=user),
-        Text(8, _LABEL_COL, "Password  . . . . . . . . . . . . . . . . . . . . ."),
-        Input(8, _FIELD_COL, 10, "password", hidden=True),
-        Text(9, _LABEL_COL, "Program/procedure  . . . . . . . . . . . . . . . . ."),
-        Input(9, _FIELD_COL, 10, "program", monocase=True),
-        Text(10, _LABEL_COL, "Menu  . . . . . . . . . . . . . . . . . . . . . . ."),
-        Input(10, _FIELD_COL, 10, "menu", monocase=True),
-        Text(11, _LABEL_COL, "Current library  . . . . . . . . . . . . . . . . ."),
-        Input(11, _FIELD_COL, 10, "library", monocase=True),
-        Text(22, _LABEL_COL, when),
+        Text(0, TITLE_COL, "Sign On", ds.ATTR_WHITE),
+        Text(1, INFO_LABEL_COL, "System  . . . . . :", INFO_LABEL_ATTR),
+        Text(1, INFO_VALUE_COL, SYSTEM_NAME, INFO_VALUE_ATTR),
+        Text(2, INFO_LABEL_COL, "Subsystem . . . . :", INFO_LABEL_ATTR),
+        Text(2, INFO_VALUE_COL, SUBSYSTEM, INFO_VALUE_ATTR),
+        Text(3, INFO_LABEL_COL, "Display . . . . . :", INFO_LABEL_ATTR),
+        Text(3, INFO_VALUE_COL, display, INFO_VALUE_ATTR),
+        Text(5, LABEL_COL, dotted("User")),
+        Input(5, FIELD_COL, 10, "user", monocase=True, value=user),
+        Text(6, LABEL_COL, dotted("Password")),
+        Input(6, FIELD_COL, 10, "password", hidden=True),
+        Text(7, LABEL_COL, dotted("Program/procedure")),
+        Input(7, FIELD_COL, 10, "program", monocase=True),
+        Text(8, LABEL_COL, dotted("Menu")),
+        Input(8, FIELD_COL, 10, "menu", monocase=True),
+        Text(9, LABEL_COL, dotted("Current library")),
+        Input(9, FIELD_COL, 10, "library", monocase=True),
     ]
     # A real IBM i puts the message on the bottom row, in white, and it takes
     # the place of the copyright line there (seen in a PUB400 capture).
     if message:
         rows.append(Text(23, 0, message[:80], ds.ATTR_WHITE))
     else:
-        rows.append(Text(23, _LABEL_COL, "Silverlake simulated system. Not IBM."))
+        rows.append(Text(23, 39, "SILVERLAKE SIMULATION. NOT IBM.", ds.ATTR_WHITE))
     return Screen(rows, cursor="user")
 
 

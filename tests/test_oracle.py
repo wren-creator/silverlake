@@ -199,7 +199,7 @@ def test_capture_signon_from_live_silverlake():
     assert len(cap["snapshots"]) == 1
     snap = cap["snapshots"][0]
     assert len(snap["fields"]) == 5
-    assert snap["cursor"] == [7, 53]
+    assert snap["cursor"] == [5, 52]
     assert cap["records_hex"][0], "raw records are kept for local inspection"
     json.dumps(cap)  # serializable
 
