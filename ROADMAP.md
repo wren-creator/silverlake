@@ -8,8 +8,10 @@
 - [x] Phase 2: oracle harness, capture on a real IBM i, replay on Silverlake, diff structure
 - [ ] Phase 2 follow-ups: confirm title and label columns and colors from a stock capture (positions came from a photo), configurable password length, authenticated captures, Query path against a real host, more scenarios as Phase 3 lands
 - [x] Phase 3a: user profiles and the access model (five classes, eight special authorities, object authority), sign-on checks, seed-file assignment of any access level (docs/access-model.md)
-- [ ] Phase 3b: CRTUSRPRF, CHGUSRPRF, DSPUSRPRF, WRKUSRPRF as *SECADM; limited capabilities enforcement; password expiry and forced change; MAXSIGN lockout; adopted authority
-- [ ] Phase 3c: menus, CL dispatcher, QSYS.LIB object model in SQLite
+- [x] Phase 3b: CRTUSRPRF, CHGUSRPRF, DSPUSRPRF, DLTUSRPRF, WRKUSRPRF, SIGNOFF from a command line as *SECADM, profiles as secured objects, changes saved in SQLite
+- [ ] Phase 3b follow-ups: F4 prompting and keyword abbreviation, limited capabilities enforcement, password expiry and forced change, MAXSIGN lockout, adopted authority, more WRKUSRPRF options, DSPUSRPRF types
+- [ ] Confirm the profile command message IDs and which condition raises each (CPF2204, CPF2217, CPF2228 and the rest are documented, not seen); safe read-only checks on PUB400 are an unknown command and DSPUSRPRF on your own profile
+- [ ] Phase 3c: menus, the rest of the CL dispatcher, QSYS.LIB object model in SQLite
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
 - [ ] Phase 5: vulnerable and secure modes, seeded weak configs, exposed services, scenarios, flag checker, instructor and trainee docs

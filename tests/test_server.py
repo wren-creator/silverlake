@@ -166,3 +166,34 @@ def test_a_failing_controller_ends_that_session_not_the_server(caplog):
             await server.wait_closed()
     asyncio.run(go())
     assert "session failed" in caplog.text
+
+
+def test_command_line_over_a_real_socket_and_disconnect_counts_the_session_out():
+    from silverlake.system import profiles
+    store = profiles.load()
+
+    async def go():
+        server = await srv.serve("127.0.0.1", 0, lambda display: SignonController(display, store))
+        port = server.sockets[0].getsockname()[1]
+        try:
+            r, w = await asyncio.open_connection("127.0.0.1", port)
+            c = Client(r, w)
+            await c.pump(lambda: c.records)
+            c.send_input(0xF1, [(5, 52, "secadmin"), (6, 52, "SECADMIN")])
+            await c.pump(lambda: len(c.records) >= 2)
+            assert store.active == {"SECADMIN": 1}
+            c.send_input(0xF1, [(20, 7, "crtusrprf netuser text('from the wire')")])
+            await c.pump(lambda: len(c.records) >= 3)
+            assert "User profile NETUSER created." in signon_text(ds.split_gds(c.records[2])[1])
+            assert store.get("NETUSER").text == "from the wire"
+            w.close()                                          # drop the line without signing off
+            for _ in range(50):
+                if not store.active:
+                    break
+                await asyncio.sleep(0.02)
+            assert store.active == {}
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    run(go())

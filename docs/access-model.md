@@ -16,7 +16,31 @@ Access lives in `src/silverlake/data/profiles.toml`. Edit a profile there, or co
 | `limited_capabilities` | `*NO` `*PARTIAL` `*YES` | Recorded now. Enforcement comes with the command line. |
 | `initial_program`, `initial_menu`, `current_library`, `text` | | Recorded for the profile. |
 
-The `[system]` table sets `qsecurity` (20, 30, 40, 50), `qpwdlvl` (0 to 3), and `mode`.
+The `[system]` table sets `qsecurity` (20, 30, 40, 50), `qpwdlvl` (0 to 3), `mode`, and `default_profile_owner` (who "created" the seeded accounts, `SECADMIN` in the seed). A profile may also set `owner`, `public_authority` (its `AUT`, default `*EXCLUDE`) and `private_authority`.
+
+## Changing access from inside a session
+
+Sign on as someone with `*SECADM` (`SECADMIN`, `SECONLY`, `DEVADMIN`, `QSECOFR`) and type on the command line. Keywords are written in full, positional values work in IBM's order, unquoted values are upper-cased and quoted ones keep their case. There is no F4 prompting or keyword abbreviation yet.
+
+| Command | What it does here |
+|---|---|
+| `CRTUSRPRF USRPRF(BOB) PASSWORD(...) USRCLS(...) SPCAUT(...) GRPPRF(...) ...` | Creates a profile with CRTUSRPRF's defaults (`PASSWORD(*NONE)`, `USRCLS(*USER)`, `SPCAUT(*USRCLS)`, `AUT(*EXCLUDE)`). |
+| `CHGUSRPRF USRPRF(BOB) STATUS(*DISABLED)` | Changes only what you name. Everything else is `*SAME`. |
+| `DSPUSRPRF BOB` | Shows the profile (`TYPE(*BASIC)`, `OUTPUT(*)` only). |
+| `DLTUSRPRF BOB OWNOBJOPT(*CHGOWN OTHER)` | Deletes it. `*NODLT` (default) refuses if it owns objects, `*DLT` deletes them, `*CHGOWN name` moves them. |
+| `WRKUSRPRF` or `WRKUSRPRF DEV*` | A paged list of the profiles you have some authority to. Option 5 displays one. Page Up and Down scroll. |
+| `SIGNOFF` | Back to the sign-on screen. |
+
+Accepted but not modeled: `ASTLVL`. The rules come from the IBM i 7.5 command reference:
+
+- **Create** needs `*SECADM`. You may give only special authorities you hold, and giving `*SECADM` or `*AUDIT` also takes `*ALLOBJ`. A group profile needs `*CHANGE` and `*OBJMGT` to it.
+- **Change** needs `*SECADM` plus `*OBJMGT` and `*USE` to the profile. Only authorities that would be newly added are checked against what you hold.
+- **Display** needs `*READ` to the profile.
+- **Delete** needs `*SECADM` plus `*OBJEXIST` and `*USE` to the profile. Profiles that other profiles own pass to `QDFTOWN`. `QSYS`, `QSECOFR`, `QDFTOWN`, `QPGMR` and `QUSER` cannot be deleted, nor can a profile someone is signed on under. Group membership, private authorities, and authorization list entries naming the deleted profile are cleaned up.
+
+**A profile is itself a secured object.** It has an owner, a public authority (`*EXCLUDE` by default) and private entries, and it always holds `*CHANGE` and `*OBJMGT` to itself. So having `*SECADM` is not enough to touch every profile. `DEVADMIN` has `*SECADM` but owns nothing and was granted nothing, so `CHGUSRPRF STUDENT` fails with `CPF2228` while `SECADMIN`, who owns the seeded accounts, can change them. It is a real IBM i behavior and a good exercise.
+
+Changes are saved to `state/silverlake.sqlite` and survive a restart. `./reset.sh` deletes the state directory, and the next start reads the seed again. The saved state holds profile passwords as typed. That is deliberate for a training range with weak credentials, and the reason this must never hold anything real.
 
 ## The five user classes
 
@@ -97,11 +121,31 @@ The wording is Silverlake's own. IDs we have not seen on a real system are marke
 
 Passwords ignore case at `qpwdlvl` 0 and 1, and respect it at 2 and 3.
 
+## Profile administration messages
+
+IBM's command reference lists these IDs for the profile commands but does not say exactly which condition raises each one. Silverlake's mapping is an inference, so every one is marked as such in `system/messages.py` (`DOCUMENTED`). Completion messages carry no ID because none is documented. Command line mistakes (unknown command, bad keyword) also carry no ID yet.
+
+| ID | When |
+|---|---|
+| `CPF2204` | profile not found |
+| `CPF2217` | not authorized to the profile (display, or group profile authority) |
+| `CPF2292` | create or change without `*SECADM` |
+| `CPF2214` | profile already exists |
+| `CPF2228` | not authorized to change the profile |
+| `CPF2229` | not authorized to delete the profile |
+| `CPF2259` | group profile not found |
+| `CPF2291` | giving a special authority you do not hold |
+| `CPF2269` | giving `*SECADM` or `*AUDIT` without `*ALLOBJ` |
+| `CPF223F` | `PWDEXP(*YES)` with `PASSWORD(*NONE)` |
+| `CPF2203` | protected profile named for delete |
+| `CPF2215` | delete refused (owns objects, or in use) |
+
 ## Not modeled yet
 
 Said plainly, so nobody assumes otherwise:
 
-- Creating and changing profiles from inside the system (`CRTUSRPRF`, `CHGUSRPRF`, `DSPUSRPRF`). Today access is assigned in the seed file. The authority rules for them are already in `system/authority.py`.
+- F4 prompting and keyword abbreviation on the command line, `DSPUSRPRF` types other than `*BASIC`, and `WRKUSRPRF` options other than 5.
+- Authority to the initial program, menu, job description, message queue and output queue named on a profile, because there is no object model yet.
 - Limited capabilities enforcement, expired passwords and forced change, failed-attempt lockout (`MAXSIGN`), and the `QMAXSIGN` warnings.
 - Adopted authority, and the exceptions to `*ALLOBJ`.
 - Whether special authorities flow from a group profile. Silverlake does not pass them down.

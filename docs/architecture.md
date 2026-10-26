@@ -36,7 +36,7 @@ A real IBM i (PUB400, read-only, human paced, no scans) is the reference for how
 
 Loopback only. The listener refuses to bind to anything but 127.0.0.1, and `start.sh` checks it again before launching.
 
-## What exists today (Phase 1)
+## What exists today (through Phase 3b)
 
 ```
 src/silverlake/
@@ -46,16 +46,22 @@ src/silverlake/
   proto/ebcdic.py      code page 037
   screens/model.py     Text and Input fields, validation
   screens/render.py    Screen -> Clear Unit + Write To Display + Read MDT Fields
-  screens/signon.py    sign-on screen and the Phase 1 controller
+  screens/signon.py    sign-on screen and the session controller (command line, views)
+  screens/home.py      placeholder menu showing the access a profile holds
+  screens/usrprf.py    DSPUSRPRF and WRKUSRPRF screens
+  cl/parser.py         splits a command line into command, positional and keyword values
+  cl/commands.py       binds parameters, runs the profile commands
   net/server.py        asyncio listener, one Connection per client
   system/authority.py  user classes, special authorities, object authority resolution
   system/profiles.py   profile store, TOML seed loader, sign-on check
+  system/admin.py      create, change, display, delete profiles with IBM's authority rules
+  system/state.py      SQLite persistence, seed on first start, wiped by reset.sh
   system/messages.py   message IDs and our wording, with where each ID came from
   data/profiles.toml   the seed: who exists and what access they hold
   oracle/              capture client, host stream decoder, diff, CLI (see oracle.md)
 ```
 
-A controller is anything with `first()` and `handle(aid, values)`, each returning a Screen. Phase 3 replaces the sign-on controller with the real system layer; the network and rendering code does not change.
+A controller is anything with `first()`, `handle(aid, values)` and `close()`. The first two return a Screen, and `close()` runs when the connection ends so the session is counted out even when the line just drops. The network and rendering code does not know what a command is.
 
 ## What has been verified, and what has not
 

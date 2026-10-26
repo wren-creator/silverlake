@@ -9,15 +9,19 @@ from . import __version__
 from .config import ConfigError, listen_address
 from .net.server import serve
 from .screens.signon import SignonController
-from .system import profiles
+from .system import profiles, state
 
 
 async def run(host: str, port: int) -> None:
-    store = profiles.load(os.environ.get("SILVERLAKE_PROFILES"))
+    store, db = state.open_store(os.environ.get("SILVERLAKE_PROFILES"),
+                                 os.environ.get("SILVERLAKE_STATE_DIR", "state"))
     server = await serve(host, port, lambda display: SignonController(display, store))
     logging.getLogger("silverlake").info("silverlake %s listening on %s:%d", __version__, host, port)
-    async with server:
-        await server.serve_forever()
+    try:
+        async with server:
+            await server.serve_forever()
+    finally:
+        db.close()
 
 
 def main() -> int:

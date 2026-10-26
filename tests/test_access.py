@@ -225,7 +225,7 @@ def test_controller_flow_signon_home_signoff(store):
     assert "*PGMR" in t and "*SECADM" in t and "explicit" in t
     assert any(isinstance(f, Input) and f.name == "command" for f in s.fields)
 
-    assert "CL layer" in texts(c.handle("ENTER", {"command": "wrkactjob"}))
+    assert "WRKACTJOB in library *LIBL not found" in texts(c.handle("ENTER", {"command": "wrkactjob"}))
     assert "Sign On" in texts(c.handle("F3", {}))
     assert "Sign On" in texts(c.handle("ENTER", {}))      # signed off, back to sign-on
 

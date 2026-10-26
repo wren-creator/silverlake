@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import messages
-from .authority import (QSECURITY_LEVELS, Auth, AuthList, SecuredObject, SpecialAuthority,
-                        UserClass, can_grant, class_authorities, parse_auth,
+from .authority import (CHANGE, EXCLUDE, QSECURITY_LEVELS, Auth, AuthList, SecuredObject, SpecialAuthority,
+                        UserClass, can_grant, class_authorities, name_auth, parse_auth,
                         resolve_object_authority)
 
 DEFAULT_SEED = Path(__file__).resolve().parent.parent / "data" / "profiles.toml"
@@ -40,6 +40,11 @@ class Profile:
     initial_menu: str = "MAIN"
     current_library: str = "*CRTDFT"
     text: str = ""
+    # The profile is itself a secured object. AUT defaults to *EXCLUDE, and the
+    # profile always holds *CHANGE and *OBJMGT to itself (CRTUSRPRF).
+    owner: str = "QSECOFR"
+    public_authority: Auth = EXCLUDE
+    private_authority: dict[str, Auth] = field(default_factory=dict)
 
 
 @dataclass
@@ -47,6 +52,7 @@ class System:
     qsecurity: int = 40
     qpwdlvl: int = 0
     mode: str = "vulnerable"
+    default_profile_owner: str = "QSECOFR"  # who "created" the seeded accounts
 
 
 class ProfileStore:
@@ -57,6 +63,8 @@ class ProfileStore:
         self.profiles = {p.name: p for p in profiles}
         self.objects = {o.name: o for o in (objects or [])}
         self.autls = {a.name: a for a in (autls or [])}
+        self.active: dict[str, int] = {}          # profile name -> sessions signed on
+        self.on_change = lambda: None             # persistence hook, set by the state layer
 
     # -- lookups ---------------------------------------------------------------
 
@@ -75,6 +83,24 @@ class ProfileStore:
     def object_authority(self, profile: Profile, obj: SecuredObject) -> Auth:
         return resolve_object_authority(
             profile.name, self.special_authorities(profile), self.groups_of(profile), obj, self.autls)
+
+    def profile_object(self, profile: Profile) -> SecuredObject:
+        """The profile as a secured object, so the usual authority rules apply."""
+        private = dict(profile.private_authority)
+        private[profile.name] = private.get(profile.name, Auth.NONE) | CHANGE | Auth.OBJMGT
+        return SecuredObject(profile.name, profile.owner, public=profile.public_authority, private=private)
+
+    def authority_to_profile(self, actor: Profile, target: Profile) -> Auth:
+        return self.object_authority(actor, self.profile_object(target))
+
+    def sign_on(self, profile: Profile) -> None:
+        self.active[profile.name] = self.active.get(profile.name, 0) + 1
+
+    def sign_off(self, profile: Profile) -> None:
+        if self.active.get(profile.name, 0) <= 1:
+            self.active.pop(profile.name, None)
+        else:
+            self.active[profile.name] -= 1
 
     def may_create_or_change(self, actor: Profile, wanted: frozenset[SpecialAuthority]) -> bool:
         """CRTUSRPRF and CHGUSRPRF need *SECADM, and the actor must hold what they give."""
@@ -117,6 +143,8 @@ class ProfileStore:
             "status": profile.status,
             "password": "*NONE" if profile.password is None else "set",
             "group": profile.group_profile or "*NONE",
+            "owner": profile.owner,
+            "public": name_auth(profile.public_authority),
         }
 
 
@@ -157,6 +185,7 @@ def load(path: Path | str | None = None) -> ProfileStore:
         qsecurity=int(sysdata.get("qsecurity", 40)),
         qpwdlvl=int(sysdata.get("qpwdlvl", 0)),
         mode=sysdata.get("mode", "vulnerable"),
+        default_profile_owner=str(sysdata.get("default_profile_owner", "QSECOFR")).upper(),
     )
     if system.qsecurity not in QSECURITY_LEVELS:
         raise SeedError(f"qsecurity must be one of {QSECURITY_LEVELS}, not {system.qsecurity}")
@@ -185,8 +214,18 @@ def load(path: Path | str | None = None) -> ProfileStore:
             initial_menu=raw.get("initial_menu", "MAIN"),
             current_library=raw.get("current_library", "*CRTDFT"),
             text=raw.get("text", ""),
+            owner=str(raw.get("owner", "")).upper(),   # blank is resolved below
+            public_authority=parse_auth(raw.get("public_authority", "*EXCLUDE")),
+            private_authority={k.upper(): parse_auth(v) for k, v in raw.get("private_authority", {}).items()},
         ))
     names = {p.name for p in profiles}
+    for p in profiles:
+        if not p.owner:
+            # Not named: the default creator if there is one, else the profile owns itself.
+            default = "QSECOFR" if p.name == "QSECOFR" else system.default_profile_owner
+            p.owner = default if default in names else p.name
+        elif p.owner not in names:
+            raise SeedError(f"profile {p.name}: owner {p.owner} does not exist")
     for p in profiles:
         for g in ([p.group_profile] if p.group_profile else []) + p.supplemental_groups:
             if g not in names:

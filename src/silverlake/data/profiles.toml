@@ -9,6 +9,7 @@
 qsecurity = 40        # 20, 30, 40 or 50. Try 20: every *USER gets *ALLOBJ.
 qpwdlvl   = 0         # 0 or 1 ignore case in passwords, 2 and 3 do not
 mode      = "vulnerable"
+default_profile_owner = "SECADMIN"   # the security administrator created the accounts below
 
 # ---------------------------------------------------------------------------
 # One account per user class. special_authorities is left out, so each gets
@@ -22,8 +23,15 @@ password = "QSECOFR"
 text = "Security officer. Every special authority."
 
 [[profile]]
+name = "QDFTOWN"
+password = "*NONE"
+owner = "QSECOFR"
+text = "IBM-supplied default owner. Cannot sign on."
+
+[[profile]]
 name = "SECADMIN"
 user_class = "*SECADM"
+owner = "QSECOFR"
 password = "SECADMIN"
 text = "Security administrator. Manages profiles."
 

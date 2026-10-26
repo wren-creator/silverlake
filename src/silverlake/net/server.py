@@ -27,6 +27,7 @@ class Controller:
 
     def first(self) -> Screen: ...
     def handle(self, aid: str, values: dict[str, str]) -> Screen: ...
+    def close(self) -> None: ...
 
 
 ControllerFactory = Callable[[str], Controller]
@@ -186,6 +187,11 @@ class Connection:
             log.exception("[%d] session failed", self.serial)
         finally:
             log.info("[%d] disconnect", self.serial)
+            if self.controller is not None:
+                try:
+                    self.controller.close()
+                except Exception:
+                    log.exception("[%d] controller close failed", self.serial)
             self.writer.close()
 
 
