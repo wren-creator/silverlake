@@ -35,3 +35,25 @@ A real IBM i (PUB400, read-only, human paced, no scans) is the reference for how
 ## Network posture
 
 Loopback only. The listener refuses to bind to anything but 127.0.0.1, and `start.sh` checks it again before launching.
+
+## What exists today (Phase 1)
+
+```
+src/silverlake/
+  config.py            loopback-only listen address
+  proto/telnet.py      telnet framing, NEW-ENVIRON parsing
+  proto/datastream.py  GDS records, AID keys, terminal input decoder
+  proto/ebcdic.py      code page 037
+  screens/model.py     Text and Input fields, validation
+  screens/render.py    Screen -> Clear Unit + Write To Display + Read MDT Fields
+  screens/signon.py    sign-on screen and the Phase 1 controller
+  net/server.py        asyncio listener, one Connection per client
+```
+
+A controller is anything with `first()` and `handle(aid, values)`, each returning a Screen. Phase 3 replaces the sign-on controller with the real system layer; the network and rendering code does not change.
+
+## What has been verified, and what has not
+
+- Unit tests cover framing split at every size, record round trips, exact rendered bytes, and screen validation.
+- An independent client, web3270's tn5250 session class, connects, sees the sign-on screen with the right fields and a hidden password, types, and gets the reply back (`tests/test_interop_web3270.py`).
+- **Not yet checked:** lib5250's `tn5250`, IBM Access Client Solutions, or any real terminal. TLS is not built. Screen text has not yet been diffed against a real IBM i; that is Phase 2.

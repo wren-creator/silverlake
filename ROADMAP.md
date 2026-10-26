@@ -3,7 +3,8 @@
 ## v1
 
 - [x] Phase 0: repo scaffold, lifecycle scripts, loopback guard, docs skeleton
-- [ ] Phase 1: 5250 core, telnet + TN5250E negotiation, encoder/decoder, declarative screens
+- [x] Phase 1: 5250 core, telnet + TN5250E negotiation, encoder/decoder, declarative screens
+- [ ] Phase 1 follow-ups: TLS listener, try real tn5250 and IBM Access clients, Query reply handling, 27x132 screens
 - [ ] Phase 2: oracle harness, capture on a real IBM i, replay on Silverlake, diff structure
 - [ ] Phase 3: sign-on, user profiles (*SECOFR vs normal), menus, CL dispatcher, QSYS.LIB object model in SQLite
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
