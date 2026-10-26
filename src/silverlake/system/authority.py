@@ -118,12 +118,21 @@ class AuthList:
 
 @dataclass
 class SecuredObject:
+    """An object is named by library, name and type, the way QSYS.LIB does it.
+    Libraries are themselves objects of type *LIB that live in QSYS."""
     name: str
     owner: str
     owner_auth: Auth = ALL
     private: dict[str, Auth] = field(default_factory=dict)
     public: Auth | None = EXCLUDE   # None means *AUTL: ask the authorization list
     autl: str | None = None
+    library: str = "QSYS"
+    type: str = "*LIB"
+    text: str = ""
+
+    @property
+    def key(self) -> tuple[str, str, str]:
+        return (self.library, self.name, self.type)
 
 
 def resolve_object_authority(

@@ -152,7 +152,9 @@ def test_qsecurity_20_hands_every_user_allobj():
 
 def test_seed_objects_resolve_for_the_demo_users(store):
     def auth(user, obj):
-        return store.object_authority(store.get(user), store.objects[obj])
+        lib = "SRCLIB" if obj == "SRCLIB" else "APPLIB"
+        key = ("QSYS", obj, "*LIB") if obj == "SRCLIB" else (lib, obj, "*FILE")
+        return store.object_authority(store.get(user), store.objects[key])
     assert auth("QSECOFR", "PAYROLL") == ALL            # *ALLOBJ
     assert auth("SECADMIN", "PAYROLL") == ALL           # on the authorization list
     assert auth("OPERATOR", "PAYROLL") == USE

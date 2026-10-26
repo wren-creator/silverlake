@@ -186,18 +186,18 @@ def test_protected_profiles_cannot_be_deleted(store):
 
 def test_owner_of_objects_is_not_deleted_by_default(store):
     assert "CPF2215" in run(store, "QSECOFR", "DLTUSRPRF STUDENT")
-    assert store.get("STUDENT") and store.objects["SCRATCH"].owner == "STUDENT"
+    assert store.get("STUDENT") and store.find_library("SCRATCH").owner == "STUDENT"
 
 
 def test_ownobjopt_chgown_moves_objects_and_cleans_references(store):
     assert "deleted" in run(store, "QSECOFR", "DLTUSRPRF DEVELOPER OWNOBJOPT(*CHGOWN QSECOFR)")
-    assert store.objects["SRCLIB"].owner == "QSECOFR"
-    assert "DEVELOPER" not in store.objects["CUSTOMERS"].private
+    assert store.find_library("SRCLIB").owner == "QSECOFR"
+    assert "DEVELOPER" not in store.objects[("APPLIB", "CUSTOMERS", "*FILE")].private
 
 
 def test_ownobjopt_dlt_removes_owned_objects(store):
     assert "deleted" in run(store, "QSECOFR", "DLTUSRPRF STUDENT OWNOBJOPT(*DLT)")
-    assert "SCRATCH" not in store.objects
+    assert store.find_library("SCRATCH") is None
 
 
 def test_chgown_needs_a_real_new_owner(store):
@@ -209,7 +209,7 @@ def test_chgown_needs_a_real_new_owner(store):
 def test_deleting_a_group_removes_it_from_its_members(store):
     run(store, "QSECOFR", "DLTUSRPRF GRPDEV")
     assert store.get("DEVELOPER").group_profile is None
-    assert "GRPDEV" not in store.objects["SRCLIB"].private
+    assert "GRPDEV" not in store.find_library("SRCLIB").private
 
 
 def test_deleting_the_owner_of_profiles_hands_them_to_qdftown(store):
@@ -240,7 +240,7 @@ def test_changes_survive_a_restart_and_reset_wipes_them(tmp_path):
     again, db2 = state.open_store(state_dir=tmp_path)
     assert again.get("KEEPER").password == "ABC"      # unquoted values are upper-cased
     assert again.special_authorities(again.get("KEEPER")) == {SA.JOBCTL}
-    assert again.get("OLDTEMP") is None and "SCRATCH" not in again.objects
+    assert again.get("OLDTEMP") is None and again.find_library("SCRATCH") is None
     assert state.to_dict(again) == state.to_dict(st)
     db2.close()
 

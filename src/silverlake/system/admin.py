@@ -174,7 +174,7 @@ def delete(store: ProfileStore, actor: Profile, name: str, ownobjopt: tuple[str,
         return _no(messages.not_deleted(name, "It owns objects and OWNOBJOPT(*NODLT) is in effect."))
     if owned and mode == "*DLT":
         for obj in owned:
-            if Auth.OBJEXIST not in store.object_authority(actor, obj):
+            if Auth.OBJEXIST not in store.authority_to_object(actor, obj):
                 return _no(messages.not_deleted(name, f"No *OBJEXIST authority to {obj.name}."))
     if owned and mode == "*CHGOWN":
         new_owner = ownobjopt[1].upper() if len(ownobjopt) > 1 else ""
@@ -188,7 +188,10 @@ def delete(store: ProfileStore, actor: Profile, name: str, ownobjopt: tuple[str,
     if owned:
         for obj in owned:
             if mode == "*DLT":
-                del store.objects[obj.name]
+                if obj.type == "*LIB" and obj.library == "QSYS":      # a library takes its contents with it
+                    for inner in [o for o in store.objects.values() if o.library == obj.name]:
+                        del store.objects[inner.key]
+                store.objects.pop(obj.key, None)
             else:
                 obj.owner = ownobjopt[1].upper()
         notes.append(f"{len(owned)} owned object(s) {'deleted' if mode == '*DLT' else 'moved to ' + ownobjopt[1].upper()}.")

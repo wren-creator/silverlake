@@ -84,7 +84,13 @@ A user can only give away what they hold. Giving `*SECADM` also requires `*ALLOB
 
 Detailed: `*OBJOPR` look at and use, `*OBJMGT` secure, move, rename, `*OBJEXIST` delete and transfer ownership, `*OBJALTER` change attributes, `*OBJREF` use as a parent in a constraint. Data: `*READ`, `*ADD`, `*UPD`, `*DLT`, `*EXECUTE`.
 
-How Silverlake resolves what a user may do to an object, in order: `*ALLOBJ`, then the owner, then the user's own entry on the object, then on its authorization list, then the user's groups (combined), then `*PUBLIC`. A private `*EXCLUDE` beats a generous `*PUBLIC`, which is how real systems behave.
+### Libraries and the library gate
+
+An object is named by library, name and type, the way QSYS.LIB names it (`APPLIB/PAYROLL *FILE`). A library is itself an object of type `*LIB` that lives in QSYS. To reach an object you must first be able to locate it in its library, which takes `*EXECUTE` on the library (IBM: "Execute authority provides the authority needed to run a program or locate an object in a library"). So a wide open object in a locked library is still out of reach. The seed has exactly that mistake: `SRCLIB/QRPGSRC` is `*CHANGE` to the public, but `SRCLIB` is `*EXCLUDE` except to the developers' group, so `STUDENT` cannot touch it.
+
+Two parts are inferred from how IBM i behaves, not read on a command page: that the gate is `*EXECUTE` on the library (IBM's pages say locating an object takes `*EXECUTE`, and `*USE` includes it), and that `*ALLOBJ` skips the gate. QSYS itself is treated as always open.
+
+How Silverlake resolves what a user may do to an object, once past the gate, in order: `*ALLOBJ`, then the owner, then the user's own entry on the object, then on its authorization list, then the user's groups (combined), then `*PUBLIC`. A private `*EXCLUDE` beats a generous `*PUBLIC`, which is how real systems behave.
 
 ## The seed accounts
 
@@ -106,7 +112,7 @@ Passwords equal the profile name, on purpose.
 | `OLDTEMP` | `*USER` | none | Disabled. |
 | `GRPDEV` | `*USER` | none | A group profile. |
 
-Four secured objects (`PAYROLL` on an authorization list, `CUSTOMERS`, `SRCLIB`, `SCRATCH`) give object authority something to be checked against. Real libraries and files arrive with the object model.
+The seed also holds libraries (`QSYS`, `QGPL`, `QUSRSYS`, `APPLIB`, `SRCLIB`, `SCRATCH`) and files in them (`APPLIB/PAYROLL` on an authorization list, `APPLIB/CUSTOMERS`, and `SRCLIB/QRPGSRC`) so authority has something real to be checked against. Libraries and objects are stored in SQL tables keyed by library, name and type; the seed validates that every object's library, owner and authorization list exist.
 
 ## Sign-on messages
 
@@ -149,4 +155,4 @@ Said plainly, so nobody assumes otherwise:
 - Limited capabilities enforcement, expired passwords and forced change, failed-attempt lockout (`MAXSIGN`), and the `QMAXSIGN` warnings.
 - Adopted authority, and the exceptions to `*ALLOBJ`.
 - Whether special authorities flow from a group profile. Silverlake does not pass them down.
-- Per-object commands, libraries, and the object model itself.
+- Object commands (creating libraries, granting and revoking object authority) are arriving in the next slice; objects other than libraries and the seeded files are not modeled.

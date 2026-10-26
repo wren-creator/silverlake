@@ -11,7 +11,9 @@
 - [x] Phase 3b: CRTUSRPRF, CHGUSRPRF, DSPUSRPRF, DLTUSRPRF, WRKUSRPRF, SIGNOFF from a command line as *SECADM, profiles as secured objects, changes saved in SQLite
 - [ ] Phase 3b follow-ups: F4 prompting and keyword abbreviation, limited capabilities enforcement, password expiry and forced change, MAXSIGN lockout, adopted authority, more WRKUSRPRF options, DSPUSRPRF types
 - [ ] Confirm the profile command message IDs and which condition raises each (CPF2204, CPF2217, CPF2228 and the rest are documented, not seen); safe read-only checks on PUB400 are an unknown command and DSPUSRPRF on your own profile
-- [ ] Phase 3c: menus, the rest of the CL dispatcher, QSYS.LIB object model in SQLite
+- [ ] Phase 3c-1: libraries and objects as real SQLite tables keyed by library, name and type; library authority checked before object authority; CRTLIB, DLTLIB, WRKLIB, DSPLIBL, ADDLIBLE, RMVLIBLE, DSPOBJAUT, GRTOBJAUT, RVKOBJAUT
+- [ ] Phase 3c-2: *MENU objects, GO, INLMNU and INLPGM at sign-on, LMTCPB enforcement (and the break-outs it invites)
+- [ ] Phase 3c-3: the rest of the dispatcher (WRKAUTL, WRKOBJ, jobs, spool, messages)
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
 - [ ] Phase 5: vulnerable and secure modes, seeded weak configs, exposed services, scenarios, flag checker, instructor and trainee docs

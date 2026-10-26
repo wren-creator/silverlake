@@ -1,5 +1,7 @@
-"""Runtime state: the profile store, saved to SQLite so changes made inside a
-session survive a restart. The seed file is the golden state; reset.sh deletes
+"""Runtime state, saved to SQLite so changes made inside a session survive a
+restart. Libraries, objects and authorization lists are real tables, keyed the
+way QSYS.LIB keys them. Profiles and system values are still one JSON row, and
+move to tables when something needs to query them. The seed file is the golden state; reset.sh deletes
 the state directory and the next start reads the seed again.
 
 Passwords are stored as given. This is a training range with deliberately weak
@@ -31,12 +33,13 @@ def to_dict(store: ProfileStore) -> dict:
             "private_authority": {k: name_auth(v) for k, v in p.private_authority.items()},
         } for p in store.profiles.values()],
         "objects": [{
-            "name": o.name, "owner": o.owner, "owner_auth": name_auth(o.owner_auth),
+            "library": o.library, "name": o.name, "type": o.type, "text": o.text,
+            "owner": o.owner, "owner_auth": name_auth(o.owner_auth),
             "private": {k: name_auth(v) for k, v in o.private.items()},
             "public": "*AUTL" if o.public is None else name_auth(o.public), "autl": o.autl,
-        } for o in store.objects.values()],
+        } for o in sorted(store.objects.values(), key=lambda o: o.key)],
         "autls": [{"name": a.name, "entries": {k: name_auth(v) for k, v in a.entries.items()},
-                   "public": name_auth(a.public)} for a in store.autls.values()],
+                   "public": name_auth(a.public)} for a in sorted(store.autls.values(), key=lambda a: a.name)],
     }
 
 
@@ -52,7 +55,7 @@ def from_dict(data: dict) -> ProfileStore:
         private_authority={k: parse_auth(v) for k, v in p["private_authority"].items()},
     ) for p in data["profiles"]]
     objects = [SecuredObject(
-        name=o["name"], owner=o["owner"], owner_auth=parse_auth(o["owner_auth"]),
+        library=o["library"], name=o["name"], type=o["type"], text=o["text"], owner=o["owner"], owner_auth=parse_auth(o["owner_auth"]),
         private={k: parse_auth(v) for k, v in o["private"].items()},
         public=None if o["public"] == "*AUTL" else parse_auth(o["public"]), autl=o["autl"],
     ) for o in data["objects"]]
@@ -61,20 +64,69 @@ def from_dict(data: dict) -> ProfileStore:
     return ProfileStore(System(**data["system"]), profiles, objects, autls)
 
 
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS objects (
+    library TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL,
+    owner TEXT NOT NULL, owner_auth TEXT NOT NULL, public TEXT NOT NULL,
+    autl TEXT, text TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (library, name, type));
+CREATE TABLE IF NOT EXISTS object_auth (
+    library TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL,
+    grantee TEXT NOT NULL, auth TEXT NOT NULL,
+    PRIMARY KEY (library, name, type, grantee));
+CREATE TABLE IF NOT EXISTS autls (name TEXT PRIMARY KEY, public TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS autl_entries (
+    autl TEXT NOT NULL, grantee TEXT NOT NULL, auth TEXT NOT NULL, PRIMARY KEY (autl, grantee));
+"""
+
+
 class StateDB:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
-        self.db.execute("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        self.db.executescript(SCHEMA)
         self.db.commit()
 
     def read(self) -> dict | None:
         row = self.db.execute("SELECT value FROM kv WHERE key = 'state'").fetchone()
-        return json.loads(row[0]) if row else None
+        if not row:
+            return None
+        data = json.loads(row[0])
+        q = self.db.execute
+        private: dict[tuple, dict] = {}
+        for lib, name, typ, who, auth in q("SELECT library, name, type, grantee, auth FROM object_auth"):
+            private.setdefault((lib, name, typ), {})[who] = auth
+        data["objects"] = [
+            {"library": lib, "name": name, "type": typ, "text": text, "owner": owner, "owner_auth": oa,
+             "private": private.get((lib, name, typ), {}), "public": pub, "autl": autl}
+            for lib, name, typ, owner, oa, pub, autl, text in q(
+                "SELECT library, name, type, owner, owner_auth, public, autl, text FROM objects "
+                "ORDER BY library, name, type")]
+        entries: dict[str, dict] = {}
+        for autl, who, auth in q("SELECT autl, grantee, auth FROM autl_entries"):
+            entries.setdefault(autl, {})[who] = auth
+        data["autls"] = [{"name": n, "entries": entries.get(n, {}), "public": pub}
+                         for n, pub in q("SELECT name, public FROM autls ORDER BY name")]
+        return data
 
     def write(self, store: ProfileStore) -> None:
-        self.db.execute("INSERT OR REPLACE INTO kv (key, value) VALUES ('state', ?)", (json.dumps(to_dict(store)),))
-        self.db.commit()
+        d = to_dict(store)
+        with self.db:      # one transaction, so a crash never leaves half a state
+            self.db.execute("INSERT OR REPLACE INTO kv (key, value) VALUES ('state', ?)",
+                            (json.dumps({"system": d["system"], "profiles": d["profiles"]}),))
+            for table in ("objects", "object_auth", "autls", "autl_entries"):
+                self.db.execute(f"DELETE FROM {table}")
+            for o in d["objects"]:
+                self.db.execute("INSERT INTO objects VALUES (?,?,?,?,?,?,?,?)",
+                                (o["library"], o["name"], o["type"], o["owner"], o["owner_auth"],
+                                 o["public"], o["autl"], o["text"]))
+                self.db.executemany("INSERT INTO object_auth VALUES (?,?,?,?,?)",
+                                    [(o["library"], o["name"], o["type"], k, v) for k, v in o["private"].items()])
+            for a in d["autls"]:
+                self.db.execute("INSERT INTO autls VALUES (?,?)", (a["name"], a["public"]))
+                self.db.executemany("INSERT INTO autl_entries VALUES (?,?,?)",
+                                    [(a["name"], k, v) for k, v in a["entries"].items()])
 
     def close(self) -> None:
         self.db.close()

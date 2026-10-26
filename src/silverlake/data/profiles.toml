@@ -154,8 +154,10 @@ password = "*NONE"
 text = "Group profile for the developers."
 
 # ---------------------------------------------------------------------------
-# A few secured objects, so object authority has something to be checked
-# against. Real libraries and files arrive with the object model.
+# Libraries and objects, so object authority has something to be checked
+# against. A library is an object of type *LIB in QSYS. Reaching anything in a
+# library takes *EXECUTE on the library first, so a wide open object in a locked
+# library is still out of reach (SRCLIB/QRPGSRC below is exactly that mistake).
 # ---------------------------------------------------------------------------
 
 [[authorization_list]]
@@ -166,15 +168,45 @@ SECADMIN = "*ALL"
 OPERATOR = "*USE"
 
 [[object]]
+name = "QSYS"
+owner = "QSECOFR"
+public = "*USE"
+text = "System library"
+
+[[object]]
+name = "QGPL"
+owner = "QSECOFR"
+public = "*CHANGE"
+text = "General purpose library"
+
+[[object]]
+name = "QUSRSYS"
+owner = "QSECOFR"
+public = "*CHANGE"
+text = "System user library"
+
+[[object]]
+name = "APPLIB"
+owner = "QSECOFR"
+public = "*USE"
+text = "Application library"
+
+[[object]]
+library = "APPLIB"
 name = "PAYROLL"
+type = "*FILE"
 owner = "QSECOFR"
 public = "*AUTL"
 autl = "PAYAUTL"
+text = "Payroll master. Secured by an authorization list."
 
 [[object]]
+library = "APPLIB"
 name = "CUSTOMERS"
+type = "*FILE"
 owner = "QSECOFR"
 public = "*USE"
+text = "Customer master."
 [object.private]
 DEVELOPER = "*CHANGE"
 GUEST = "*EXCLUDE"
@@ -183,10 +215,20 @@ GUEST = "*EXCLUDE"
 name = "SRCLIB"
 owner = "DEVELOPER"
 public = "*EXCLUDE"
+text = "Developer source library. Locked to the group."
 [object.private]
 GRPDEV = "*CHANGE"
+
+[[object]]
+library = "SRCLIB"
+name = "QRPGSRC"
+type = "*FILE"
+owner = "DEVELOPER"
+public = "*CHANGE"
+text = "RPG source. Wide open, but the library is locked."
 
 [[object]]
 name = "SCRATCH"
 owner = "STUDENT"
 public = "*CHANGE"
+text = "Student scratch library."

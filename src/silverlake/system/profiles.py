@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import messages
-from .authority import (CHANGE, EXCLUDE, QSECURITY_LEVELS, Auth, AuthList, SecuredObject, SpecialAuthority,
+from .authority import (ALL, CHANGE, EXCLUDE, QSECURITY_LEVELS, Auth, AuthList, SecuredObject, SpecialAuthority,
                         UserClass, can_grant, class_authorities, name_auth, parse_auth,
                         resolve_object_authority)
 
@@ -61,7 +61,7 @@ class ProfileStore:
                  autls: list[AuthList] | None = None) -> None:
         self.system = system
         self.profiles = {p.name: p for p in profiles}
-        self.objects = {o.name: o for o in (objects or [])}
+        self.objects = {o.key: o for o in (objects or [])}
         self.autls = {a.name: a for a in (autls or [])}
         self.active: dict[str, int] = {}          # profile name -> sessions signed on
         self.on_change = lambda: None             # persistence hook, set by the state layer
@@ -84,11 +84,31 @@ class ProfileStore:
         return resolve_object_authority(
             profile.name, self.special_authorities(profile), self.groups_of(profile), obj, self.autls)
 
+    def find_library(self, name: str) -> SecuredObject | None:
+        return self.objects.get(("QSYS", name.upper(), "*LIB"))
+
+    def authority_to_object(self, profile: Profile, obj: SecuredObject) -> Auth:
+        """Authority to an object including the library it sits in. Reaching an
+        object means locating it in its library, which takes *EXECUTE on the
+        library (IBM: "Execute authority provides the authority needed to ...
+        locate an object in a library"). So a wide open object in a locked
+        library is still out of reach. *ALLOBJ skips the gate; that part is
+        inferred from IBM i behavior, not read on a command page. Libraries
+        themselves sit in QSYS, whose gate is treated as always open."""
+        if SpecialAuthority.ALLOBJ in self.special_authorities(profile):
+            return ALL
+        if obj.type != "*LIB" or obj.library != "QSYS":
+            lib = self.find_library(obj.library)
+            if lib is None or Auth.EXECUTE not in self.object_authority(profile, lib):
+                return Auth.NONE
+        return self.object_authority(profile, obj)
+
     def profile_object(self, profile: Profile) -> SecuredObject:
         """The profile as a secured object, so the usual authority rules apply."""
         private = dict(profile.private_authority)
         private[profile.name] = private.get(profile.name, Auth.NONE) | CHANGE | Auth.OBJMGT
-        return SecuredObject(profile.name, profile.owner, public=profile.public_authority, private=private)
+        return SecuredObject(profile.name, profile.owner, public=profile.public_authority, private=private,
+                             type="*USRPRF")
 
     def authority_to_profile(self, actor: Profile, target: Profile) -> Auth:
         return self.object_authority(actor, self.profile_object(target))
@@ -240,11 +260,31 @@ def load(path: Path | str | None = None) -> ProfileStore:
         public = o.get("public", "*EXCLUDE")
         objects.append(SecuredObject(
             name=o["name"].upper(), owner=o["owner"].upper(),
+            library=o.get("library", "QSYS").upper(), type=o.get("type", "*LIB").upper(),
+            text=o.get("text", ""),
             owner_auth=parse_auth(o.get("owner_auth", "*ALL")),
             private={k.upper(): parse_auth(v) for k, v in o.get("private", {}).items()},
             public=None if public == "*AUTL" else parse_auth(public),
             autl=o.get("autl", None) and o["autl"].upper(),
         ))
+    seen: set[tuple] = set()
+    autl_names = {a.name for a in autls}
+    libs = {o.name for o in objects if o.library == "QSYS" and o.type == "*LIB"}
+    for o in objects:
+        if o.key in seen:
+            raise SeedError(f"duplicate object {o.library}/{o.name} {o.type}")
+        seen.add(o.key)
+        if o.owner not in names:
+            raise SeedError(f"object {o.library}/{o.name}: owner {o.owner} does not exist")
+        if o.type == "*LIB":
+            if o.library != "QSYS":
+                raise SeedError(f"library {o.name} must live in QSYS, not {o.library}")
+        elif o.library not in libs:
+            raise SeedError(f"object {o.library}/{o.name}: library {o.library} does not exist")
+        if o.autl and o.autl not in autl_names:
+            raise SeedError(f"object {o.library}/{o.name}: authorization list {o.autl} does not exist")
+        if o.public is None and not o.autl:
+            raise SeedError(f"object {o.library}/{o.name}: public *AUTL needs an authorization list")
     return ProfileStore(system, profiles, objects, autls)
 
 

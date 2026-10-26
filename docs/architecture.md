@@ -55,7 +55,7 @@ src/silverlake/
   system/authority.py  user classes, special authorities, object authority resolution
   system/profiles.py   profile store, TOML seed loader, sign-on check
   system/admin.py      create, change, display, delete profiles with IBM's authority rules
-  system/state.py      SQLite persistence, seed on first start, wiped by reset.sh
+  system/state.py      SQLite persistence (object tables keyed by library/name/type), seed on first start, wiped by reset.sh
   system/messages.py   message IDs and our wording, with where each ID came from
   data/profiles.toml   the seed: who exists and what access they hold
   oracle/              capture client, host stream decoder, diff, CLI (see oracle.md)
