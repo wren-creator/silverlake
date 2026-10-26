@@ -167,10 +167,12 @@ public = "*EXCLUDE"
 SECADMIN = "*ALL"
 OPERATOR = "*USE"
 
+# Public *CHANGE lets any user create a library (CRTLIB needs *ADD to QSYS, which is
+# inferred, not read on a command page). Set it to *USE for a locked down system.
 [[object]]
 name = "QSYS"
 owner = "QSECOFR"
-public = "*USE"
+public = "*CHANGE"
 text = "System library"
 
 [[object]]

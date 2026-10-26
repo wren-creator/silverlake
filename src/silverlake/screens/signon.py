@@ -19,8 +19,10 @@ from ..cl import commands
 from ..proto import datastream as ds
 from ..system import admin, profiles
 from ..system.profiles import Profile, ProfileStore
+from ..cl.session import Session
 from .home import home_screen
 from .model import Input, Screen, Text
+from .objects import dsplibl_screen, dspobjaut_screen, pages, wrklib_screen
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -85,7 +87,10 @@ class SignonController:
         self.display = display
         self.store = store or profiles.load()
         self.profile: Profile | None = None
-        self.view: tuple | None = None      # ("dsp", Profile, list view or None) or ("wrk", rows, page)
+        self.session = Session()
+        # ("dsp", Profile, list view or None), ("wrk", rows, page), or
+        # ("plist", rows, page, renderer) for a list with paging and no options
+        self.view: tuple | None = None
 
     def first(self) -> Screen:
         return signon_screen(self.display)
@@ -110,6 +115,7 @@ class SignonController:
         if result.profile is None:
             return signon_screen(self.display, result.message.line(), user.upper())
         self.profile = result.profile
+        self.session = Session.for_profile(self.profile.current_library)
         self.store.sign_on(self.profile)
         return home_screen(self.store, self.profile)
 
@@ -124,23 +130,48 @@ class SignonController:
         line = values.get("command", "").strip()
         if not line:
             return home_screen(self.store, self.profile)
-        outcome = commands.execute(self.store, self.profile, line)
+        outcome = commands.execute(self.store, self.profile, line, self.session)
         if outcome.signoff:
             self._sign_off()
             return signon_screen(self.display)
         if outcome.view:
-            kind, subject = outcome.view
-            self.view = ("dsp", subject, None) if kind == "dspusrprf" else ("wrk", subject, 0)
+            self.view = self._open_view(outcome.view)
             return self._draw_view()
         return home_screen(self.store, self.profile, outcome.message.line() if outcome.message else "")
+
+    def _open_view(self, spec: tuple) -> tuple:
+        kind = spec[0]
+        if kind == "dspusrprf":
+            return ("dsp", spec[1], None)
+        if kind == "wrkusrprf":
+            return ("wrk", spec[1], 0)
+        if kind == "dsplibl":
+            entries = spec[1].entries()
+            return ("plist", entries, 0, lambda rows, page: dsplibl_screen(self.store, rows, page))
+        if kind == "wrklib":
+            return ("plist", spec[1], 0, wrklib_screen)
+        if kind == "dspobjaut":
+            obj = spec[1]
+            return ("plist", spec[2], 0, lambda rows, page: dspobjaut_screen(obj, rows, page))
+        raise AssertionError(kind)
 
     def _draw_view(self, message: str = "") -> Screen:
         if self.view[0] == "dsp":
             return dspusrprf_screen(self.store, self.view[1])
+        if self.view[0] == "plist":
+            return self.view[3](self.view[1], self.view[2])
         return wrkusrprf_screen(self.view[1], self.view[2], message)
 
     def _in_view(self, aid: str, values: dict[str, str]) -> Screen:
         kind = self.view[0]
+        if kind == "plist":
+            _, rows, page, renderer = self.view
+            if aid in ("ROLLUP", "ROLLDOWN"):
+                step = 1 if aid == "ROLLUP" else -1
+                self.view = ("plist", rows, max(0, min(page + step, pages(len(rows)) - 1)), renderer)
+                return self._draw_view()
+            self.view = None                  # Enter, F3 and F12 all go back
+            return home_screen(self.store, self.profile)
         if aid == "F3" or (kind == "wrk" and aid == "F12"):
             self.view = None
             return home_screen(self.store, self.profile)

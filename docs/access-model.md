@@ -42,6 +42,25 @@ Accepted but not modeled: `ASTLVL`. The rules come from the IBM i 7.5 command re
 
 Changes are saved to `state/silverlake.sqlite` and survive a restart. `./reset.sh` deletes the state directory, and the next start reads the seed again. The saved state holds profile passwords as typed. That is deliberate for a training range with weak credentials, and the reason this must never hold anything real.
 
+## Libraries and object authority from the command line
+
+| Command | What it does here |
+|---|---|
+| `CRTLIB LIB(NAME) TEXT('...') AUT(...)` | Creates a library you own. `AUT` defaults to `*LIBCRTAUT`, which is `*CHANGE` here. `TYPE` is accepted but not stored. |
+| `DLTLIB LIB(NAME)` | Needs `*USE` and `*OBJEXIST` on the library and `*OBJEXIST` on everything in it. What you may delete goes, and if anything is left, the library stays (`CPF2161` then `CPF2168`). Not for `QSYS`, `QGPL`, `QUSRSYS`, `QSYS2`, or a library on your list. |
+| `ADDLIBLE`, `RMVLIBLE`, `DSPLIBL` | Your library list: `QSYS` and `QUSRSYS` (system), `QGPL` (user), plus your profile's current library. `POSITION` takes `*FIRST`, `*LAST`, or `*AFTER`/`*BEFORE`/`*REPLACE` and a library. The list belongs to the job and starts fresh at each sign-on. |
+| `WRKLIB LIB(*LIBL)` | A paged list of libraries you have some authority to. Also `*ALL`, `*ALLUSR`, `*USRLIBL`, `*CURLIB`, a name, or `NAME*`. No options yet. |
+| `DSPOBJAUT OBJ(LIB/NAME) OBJTYPE(*FILE)` | Shows who holds what. Someone with `*OBJMGT` sees everyone, anyone else sees only themselves. |
+| `GRTOBJAUT OBJ(LIB/NAME) OBJTYPE(*LIB) USER(A B *PUBLIC) AUT(...)` | The owner, someone with `*OBJMGT`, or `*ALLOBJ`. Only the owner or `*ALLOBJ` may give `*OBJMGT`. `REPLACE(*NO)` adds to what is there, `*YES` sets it exactly, `*EXCLUDE` always replaces. `AUTL(name)` needs ownership or `*ALL`. |
+| `RVKOBJAUT OBJ(LIB/NAME) OBJTYPE(*FILE) USER(A *ALL *PUBLIC) AUT(...)` | Removes only the named authorities. A user left with nothing loses the entry altogether and falls through to groups and `*PUBLIC`, which is not the same as holding `*EXCLUDE`. |
+
+Only `*LIB` and `*FILE` exist as object types so far, `OBJ` takes one explicit name (no generic names or `*ALL`), `OBJ(NAME)` is found through your library list, and `REFOBJ`, `OUTPUT(*PRINT)` and `OUTFILE` are not modeled. Use `LIB/NAME`, or `OBJ(NAME) OBJTYPE(*LIB)` for a library, which always lives in QSYS.
+
+Two things to try:
+
+- **Open a locked library.** `STUDENT` cannot reach `SRCLIB/QRPGSRC` (`CPF2216`). Sign on as `DEVELOPER` and run `GRTOBJAUT OBJ(SRCLIB) OBJTYPE(*LIB) USER(STUDENT) AUT(*USE)`. The file was never the lock, the library was.
+- **Tell what exists.** As `STUDENT`, ask `DSPOBJAUT` about a library that is not there (`CPF2209`), one that is locked (`CPF2216`), and a file that is not in an open library (`CPF2208`) against one that is but that you hold nothing on (`CPF2207`). The answers draw a map of a system you cannot see into.
+
 ## The five user classes
 
 | Class | At QSECURITY 20 | At QSECURITY 30, 40, 50 |
@@ -146,6 +165,28 @@ IBM's command reference lists these IDs for the profile commands but does not sa
 | `CPF2203` | protected profile named for delete |
 | `CPF2215` | delete refused (owns objects, or in use) |
 
+## Library and object authority messages
+
+IDs and wording come from IBM's 7.5 error lists for these commands. Which condition raises each is inferred, so each is marked `DOCUMENTED` in `system/messages.py`.
+
+| ID | When |
+|---|---|
+| `CPF2110` `CPF2209` | library not found (`ADDLIBLE`, `DLTLIB`; object commands) |
+| `CPF2111` | `CRTLIB` on a name that exists |
+| `CPF2166` | library name not valid |
+| `CPF2138` | no authority to create (no `*ADD` to QSYS, inferred) |
+| `CPF2182` | not authorized to the library (`DLTLIB`, `ADDLIBLE`) |
+| `CPF2216` | cannot use the library an object sits in |
+| `CPF2129` `CPF2167` | system library, or a library on the list, cannot be deleted |
+| `CPF2161` `CPF2168` | some objects could not be deleted, so the library stays |
+| `CPF2103` `CPF2149` | already on the list, or not on the user portion |
+| `CPF2208` `CPF2207` | object not found, or no authority to it |
+| `CPF2223` `CPF2224` | not authorized to give or revoke authority |
+| `CPF2290` `CPF22A0` `CPF22A4` `CPF22A5` | `*EXCLUDE` with another authority, `*AUTL` for a user, `*EXCLUDE` from `*PUBLIC`, not on that list |
+| `CPF2283` | authorization list does not exist |
+
+Inferred and worth checking on a real system: that `CRTLIB` needs `*ADD` to QSYS (the seed sets QSYS public to `*CHANGE` so any user can create a library, `*USE` locks it down), that `ADDLIBLE` needs `*USE` on the library, and what revoking an authorization list does to the public authority. `DSPOBJAUT QSYS *LIB` run as an ordinary user on a real system would settle the first.
+
 ## Not modeled yet
 
 Said plainly, so nobody assumes otherwise:
@@ -155,4 +196,4 @@ Said plainly, so nobody assumes otherwise:
 - Limited capabilities enforcement, expired passwords and forced change, failed-attempt lockout (`MAXSIGN`), and the `QMAXSIGN` warnings.
 - Adopted authority, and the exceptions to `*ALLOBJ`.
 - Whether special authorities flow from a group profile. Silverlake does not pass them down.
-- Object commands (creating libraries, granting and revoking object authority) are arriving in the next slice; objects other than libraries and the seeded files are not modeled.
+- Object types other than `*LIB` and `*FILE`, creating objects, generic names and `*ALL` on the object commands, `*PRINT` and `*OUTFILE` output, the `CRTAUT` and `CRTOBJAUD` library settings, and primary groups on objects.

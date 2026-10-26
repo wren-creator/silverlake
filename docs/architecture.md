@@ -50,11 +50,14 @@ src/silverlake/
   screens/home.py      placeholder menu showing the access a profile holds
   screens/usrprf.py    DSPUSRPRF and WRKUSRPRF screens
   cl/parser.py         splits a command line into command, positional and keyword values
-  cl/commands.py       binds parameters, runs the profile commands
+  cl/commands.py       binds parameters, runs the profile, library and object authority commands
+  cl/session.py        what a job carries: its library list
+  screens/objects.py   DSPLIBL, WRKLIB, DSPOBJAUT screens
   net/server.py        asyncio listener, one Connection per client
   system/authority.py  user classes, special authorities, object authority resolution
   system/profiles.py   profile store, TOML seed loader, sign-on check
   system/admin.py      create, change, display, delete profiles with IBM's authority rules
+  system/objects.py    libraries, library list, DSPOBJAUT/GRTOBJAUT/RVKOBJAUT with IBM's rules
   system/state.py      SQLite persistence (object tables keyed by library/name/type), seed on first start, wiped by reset.sh
   system/messages.py   message IDs and our wording, with where each ID came from
   data/profiles.toml   the seed: who exists and what access they hold
