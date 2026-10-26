@@ -36,6 +36,10 @@ ATTR_BLUE = 0x3A
 
 # Field Format Word, first byte is always 01xxxxxx. Alphabetic shift, no flags.
 FFW_ALPHA = (0x40, 0x00)
+# Second FFW byte: bit 0x20 is monocase, the terminal upper-cases what is typed.
+# A real IBM i sets it on the sign-on user field (seen in a PUB400 capture) and not
+# on the password field.
+FFW2_MONOCASE = 0x20
 
 GDS_TYPE = (0x12, 0xA0)
 OPCODE_PUT_GET = 0x03

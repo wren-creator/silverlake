@@ -1,0 +1,280 @@
+import asyncio
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+from silverlake.net import server as srv
+from silverlake.oracle import scenario
+from silverlake.oracle.client import CaptureError
+from silverlake.oracle.diff import diff_captures, diff_snapshots
+from silverlake.oracle.terminal import DecodeError, Terminal
+from silverlake.proto import datastream as ds
+from silverlake.proto import ebcdic
+from silverlake.screens.model import Input, Screen, Text
+from silverlake.screens.render import render
+from silverlake.screens.signon import SignonController, signon_screen
+
+
+def decode(screen: Screen) -> dict:
+    t = Terminal()
+    t.apply(render(screen))
+    return t.snapshot()
+
+
+# -- terminal: encoder and decoder agree ---------------------------------------
+
+def test_render_then_decode_recovers_the_screen():
+    snap = decode(Screen([
+        Text(1, 30, "Title", ds.ATTR_WHITE),
+        Input(5, 20, 8, "a"),
+        Input(6, 20, 12, "b", hidden=True),
+    ], cursor="b"))
+    assert [(f["row"], f["col"], f["length"], f["hidden"]) for f in snap["fields"]] == [
+        (5, 20, 8, False), (6, 20, 12, True)]
+    assert snap["cursor"] == [6, 20]
+    assert snap["runs"][0] == {"row": 1, "col": 30, "attr": "0x22", "length": 5, "text": "Title"}
+
+
+def test_cursor_homes_to_first_input_without_ic():
+    t = Terminal()
+    sf = bytes([ds.ESC, ds.CMD_WRITE_TO_DISPLAY, 0, 0, ds.ORDER_SBA, 3, 10, ds.ORDER_SF, 0x40, 0x00, 0x24, 0, 6])
+    t.apply(sf)
+    assert t.snapshot()["cursor"] == [2, 10]
+
+
+def test_bare_attribute_after_start_of_field_keeps_the_field():
+    """A real host re-writes a field's attribute cell as a bare attribute.
+    That used to erase the field."""
+    t = Terminal()
+    t.apply(bytes([
+        ds.ESC, ds.CMD_WRITE_TO_DISPLAY, 0, 0,
+        ds.ORDER_SBA, 6, 24, ds.ORDER_SF, 0x40, 0x00, 0x27, 0x00, 0x80,
+        ds.ORDER_SBA, 6, 24, 0x27,
+    ]))
+    [f] = t.snapshot()["fields"]
+    assert (f["row"], f["col"], f["length"], f["hidden"]) == (5, 24, 128, True)
+
+
+def test_clear_unit_resets_and_alternate_screen_is_27x132():
+    t = Terminal()
+    t.apply(render(signon_screen("D")))
+    t.apply(bytes([ds.ESC, ds.CMD_CLEAR_UNIT]))
+    assert t.snapshot()["fields"] == []
+    t.apply(bytes([ds.ESC, 0x20, 0x00]))
+    assert (t.rows, t.cols) == (27, 132)
+
+
+def test_read_and_query_events():
+    t = Terminal()
+    assert [e.kind for e in t.apply(bytes([ds.ESC, ds.CMD_READ_MDT_FIELDS, 0, 0]))] == ["read"]
+    wsf = bytes([ds.ESC, 0xF3, 0x00, 0x05, 0xD9, 0x70, 0x00])
+    assert [e.kind for e in t.apply(wsf)] == ["query"]
+
+
+def test_message_ids_are_extracted():
+    snap = decode(Screen([Text(20, 2, "CPF1107 - Password not correct. Also MCH1210 and SQL0204.")]))
+    assert snap["message_ids"] == ["CPF1107", "MCH1210", "SQL0204"]
+
+
+@pytest.mark.parametrize("bad", [
+    bytes([0x11, 1, 1]),                                             # not an ESC command
+    bytes([ds.ESC]),                                                 # ESC at the end
+    bytes([ds.ESC, ds.CMD_WRITE_TO_DISPLAY, 0, 0, ds.ORDER_SBA, 99, 1]),  # off the screen
+])
+def test_malformed_streams_raise(bad):
+    with pytest.raises(DecodeError):
+        Terminal().apply(bad)
+
+
+# -- a real host record, when web3270's fixture is next door ---------------------
+
+FIXTURE = Path(os.environ.get("SILVERLAKE_WEB3270", Path(__file__).parents[2] / "web3270")) \
+    / "Bridge_server/features/fixtures/ibmi-pub400-23-signon-record.hex"
+
+
+@pytest.mark.skipif(not FIXTURE.exists(), reason="needs a web3270 checkout")
+def test_real_ibmi_signon_record_structure():
+    """Structure only. The record is not copied into this repo."""
+    t = Terminal()
+    t.apply(ds.split_gds(bytes.fromhex(FIXTURE.read_text().strip()))[1])
+    snap = t.snapshot()
+    user, pw = snap["fields"]
+    assert (user["row"], user["col"], user["length"], user["hidden"]) == (4, 24, 10, False)
+    assert (pw["row"], pw["col"], pw["length"], pw["hidden"]) == (5, 24, 128, True)
+    assert snap["cursor"] == [4, 24]
+    assert snap["geometry"] == [24, 80]
+
+
+# -- diff ---------------------------------------------------------------------------
+
+def test_identical_screens_have_no_diff():
+    s = decode(signon_screen("QPADEV0001"))
+    assert diff_snapshots(s, s) == []
+
+
+def test_diff_reports_field_and_cursor_differences():
+    a = decode(Screen([Input(5, 20, 10, "a")]))
+    b = decode(Screen([Input(5, 20, 50, "a", hidden=True), Input(6, 20, 3, "b")]))
+    out = diff_snapshots(a, b)
+    assert "input fields: 1 != 2" in out
+    assert "field[0].length: 10 != 50" in out
+    assert "field[0].hidden: False != True" in out
+    assert "field[0].attr: 0x24 != 0x27" in out
+
+
+def test_wording_differs_only_when_asked():
+    a = decode(Screen([Text(2, 5, "Hello there")]))
+    b = decode(Screen([Text(2, 5, "Howdy folks!")]))
+    assert diff_snapshots(a, b) == []
+    assert any("text at row=2" in d for d in diff_snapshots(a, b, text=True))
+
+
+def test_diff_flags_a_run_in_a_different_attribute_or_place():
+    a = decode(Screen([Text(2, 5, "x", ds.ATTR_WHITE)]))
+    b = decode(Screen([Text(2, 6, "x", ds.ATTR_WHITE)]))
+    assert any(d.startswith("run only in A") for d in diff_snapshots(a, b))
+    assert any(d.startswith("run only in B") for d in diff_snapshots(a, b))
+
+
+def test_fields_only_ignores_runs():
+    a = decode(Screen([Text(2, 5, "x"), Input(5, 20, 4, "a")]))
+    b = decode(Screen([Text(9, 5, "x"), Input(5, 20, 4, "a")]))
+    assert diff_snapshots(a, b)
+    assert diff_snapshots(a, b, fields_only=True) == []
+
+
+def test_diff_captures_prefixes_screen_index_and_counts_screens():
+    s1, s2 = decode(Screen([Input(1, 5, 3, "a")])), decode(Screen([Input(1, 5, 4, "a")]))
+    out = diff_captures({"snapshots": [s1, s1]}, {"snapshots": [s1, s2, s1]})
+    assert "screens: 2 != 3" in out
+    assert "screen 1: field[0].length: 3 != 4" in out
+
+
+# -- scenarios and the remote guard ------------------------------------------------
+
+def test_remote_host_needs_the_allowlist(tmp_path, monkeypatch):
+    monkeypatch.delenv(scenario.ALLOW_ENV, raising=False)
+    with pytest.raises(CaptureError, match="not allowlisted"):
+        scenario.check_target("pub400.com", tmp_path)
+    scenario.check_target("127.0.0.1", tmp_path)  # loopback is always fine
+
+
+def test_remote_host_is_rate_limited(tmp_path, monkeypatch):
+    monkeypatch.setenv(scenario.ALLOW_ENV, "pub400.com, other.example")
+    scenario.check_target("PUB400.com", tmp_path)
+    with pytest.raises(CaptureError, match="moments ago"):
+        scenario.check_target("pub400.com", tmp_path)
+
+
+def test_env_expansion(monkeypatch):
+    monkeypatch.setenv("SL_X", "abc")
+    assert scenario.expand("pre-${SL_X}-post") == "pre-abc-post"
+    monkeypatch.delenv("SL_X")
+    with pytest.raises(CaptureError, match="SL_X"):
+        scenario.expand("${SL_X}")
+
+
+def test_unknown_scenario():
+    with pytest.raises(CaptureError):
+        asyncio.run(scenario.run_scenario("127.0.0.1", 1, "nope"))
+
+
+# -- the whole loop against a live Silverlake ---------------------------------------
+
+def capture_local(name):
+    async def go():
+        server = await srv.serve("127.0.0.1", 0, SignonController)
+        try:
+            return await scenario.run_scenario("127.0.0.1", server.sockets[0].getsockname()[1], name)
+        finally:
+            server.close()
+            await server.wait_closed()
+    return asyncio.run(go())
+
+
+def test_capture_signon_from_live_silverlake():
+    cap = capture_local("signon")
+    assert len(cap["snapshots"]) == 1
+    snap = cap["snapshots"][0]
+    assert len(snap["fields"]) == 5
+    assert snap["cursor"] == [7, 53]
+    assert cap["records_hex"][0], "raw records are kept for local inspection"
+    json.dumps(cap)  # serializable
+
+
+def test_capture_unknown_user_scenario_takes_two_screens():
+    cap = capture_local("signon-unknown-user")
+    assert len(cap["snapshots"]) == 2
+    text = " ".join(r["text"] for r in cap["snapshots"][1]["runs"])
+    assert "SLNOUSR1" in text
+
+
+def test_local_against_itself_has_no_structural_diff():
+    a, b = capture_local("signon"), capture_local("signon")
+    assert diff_captures(a, b) == []
+
+
+def test_query_is_answered_and_screen_still_arrives():
+    """A host that sends a Query before its screen must get a reply."""
+    sent = []
+
+    async def go():
+        async def host(reader, writer):
+            from silverlake.proto import telnet as tn
+            for opt in (tn.OPT_TTYPE, tn.OPT_BINARY, tn.OPT_EOR):
+                writer.write(tn.command(tn.DO, opt))
+            writer.write(tn.command(tn.WILL, tn.OPT_BINARY) + tn.command(tn.WILL, tn.OPT_EOR))
+            query = bytes([ds.ESC, 0xF3, 0x00, 0x05, 0xD9, 0x70, 0x00])
+            writer.write(tn.record(ds.gds_record(query, ds.OPCODE_NO_OP)))
+            writer.write(tn.record(ds.gds_record(render(Screen([Input(2, 5, 4, "a")])))))
+            await writer.drain()
+            p = tn.Parser()
+            while True:
+                data = await reader.read(4096)
+                if not data:
+                    return
+                sent.extend(p.feed(data))
+        server = await asyncio.start_server(host, "127.0.0.1", 0)
+        try:
+            port = server.sockets[0].getsockname()[1]
+            from silverlake.oracle.client import Client
+            c = Client("127.0.0.1", port)
+            await c.connect()
+            cap = await c.wait_screen(5)
+            await asyncio.sleep(0.1)
+            await c.close()
+            return cap
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    cap = asyncio.run(go())
+    assert cap.snapshot["fields"][0]["length"] == 4
+    # cursor 0,0 then AID 0x88, the inbound structured field marker
+    replies = [e for e in sent if hasattr(e, "data") and ds.split_gds(e.data)[1][:3] == bytes([0, 0, 0x88])]
+    assert replies, "client did not answer the Query"
+    assert ebcdic.encode("3179") in replies[0].data
+
+
+# -- re-deriving snapshots from raw records ----------------------------------------
+
+def test_reanalyze_rebuilds_snapshots_from_records():
+    cap = capture_local("signon-unknown-user")
+    stale = {**cap, "snapshots": [{"stale": True}, {"stale": True}]}
+    fresh = scenario.reanalyze(stale)
+    assert fresh["snapshots"] == cap["snapshots"]
+    assert len(fresh["error_lines"]) == 2
+
+
+def test_reanalyze_leaves_captures_without_records_alone():
+    cap = {"snapshots": [{"x": 1}]}
+    assert scenario.reanalyze(cap) == cap
+
+
+def test_diff_survives_a_snapshot_missing_a_newer_key():
+    a = decode(Screen([Input(5, 20, 10, "a")]))
+    old = json.loads(json.dumps(a))
+    del old["fields"][0]["monocase"]
+    assert any("monocase" in d for d in diff_snapshots(old, a)) is True

@@ -22,20 +22,23 @@ def signon_screen(display: str, message: str = "", user: str = "") -> Screen:
         Text(4, _LABEL_COL, f"Subsystem . . . . :   {SUBSYSTEM}", ds.ATTR_WHITE),
         Text(5, _LABEL_COL, f"Display . . . . . :   {display}", ds.ATTR_WHITE),
         Text(7, _LABEL_COL, "User  . . . . . . . . . . . . . . . . . . . . . . ."),
-        Input(7, _FIELD_COL, 10, "user", value=user),
+        Input(7, _FIELD_COL, 10, "user", monocase=True, value=user),
         Text(8, _LABEL_COL, "Password  . . . . . . . . . . . . . . . . . . . . ."),
         Input(8, _FIELD_COL, 10, "password", hidden=True),
         Text(9, _LABEL_COL, "Program/procedure  . . . . . . . . . . . . . . . . ."),
-        Input(9, _FIELD_COL, 10, "program"),
+        Input(9, _FIELD_COL, 10, "program", monocase=True),
         Text(10, _LABEL_COL, "Menu  . . . . . . . . . . . . . . . . . . . . . . ."),
-        Input(10, _FIELD_COL, 10, "menu"),
+        Input(10, _FIELD_COL, 10, "menu", monocase=True),
         Text(11, _LABEL_COL, "Current library  . . . . . . . . . . . . . . . . ."),
-        Input(11, _FIELD_COL, 10, "library"),
+        Input(11, _FIELD_COL, 10, "library", monocase=True),
         Text(22, _LABEL_COL, when),
-        Text(23, _LABEL_COL, "Silverlake simulated system. Not IBM."),
     ]
+    # A real IBM i puts the message on the bottom row, in white, and it takes
+    # the place of the copyright line there (seen in a PUB400 capture).
     if message:
-        rows.append(Text(20, _LABEL_COL, message[:76], ds.ATTR_RED))
+        rows.append(Text(23, 0, message[:80], ds.ATTR_WHITE))
+    else:
+        rows.append(Text(23, _LABEL_COL, "Silverlake simulated system. Not IBM."))
     return Screen(rows, cursor="user")
 
 

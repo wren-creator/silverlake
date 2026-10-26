@@ -1,6 +1,7 @@
 """The screen model. Rows and columns are 0-based and name the first visible
 character. The attribute cell that 5250 needs in front of each run is the
-renderer's business, not the screen author's."""
+renderer's business, not the screen author's. It sits in the cell just before
+the run, which for a run at column 0 is the last cell of the row above."""
 
 from dataclasses import dataclass, field
 
@@ -21,9 +22,10 @@ class Text:
 class Input:
     row: int
     col: int
-    length: int
+    length: int  # may run past the end of the row, as a real 128 character password field does
     name: str
-    hidden: bool = False  # password style, nothing echoed
+    hidden: bool = False    # password style, nothing echoed
+    monocase: bool = False  # the terminal upper-cases what is typed
     value: str = ""
 
 
@@ -37,19 +39,23 @@ class Screen:
 
     def validate(self) -> None:
         names = set()
+        cells = ROWS * COLS
         for f in self.fields:
-            if f.col < 1:
-                raise ValueError(f"{f}: col must be >= 1, the attribute cell needs the column before it")
-            if f.row < 0 or f.row >= ROWS:
-                raise ValueError(f"{f}: row off the screen")
-            width = f.length if isinstance(f, Input) else len(f.text)
-            if f.col + width > COLS - 1 and isinstance(f, Input):
+            if not (0 <= f.row < ROWS and 0 <= f.col < COLS):
+                raise ValueError(f"{f}: off the screen")
+            start = f.row * COLS + f.col
+            if start < 1:
+                raise ValueError(f"{f}: the attribute cell needs a cell before the first one")
+            if isinstance(f, Text):
+                if f.col + len(f.text) > COLS:
+                    raise ValueError(f"{f}: runs off the right edge")
+                continue
+            if f.length < 1:
+                raise ValueError(f"{f}: length must be at least 1")
+            if start + f.length > cells - 1:
                 raise ValueError(f"{f}: no room for the closing attribute cell")
-            if f.col + width > COLS:
-                raise ValueError(f"{f}: runs off the right edge")
-            if isinstance(f, Input):
-                if f.name in names:
-                    raise ValueError(f"duplicate input name {f.name!r}")
-                names.add(f.name)
+            if f.name in names:
+                raise ValueError(f"duplicate input name {f.name!r}")
+            names.add(f.name)
         if self.cursor is not None and self.cursor not in names:
             raise ValueError(f"cursor names unknown input {self.cursor!r}")

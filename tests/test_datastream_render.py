@@ -85,7 +85,9 @@ def test_cursor_defaults_to_first_input():
     Screen([Text(0, 0, "x")]),                              # no room for the attribute cell
     Screen([Text(30, 5, "x")]),                             # off the screen
     Screen([Text(0, 70, "x" * 20)]),                        # off the right edge
-    Screen([Input(0, 70, 10, "a")]),                        # no room for the closing cell
+    Screen([Input(23, 75, 10, "a")]),                       # runs off the bottom of the screen
+    Screen([Input(5, 5, 0, "a")]),                          # empty field
+    Screen([Text(0, 0, "x")]),                              # no cell before the very first one
     Screen([Input(0, 5, 3, "a"), Input(1, 5, 3, "a")]),     # duplicate names
     Screen([Input(0, 5, 3, "a")], cursor="nope"),           # cursor names nothing
 ])
@@ -99,3 +101,38 @@ def test_signon_screen_is_valid_and_has_the_expected_inputs():
     s.validate()
     assert [i.name for i in s.inputs()] == ["user", "password", "program", "menu", "library"]
     assert next(i for i in s.inputs() if i.name == "password").hidden
+
+
+def test_monocase_sets_the_second_ffw_byte():
+    out = render(Screen([Input(2, 5, 4, "a", monocase=True), Input(3, 5, 4, "b")]))
+    assert bytes([0x1D, 0x40, 0x20, 0x24, 0, 4]) in out   # monocase
+    assert bytes([0x1D, 0x40, 0x00, 0x24, 0, 4]) in out   # plain
+
+
+def test_text_at_column_zero_puts_its_attribute_in_the_last_cell_of_the_row_above():
+    out = render(Screen([Text(23, 0, "msg", ds.ATTR_WHITE)]))
+    assert bytes([ds.ORDER_SBA, 23, 80, ds.ATTR_WHITE]) + ebcdic.encode("msg") in out
+
+
+def test_field_longer_than_a_row_wraps():
+    from silverlake.oracle.terminal import Terminal
+    out = render(Screen([Input(5, 24, 128, "pw", hidden=True)]))
+    t = Terminal()
+    t.apply(out)
+    [f] = t.snapshot()["fields"]
+    assert (f["row"], f["col"], f["length"], f["hidden"]) == (5, 24, 128, True)
+
+
+def test_signon_user_is_monocase_and_password_is_not():
+    s = signon_screen("QPADEV0001")
+    flags = {i.name: (i.monocase, i.hidden) for i in s.inputs()}
+    assert flags["user"] == (True, False)
+    assert flags["password"] == (False, True)
+
+
+def test_signon_message_takes_the_bottom_row_in_white():
+    s = signon_screen("QPADEV0001", message="CPF0000 - test")
+    [msg] = [f for f in s.fields if isinstance(f, Text) and f.row == 23]
+    assert (msg.col, msg.attr, msg.text) == (0, ds.ATTR_WHITE, "CPF0000 - test")
+    quiet = signon_screen("QPADEV0001")
+    assert any(isinstance(f, Text) and f.row == 23 and "Not IBM" in f.text for f in quiet.fields)

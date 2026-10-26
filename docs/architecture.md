@@ -48,6 +48,7 @@ src/silverlake/
   screens/render.py    Screen -> Clear Unit + Write To Display + Read MDT Fields
   screens/signon.py    sign-on screen and the Phase 1 controller
   net/server.py        asyncio listener, one Connection per client
+  oracle/              capture client, host stream decoder, diff, CLI (see oracle.md)
 ```
 
 A controller is anything with `first()` and `handle(aid, values)`, each returning a Screen. Phase 3 replaces the sign-on controller with the real system layer; the network and rendering code does not change.
@@ -56,4 +57,5 @@ A controller is anything with `first()` and `handle(aid, values)`, each returnin
 
 - Unit tests cover framing split at every size, record round trips, exact rendered bytes, and screen validation.
 - An independent client, web3270's tn5250 session class, connects, sees the sign-on screen with the right fields and a hidden password, types, and gets the reply back (`tests/test_interop_web3270.py`).
-- **Not yet checked:** lib5250's `tn5250`, IBM Access Client Solutions, or any real terminal. TLS is not built. Screen text has not yet been diffed against a real IBM i; that is Phase 2.
+- The decoder reads a real PUB400 sign-on record correctly (two fields, a 128 long hidden password, cursor homed to the first field), and the structural diff against live PUB400 captures is how generic behavior gets confirmed (`docs/oracle.md`).
+- **Not yet checked:** lib5250's `tn5250`, IBM Access Client Solutions, or any real terminal. TLS is not built. Anything past the sign-on screen has not been compared with a real IBM i.

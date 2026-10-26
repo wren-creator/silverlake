@@ -12,7 +12,7 @@ A true AS/400 emulator is off the table. The licensed internal code is proprieta
 
 ## Status
 
-Phase 1 done. A 5250 client can connect, negotiate, and see a sign-on screen; typing a user and pressing Enter round-trips, but sign-on checks are not wired up yet (that is Phase 3). See [ROADMAP.md](ROADMAP.md) for the plan and [docs/architecture.md](docs/architecture.md) for how the pieces fit.
+Phases 0 to 2 done. A 5250 client can connect, negotiate, and see a sign-on screen, and typing a user and pressing Enter round-trips, but sign-on checks are not wired up yet (that is Phase 3). A capture-and-diff harness measures how close the screens are to a real IBM i ([docs/oracle.md](docs/oracle.md)). See [ROADMAP.md](ROADMAP.md) for the plan and [docs/architecture.md](docs/architecture.md) for how the pieces fit.
 
 ## Safety
 
