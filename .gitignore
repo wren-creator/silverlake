@@ -1,0 +1,22 @@
+# --- local env ---
+.env
+.venv/
+
+# --- runtime state ---
+# SQLite system image and spool; reset.sh rebuilds from the seed
+state/
+*.sqlite
+*.sqlite-journal
+
+# --- captures from a real IBM i ---
+# IBM's screens and message text. Local oracle only, never committed.
+captures/*
+!captures/.gitkeep
+
+# --- os / editor cruft ---
+.DS_Store
+*.swp
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
