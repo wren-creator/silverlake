@@ -19,5 +19,8 @@ silverlake = "silverlake.__main__:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+silverlake = ["data/*.toml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

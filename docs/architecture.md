@@ -48,6 +48,10 @@ src/silverlake/
   screens/render.py    Screen -> Clear Unit + Write To Display + Read MDT Fields
   screens/signon.py    sign-on screen and the Phase 1 controller
   net/server.py        asyncio listener, one Connection per client
+  system/authority.py  user classes, special authorities, object authority resolution
+  system/profiles.py   profile store, TOML seed loader, sign-on check
+  system/messages.py   message IDs and our wording, with where each ID came from
+  data/profiles.toml   the seed: who exists and what access they hold
   oracle/              capture client, host stream decoder, diff, CLI (see oracle.md)
 ```
 

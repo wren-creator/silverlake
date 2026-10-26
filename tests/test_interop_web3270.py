@@ -62,7 +62,7 @@ def test_real_client_signs_on_and_round_trips():
     assert [f["data"] for f in out["sent"]] == ["wren01", "secret"]
 
     assert any("WREN01" in line for line in second["text"])
-    assert any("not wired up" in line for line in second["text"])
+    assert any("CPF1120" in line for line in second["text"])
     assert not any("secret" in line.lower() for line in second["text"])
 
 

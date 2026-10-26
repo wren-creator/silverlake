@@ -1,0 +1,184 @@
+# Silverlake seed: the range's golden state for users and access.
+#
+# To assign access, edit a profile here (or copy this file and point
+# SILVERLAKE_PROFILES at the copy), then run ./reset.sh. docs/access-model.md
+# explains every field. This file is deliberately weak: passwords equal the
+# profile name, and a few accounts are over-privileged on purpose.
+
+[system]
+qsecurity = 40        # 20, 30, 40 or 50. Try 20: every *USER gets *ALLOBJ.
+qpwdlvl   = 0         # 0 or 1 ignore case in passwords, 2 and 3 do not
+mode      = "vulnerable"
+
+# ---------------------------------------------------------------------------
+# One account per user class. special_authorities is left out, so each gets
+# what its class gives at the QSECURITY level above (SPCAUT(*USRCLS)).
+# ---------------------------------------------------------------------------
+
+[[profile]]
+name = "QSECOFR"
+user_class = "*SECOFR"
+password = "QSECOFR"
+text = "Security officer. Every special authority."
+
+[[profile]]
+name = "SECADMIN"
+user_class = "*SECADM"
+password = "SECADMIN"
+text = "Security administrator. Manages profiles."
+
+[[profile]]
+name = "DEVELOPER"
+user_class = "*PGMR"
+password = "DEVELOPER"
+group_profile = "GRPDEV"
+text = "Programmer."
+
+[[profile]]
+name = "OPERATOR"
+user_class = "*SYSOPR"
+password = "OPERATOR"
+text = "System operator."
+
+[[profile]]
+name = "STUDENT"
+user_class = "*USER"
+password = "STUDENT"
+text = "Ordinary user. The account most attacks start from."
+
+# ---------------------------------------------------------------------------
+# Tighter than the class: SPCAUT(*NONE) and limited capabilities.
+# ---------------------------------------------------------------------------
+
+[[profile]]
+name = "GUEST"
+user_class = "*USER"
+special_authorities = "*NONE"
+limited_capabilities = "*YES"
+password = "GUEST"
+text = "No special authority, limited capabilities."
+
+# ---------------------------------------------------------------------------
+# One special authority each, on an ordinary *USER. Hand out exactly one thing
+# and see what it is worth.
+# ---------------------------------------------------------------------------
+
+[[profile]]
+name = "AUDITOR"
+special_authorities = ["*AUDIT"]
+password = "AUDITOR"
+text = "*AUDIT only."
+
+[[profile]]
+name = "IOADMIN"
+special_authorities = ["*IOSYSCFG"]
+password = "IOADMIN"
+text = "*IOSYSCFG only."
+
+[[profile]]
+name = "JOBMAN"
+special_authorities = ["*JOBCTL"]
+password = "JOBMAN"
+text = "*JOBCTL only."
+
+[[profile]]
+name = "BACKUP"
+special_authorities = ["*SAVSYS"]
+password = "BACKUP"
+text = "*SAVSYS only. Can save and restore any object."
+
+[[profile]]
+name = "SECONLY"
+special_authorities = ["*SECADM"]
+password = "SECONLY"
+text = "*SECADM only. Cannot give away what it does not hold."
+
+[[profile]]
+name = "SVCTOOLS"
+special_authorities = ["*SERVICE"]
+password = "SVCTOOLS"
+text = "*SERVICE only."
+
+[[profile]]
+name = "SPOOLMAN"
+special_authorities = ["*SPLCTL"]
+password = "SPOOLMAN"
+text = "*SPLCTL only."
+
+# ---------------------------------------------------------------------------
+# The mistakes real systems actually have.
+# ---------------------------------------------------------------------------
+
+[[profile]]
+name = "SVCACCT"
+special_authorities = ["*ALLOBJ"]
+password = "SVCACCT"
+text = "Service account with *ALLOBJ it does not need."
+
+[[profile]]
+name = "LEGACY"
+user_class = "*PGMR"
+special_authorities = ["*ALLOBJ", "*JOBCTL"]
+password = "LEGACY"
+text = "Programmer with *ALLOBJ, left over from a long gone project."
+
+[[profile]]
+name = "DEVADMIN"
+user_class = "*PGMR"
+special_authorities = ["*SECADM"]
+password = "DEVADMIN"
+text = "Programmer who was given *SECADM for a day, years ago."
+
+[[profile]]
+name = "NOPWD"
+password = "*NONE"
+text = "PASSWORD(*NONE). Cannot sign on, can still own things and run jobs."
+
+[[profile]]
+name = "OLDTEMP"
+status = "*DISABLED"
+password = "OLDTEMP"
+text = "Disabled contractor account."
+
+[[profile]]
+name = "GRPDEV"
+password = "*NONE"
+text = "Group profile for the developers."
+
+# ---------------------------------------------------------------------------
+# A few secured objects, so object authority has something to be checked
+# against. Real libraries and files arrive with the object model.
+# ---------------------------------------------------------------------------
+
+[[authorization_list]]
+name = "PAYAUTL"
+public = "*EXCLUDE"
+[authorization_list.entries]
+SECADMIN = "*ALL"
+OPERATOR = "*USE"
+
+[[object]]
+name = "PAYROLL"
+owner = "QSECOFR"
+public = "*AUTL"
+autl = "PAYAUTL"
+
+[[object]]
+name = "CUSTOMERS"
+owner = "QSECOFR"
+public = "*USE"
+[object.private]
+DEVELOPER = "*CHANGE"
+GUEST = "*EXCLUDE"
+
+[[object]]
+name = "SRCLIB"
+owner = "DEVELOPER"
+public = "*EXCLUDE"
+[object.private]
+GRPDEV = "*CHANGE"
+
+[[object]]
+name = "SCRATCH"
+owner = "STUDENT"
+public = "*CHANGE"

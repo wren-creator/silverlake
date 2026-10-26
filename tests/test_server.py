@@ -105,14 +105,14 @@ def test_client_that_refuses_new_environ_still_gets_a_screen():
     run(with_server(fn, environ=False))
 
 
-def test_enter_round_trip_echoes_user_and_reports_not_wired():
+def test_enter_round_trip_echoes_user_and_reports_unknown_user():
     async def fn(c):
         await c.pump(lambda: c.records)
         c.send_input(0xF1, [(5, 52, "wren01"), (6, 52, "secret")])
         await c.pump(lambda: len(c.records) >= 2)
         text = signon_text(ds.split_gds(c.records[1])[1])
         assert "WREN01" in text
-        assert "not wired up" in text
+        assert "CPF1120" in text
         assert "secret" not in text.lower()  # the password is never drawn back
     run(with_server(fn))
 
@@ -130,3 +130,39 @@ def test_garbage_record_does_not_kill_the_connection():
 def test_loopback_only_listener_address():
     from silverlake.config import listen_address
     assert listen_address()[0] == "127.0.0.1"
+
+
+def test_signon_to_home_and_back_over_a_real_socket():
+    async def fn(c):
+        await c.pump(lambda: c.records)
+        c.send_input(0xF1, [(5, 52, "qsecofr"), (6, 52, "QSECOFR")])
+        await c.pump(lambda: len(c.records) >= 2)
+        text = signon_text(ds.split_gds(c.records[1])[1])
+        assert "*SECOFR" in text and "*SPLCTL" in text      # all eight, wrapped, not dropped
+        c.send_input(0x33, [])                               # F3
+        await c.pump(lambda: len(c.records) >= 3)
+        assert "Sign On" in signon_text(ds.split_gds(c.records[2])[1])
+    run(with_server(fn))
+
+
+def test_a_failing_controller_ends_that_session_not_the_server(caplog):
+    class Boom(SignonController):
+        def handle(self, aid, values):
+            raise RuntimeError("boom")
+
+    async def go():
+        server = await srv.serve("127.0.0.1", 0, Boom)
+        port = server.sockets[0].getsockname()[1]
+        try:
+            for _ in range(2):   # the second connection proves the server survived
+                r, w = await asyncio.open_connection("127.0.0.1", port)
+                c = Client(r, w)
+                await c.pump(lambda: c.records)
+                c.send_input(0xF1, [(5, 52, "x")])
+                await asyncio.wait_for(r.read(4096), 3)
+                w.close()
+        finally:
+            server.close()
+            await server.wait_closed()
+    asyncio.run(go())
+    assert "session failed" in caplog.text

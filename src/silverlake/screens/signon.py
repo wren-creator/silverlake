@@ -16,6 +16,9 @@ column, the right hand block, and the copyright column are exact.
 """
 
 from ..proto import datastream as ds
+from ..system import profiles
+from ..system.profiles import Profile, ProfileStore
+from .home import home_screen
 from .model import Input, Screen, Text
 
 SYSTEM_NAME = "SILVERLK"
@@ -72,17 +75,33 @@ def signon_screen(display: str, message: str = "", user: str = "") -> Screen:
 
 
 class SignonController:
-    """One per connection. Phase 1 only proves the round trip: it draws the
-    sign-on screen, reads back what was typed, and says it is not wired yet."""
+    """One per connection. Checks the sign-on against the profile store, then
+    shows the placeholder menu. Sign off (F3) returns to the sign-on screen."""
 
-    def __init__(self, display: str) -> None:
+    def __init__(self, display: str, store: ProfileStore | None = None) -> None:
         self.display = display
-        self.last_values: dict[str, str] = {}
+        self.store = store or profiles.load()
+        self.profile: Profile | None = None
 
     def first(self) -> Screen:
         return signon_screen(self.display)
 
     def handle(self, aid: str, values: dict[str, str]) -> Screen:
-        self.last_values = values
-        user = values.get("user", "").upper()
-        return signon_screen(self.display, "Sign-on is not wired up yet (Phase 3).", user)
+        if self.profile is not None:
+            return self._home(aid, values)
+        user = values.get("user", "").strip()
+        if not user:
+            return signon_screen(self.display)
+        result = self.store.check_signon(user, values.get("password", ""))
+        if result.profile is None:
+            return signon_screen(self.display, result.message.line(), user.upper())
+        self.profile = result.profile
+        return home_screen(self.store, self.profile)
+
+    def _home(self, aid: str, values: dict[str, str]) -> Screen:
+        if aid in ("F3", "F12"):
+            self.profile = None
+            return signon_screen(self.display)
+        command = values.get("command", "").strip()
+        message = "Commands arrive with the CL layer." if command else ""
+        return home_screen(self.store, self.profile, message)

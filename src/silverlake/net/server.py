@@ -180,6 +180,10 @@ class Connection:
                 await self.writer.drain()
         except (ConnectionError, asyncio.IncompleteReadError):
             pass
+        except Exception:
+            # A bug in a screen or a controller costs this one session, loudly,
+            # and nothing else.
+            log.exception("[%d] session failed", self.serial)
         finally:
             log.info("[%d] disconnect", self.serial)
             self.writer.close()
