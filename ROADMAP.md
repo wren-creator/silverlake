@@ -29,7 +29,7 @@
 - [x] DSPJOBLOG (live log, *JOBCTL or same user, *ALLOBJ jobs need *ALLOBJ) and WRKJOB (menu, options 4, 10, 13), WRKACTJOB option 5, from the PUB400 captures
 - [x] DSPJOB and its status, definition and run attribute pages (first pages), also behind WRKJOB options 1, 2, 3, from a PUB400 capture of the profile's own job
 - [ ] Job leftovers: WRKJOB and DSPJOB options 11, 12, 14, 15, 16, page two of the menus and of the status and definition pages, DSPJOBLOG F10, WRKACTJOB options 7, 13 and keys F7, F10, F11, the real confirm for option 4 and prompt for option 2 (need captures, the oracle will not end or change jobs)
-- [ ] Colors: a compare against the captures shows Silverlake draws option and value text white where the real host draws green (labels and values green, titles and More... white, prompts and keys blue). The job screens now match, most older screens do not. Do one pass over every screen against its capture
+- [x] Colors: every captured screen now draws what the real host draws (labels, values, list rows and options green, titles, column headings and More... and Bottom white, prompts and keys blue), with a test holding the rules. Screens with no capture follow the same rules by analogy
 - [ ] Spool leftovers: WRKOUTQ and its capture, WRKSPLF options 1, 2, 4 (confirm), 7, 9, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF, CRTOUTQ
 - [x] Phase 3c-3c step 3: message queues (DSPMSG, SNDMSG, CLRMSGQ, QSYSOPR, per-user queues in QUSRSYS), from the PUB400 captures
 - [x] CRTMSGQ, CHGMSGQ (DLVRY, SEV, TEXT) and DLTMSGQ from IBM's command pages, rules and inferences in docs/jobs-spool-messages.md

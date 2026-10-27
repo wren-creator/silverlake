@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Colors now follow the real host on every screen that has a capture: list rows and values green (they were turquoise or white), More... and Bottom white (they were blue), column headings white. A test holds the rules. The sign-on screen keeps its own turquoise block, which the real one draws.
 - DSPJOB and the three job attribute pages (status, definition, run), from a read-only capture of the real displays. They are also behind WRKJOB options 1, 2 and 3. The run page shows what CHGJOB changed. The job screens now use the colors the real host uses (green for labels, values and options, white titles, blue prompts and keys), which the capture showed older screens get wrong.
 
 - CRTMSGQ, CHGMSGQ and DLTMSGQ, built from IBM's command pages. A new queue is delivery *HOLD, severity 00, owned by its creator, and AUT sets who else can touch it. CHGMSGQ needs *USE and *DLT on the queue, DLTMSGQ needs *OBJEXIST on top, so the default *CHANGE lets anyone write to a queue and change it but not delete it. QSYSOPR cannot be deleted. WRKOBJ option 4 on a queue runs DLTMSGQ.

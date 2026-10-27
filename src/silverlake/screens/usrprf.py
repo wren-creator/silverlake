@@ -18,7 +18,7 @@ FIRST_ROW = 5
 def _fact(rows: list, row: int, label: str, value: str) -> int:
     rows.append(Text(row, LABEL_COL, f"{label} ".ljust(VALUE_COL - LABEL_COL - 3, ".") + " :", ds.ATTR_GREEN))
     for line in wrap(value or " ", VALUE_WIDTH):
-        rows.append(Text(row, VALUE_COL, line, ds.ATTR_WHITE))
+        rows.append(Text(row, VALUE_COL, line, ds.ATTR_GREEN))
         row += 1
     return row
 
@@ -73,13 +73,13 @@ def wrkusrprf_screen(profiles: list[Profile], page: int = 0, message: str = "") 
         r = FIRST_ROW + i
         rows += [
             Input(r, 3, 1, f"opt{i}"),
-            Text(r, 7, p.name, ds.ATTR_TURQUOISE),
-            Text(r, 22, p.user_class.value, ds.ATTR_TURQUOISE),
-            Text(r, 32, p.group_profile or "*NONE", ds.ATTR_TURQUOISE),
-            Text(r, 44, p.text[:34], ds.ATTR_TURQUOISE),
+            Text(r, 7, p.name, ds.ATTR_GREEN),
+            Text(r, 22, p.user_class.value, ds.ATTR_GREEN),
+            Text(r, 32, p.group_profile or "*NONE", ds.ATTR_GREEN),
+            Text(r, 44, p.text[:34], ds.ATTR_GREEN),
         ]
     more = "More..." if page < wrkusrprf_pages(len(profiles)) - 1 else "Bottom"
-    rows.append(Text(FIRST_ROW + PAGE_SIZE, 70, more, ds.ATTR_BLUE))
+    rows.append(Text(FIRST_ROW + PAGE_SIZE, 70, more, ds.ATTR_WHITE))
     if message:
         rows.append(Text(22, 2, message[:76], ds.ATTR_WHITE))
     rows.append(Text(23, 2, "F3=Exit   F12=Cancel   Page Up/Down", ds.ATTR_GREEN))
