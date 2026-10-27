@@ -54,11 +54,13 @@ if .venv/bin/python -c "import socket; socket.create_connection(('$HOST', $PORT)
   exit 1
 fi
 if [ -n "$SERVICES" ]; then
-  HTTP_PORT="${SILVERLAKE_HTTPADMIN_PORT:-2001}"
-  if .venv/bin/python -c "import socket; socket.create_connection(('$HOST', $HTTP_PORT), 0.5).close()" 2>/dev/null; then
-    bad "port $HTTP_PORT (HTTP Admin) is already in use. Set SILVERLAKE_HTTPADMIN_PORT to another"
-    exit 1
-  fi
+  for spec in "HTTP Admin:${SILVERLAKE_HTTPADMIN_PORT:-2001}:SILVERLAKE_HTTPADMIN_PORT" "FTP:${SILVERLAKE_FTP_PORT:-2121}:SILVERLAKE_FTP_PORT"; do
+    IFS=: read -r svc svc_port svc_var <<<"$spec"
+    if .venv/bin/python -c "import socket; socket.create_connection(('$HOST', $svc_port), 0.5).close()" 2>/dev/null; then
+      bad "port $svc_port ($svc) is already in use. Set $svc_var to another"
+      exit 1
+    fi
+  done
 fi
 info "starting on $HOST:$PORT"
 nohup .venv/bin/python -m silverlake >"$LOG_FILE" 2>&1 &
@@ -81,6 +83,7 @@ if [ -n "$listening" ]; then
   ok "Silverlake is up"
   echo "  5250 sign-on   $HOST:$PORT   (tn5250 $HOST:$PORT)"
   [ -n "$SERVICES" ] && echo "  HTTP Admin     $HOST:${SILVERLAKE_HTTPADMIN_PORT:-2001}   (http://$HOST:${SILVERLAKE_HTTPADMIN_PORT:-2001}/HTTPAdmin)"
+  [ -n "$SERVICES" ] && echo "  FTP            $HOST:${SILVERLAKE_FTP_PORT:-2121}   (ftp $HOST ${SILVERLAKE_FTP_PORT:-2121})"
   echo "  logs:          $LOG_FILE"
   echo "  reset to seed: ./reset.sh"
 else

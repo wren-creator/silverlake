@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- FTP on 127.0.0.1:2121 with the other services. Sign-on goes through the profile store (clear text, bad attempts count), `RETR` and `LIST` obey the same file authority as DSPPFM, and both naming formats work. Read only: nothing can be written, deleted or made. No lesson on it yet.
+
 - Network services, first one. `./start.sh --services` (or `SILVERLAKE_SERVICES=1`) now also starts the HTTP Server Administration console on 127.0.0.1:2001, in the same process as the 5250 server, so it signs in against the same profiles and sees lesson toggles at once. A new lesson group D and lesson `httpadmin-ssi-injection`: the Create HTTP Server description is evaluated for `exec` directives and the command runs as QTMHHTTP, so an ordinary profile reads a system profile's message queue (the flag) that the 5250 side refuses it. The command goes to Silverlake's own dispatcher, never a shell. The secure state records the fix PTF on `QHTTPSVR/QZHBADMIN` and the field is escaped. IBM has not published the real parameter, so this models the bug class, not the bug. `scenario.sh` keeps services on across its restart. Details in docs/services.md. FTP and the host servers are the next two steps.
 
 - Instructor kit, in the shape of Cross Creek's. `instructor/` holds a two day agenda, an answer key with the teaching notes and a one line mechanism and fix for every lesson, a capstone rubric, a setup runbook (including why flags differ per machine and how to score on the student's own), and five session decks: orientation, one each for the three lesson groups, and fix and re-run. A test keeps the answer key and the registry in step.
