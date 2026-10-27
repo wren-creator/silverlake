@@ -101,36 +101,3 @@ def dspautl_screen(autl, entry_rows: list[tuple[str, str]], page: int = 0) -> Sc
     rows.append(Text(19, 1, "Press Enter to continue.", ds.ATTR_BLUE))
     rows.append(Text(21, 1, "F3=Exit   F12=Cancel", ds.ATTR_BLUE))
     return Screen(rows)
-
-
-def wrkautl_screen(lists: list, page: int = 0) -> Screen:
-    page, shown = _clamp(lists, page)
-    rows: list[Text | Input] = [
-        Text(0, 25, "Work with Authorization Lists", ds.ATTR_WHITE),
-        Text(2, 2, "Authorization lists you have some authority to.", ds.ATTR_BLUE),
-        Text(4, 2, "List", ds.ATTR_WHITE), Text(4, 14, "Owner", ds.ATTR_WHITE), Text(4, 26, "Text", ds.ATTR_WHITE),
-    ]
-    for i, autl in enumerate(shown):
-        r = FIRST_ROW + i
-        rows += [Text(r, 2, autl.name, ds.ATTR_TURQUOISE), Text(r, 14, autl.owner, ds.ATTR_TURQUOISE),
-                 Text(r, 26, autl.text[:50], ds.ATTR_TURQUOISE)]
-    _footer(rows, page, len(lists), "F3=Exit   F12=Cancel   Page Up/Down")
-    return Screen(rows)
-
-
-def wrkobj_screen(objs: list, title: str, page: int = 0) -> Screen:
-    page, shown = _clamp(objs, page)
-    rows: list[Text | Input] = [
-        Text(0, max(0, (80 - len(title)) // 2), title, ds.ATTR_WHITE),
-        Text(2, 2, "Objects you have some authority to.", ds.ATTR_BLUE),
-        Text(4, 2, "Object", ds.ATTR_WHITE), Text(4, 14, "Type", ds.ATTR_WHITE),
-        Text(4, 22, "Library", ds.ATTR_WHITE), Text(4, 34, "Owner", ds.ATTR_WHITE),
-        Text(4, 46, "Text", ds.ATTR_WHITE),
-    ]
-    for i, o in enumerate(shown):
-        r = FIRST_ROW + i
-        rows += [Text(r, 2, o.name, ds.ATTR_TURQUOISE), Text(r, 14, o.type, ds.ATTR_TURQUOISE),
-                 Text(r, 22, o.library, ds.ATTR_TURQUOISE), Text(r, 34, o.owner, ds.ATTR_TURQUOISE),
-                 Text(r, 46, o.text[:32], ds.ATTR_TURQUOISE)]
-    _footer(rows, page, len(objs), "F3=Exit   F12=Cancel   Page Up/Down")
-    return Screen(rows)

@@ -106,6 +106,12 @@ CHGOBJOWN_PARAMS = [
     Param("NEWOWN", "name", "", required=True), Param("CUROWNAUT", "curownaut", "*REVOKE"),
 ]
 
+RNMOBJ_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
+                 Param("NEWOBJ", "name", "", required=True), Param("ASPDEV", "ignored", "*"),
+                 Param("SYSTEM", "ignored", "*LCL")]
+CHGOBJD_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
+                  Param("TEXT", "text", SAME), Param("USECOUNT", "ignored", "*NORESET")]
+
 COMMANDS = {
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
     "DLTUSRPRF": DLT_PARAMS, "WRKUSRPRF": WRK_PARAMS, "SIGNOFF": [],
@@ -116,7 +122,7 @@ COMMANDS = {
     "CRTAUTL": CRTAUTL_PARAMS, "DLTAUTL": DLTAUTL_PARAMS, "ADDAUTLE": ADDAUTLE_PARAMS,
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
-    "CHGOBJOWN": CHGOBJOWN_PARAMS,
+    "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
 }
 
 
@@ -458,11 +464,25 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
             return Outcome(messages.syntax("Nothing to change: give INLPGM, INLMNU or CURLIB."))
         return Outcome(admin.change_own_profile(store, actor, session.search_order(), attrs).message)
     if name == "WRKOBJ":
+        def again():
+            return objlist.work_with_objects(store, actor, *b["OBJ"], b["OBJTYPE"], session)[0]
         rows, err = objlist.work_with_objects(store, actor, *b["OBJ"], b["OBJTYPE"], session)
-        return _object_view(rows, err, "Work with Objects")
+        return _object_view(rows, err, ("objects", None, again))
     if name == "WRKOBJOWN":
+        owner = actor.name if b["USRPRF"] == "*CURRENT" else b["USRPRF"]
+
+        def again():
+            return objlist.work_with_objects_by_owner(store, actor, b["USRPRF"], b["OBJTYPE"])[0]
         rows, err = objlist.work_with_objects_by_owner(store, actor, b["USRPRF"], b["OBJTYPE"])
-        return _object_view(rows, err, "Work with Objects by Owner")
+        return _object_view(rows, err, ("owner", owner, again))
+    if name == "RNMOBJ":
+        return Outcome(objlist.rename_object(store, actor, b["OBJ"], b["OBJTYPE"], b["NEWOBJ"],
+                                             session.search_order()).message)
+    if name == "CHGOBJD":
+        if b["TEXT"] == SAME:
+            return Outcome(messages.info("Object not changed."))
+        return Outcome(objlist.change_description(store, actor, b["OBJ"], b["OBJTYPE"], b["TEXT"],
+                                                  session.search_order()).message)
     if name == "CHGOBJOWN":
         return Outcome(objlist.change_owner(store, actor, b["OBJ"], b["OBJTYPE"], b["NEWOWN"],
                                             b["CUROWNAUT"], session.search_order()).message)
@@ -505,15 +525,15 @@ def _run_autl_command(store: ProfileStore, actor: Profile, name: str, b: dict) -
     rows = autls.visible(store, actor, pattern)
     if not rows:
         return Outcome(messages.syntax("No authorization lists found, or you are not authorized to any."))
-    return Outcome(view=("wrkautl", rows))
+    return Outcome(view=("wrkautl", rows, lambda: autls.visible(store, actor, pattern)))
 
 
-def _object_view(rows: list, err, title: str) -> Outcome:
+def _object_view(rows: list, err, how: tuple) -> Outcome:
     if err:
         return Outcome(err)
     if not rows:
         return Outcome(messages.syntax("No objects found, or you are not authorized to any."))
-    return Outcome(view=("wrkobj", rows, title))
+    return Outcome(view=("wrkobj", rows, *how))
 
 
 def _done(d: objects.Done) -> messages.Message:

@@ -19,7 +19,9 @@
 - [x] Phase 3c-3a: authorization lists (CRTAUTL, DLTAUTL, ADDAUTLE, CHGAUTLE, RMVAUTLE, DSPAUTL, WRKAUTL), *AUTLMGT, list owner
 - [ ] Phase 3c-3a follow-ups: generic list names, WRKAUTL options, DSPAUTL *PRINT and *OUTFILE, lists owned by a deleted profile, QIBM_DB_SECADM, CHGOBJOWN, *AUTL as an object type for DSPOBJAUT
 - [x] Phase 3c-3b: WRKOBJ, WRKOBJOWN, CHGOBJOWN
-- [ ] Phase 3c-3b follow-ups: build the options the PUB400 capture showed (WRKOBJ 2/3/4/5/7/8/13, WRKOBJOWN adds 9, WRKAUTL 1/2/4/5/8/9/13, position-to rows, real column layouts), more object types, *AUTL in the object table, DSPOBJD
+- [x] Work list options and layouts from the PUB400 capture: WRKOBJ 5, 7, 13, WRKOBJOWN 5, 7, 9, WRKAUTL 1, 5, 8, plus RNMOBJ and CHGOBJD
+- [ ] Work list options still to build: 2 (Edit authority, needs EDTOBJAUT and its screen), 3 (copy), 4 (delete, with the confirm screen), 8 on objects (display description), WRKAUTL 2, 4, 9, 13; F4 prompting, F11, F16 and F17 positioning, F17 and F18 top and bottom on WRKOBJOWN; capture the real confirm and edit screens
+- [ ] More object types, *AUTL in the object table, DSPOBJD, generic names on RNMOBJ and CHGOBJD
 - [ ] Phase 3c-3c: jobs, spool and messages (WRKACTJOB, WRKSPLF, DSPMSG)
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)

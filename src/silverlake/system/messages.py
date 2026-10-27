@@ -251,6 +251,22 @@ def no_delete_authority_to_owner(name: str) -> Message:
     return _doc("CPF2233", f"No delete authority to user profile {name}.")
 
 
+def not_authorized_to_object_2189(obj: str, lib: str, typ: str) -> Message:
+    return _doc("CPF2189", f"Not authorized to object {obj} in {lib} type {typ}.")
+
+
+def object_already_exists(obj: str, lib: str) -> Message:
+    return _doc("CPF2132", f"Object {obj} already exists in library {lib}.")
+
+
+def protected_library(lib: str) -> Message:
+    return _doc("CPF9876", f"Protected library {lib} cannot be modified.")
+
+
+def system_library_name(name: str) -> Message:
+    return _doc("CPF2166", f"Library name {name} not valid.")
+
+
 def autl_not_found(name: str) -> Message:
     return _doc("CPF2283", f"Authorization list {name} does not exist.")
 

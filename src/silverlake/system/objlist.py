@@ -12,6 +12,11 @@ Rules read from the IBM i 7.5 command pages:
              new owner's profile and *DLT to the present owner's, or *ALLOBJ. CUROWNAUT(*REVOKE)
              takes the old owner's authority away, *SAME keeps it as a private entry.
 
+  RNMOBJ     *OBJMGT on the object (and *OBJOPR for a file), and *UPD and *EXECUTE on the library
+             it sits in. IBM's system libraries cannot be renamed, nor can a library take a
+             system library's name. The new name must be unique in the library for the type.
+  CHGOBJD    *OBJMGT on the object (and *OBJOPR for a file) and *EXECUTE on the library.
+
 Not on the pages, so ours: the options on the list displays (the pages do not list them, so
 none are offered), and what the library gate means for a *USE check on a library you only
 reach through *PUBLIC. *AUTL objects are not in the object table yet, so they never appear."""
@@ -20,7 +25,7 @@ import fnmatch
 
 from . import messages
 from .authority import ALL, USE, Auth, SecuredObject, SpecialAuthority
-from .objects import TYPES, Done, _no, _ok, locate
+from .objects import NAME, SYSTEM_LIBRARIES, TYPES, Done, _no, _ok, authority_to_library, locate
 from .profiles import Profile, ProfileStore
 
 SA = SpecialAuthority
@@ -113,3 +118,72 @@ def change_owner(store: ProfileStore, actor: Profile, qualified: str, typ: str, 
         obj.private[previous] = kept
     store.on_change()
     return _ok(f"Ownership of object {obj.name} in {obj.library} type {obj.type} changed.")
+
+
+def _need_for(typ: str) -> Auth:
+    return Auth.OBJMGT | (Auth.OBJOPR if typ == "*FILE" else Auth.NONE)
+
+
+def _protected(obj: SecuredObject) -> messages.Message | None:
+    """Inferred from IBM's list of things RNMOBJ will not rename: its system libraries, and what
+    is in them. User libraries live in QSYS as *LIB objects, so those stay renamable."""
+    if obj.type == "*LIB":
+        return messages.system_library_name(obj.name) if obj.name in SYSTEM_LIBRARIES else None
+    if obj.library in ("QSYS", "QSYS2", "QHLPSYS"):
+        return messages.protected_library(obj.library)
+    return None
+
+
+def rename_object(store: ProfileStore, actor: Profile, qualified: str, typ: str, new: str,
+                  search: list[str]) -> Done:
+    obj, err = locate(store, actor, qualified, typ, search)
+    if err:
+        return _no(err)
+    new = new.upper()
+    if not NAME.match(new):
+        return _no(messages.syntax(f"New object name {new} not valid."))
+    blocked = _protected(obj)
+    if blocked:
+        return _no(blocked)
+    if typ == "*LIB" and new in SYSTEM_LIBRARIES:
+        return _no(messages.system_library_name(new))
+    if not _allobj(store, actor):
+        if _need_for(typ) & ~store.authority_to_object(actor, obj):
+            return _no(messages.not_authorized_to_object_2189(obj.name, obj.library, typ))
+        lib = store.find_library(obj.library)
+        if lib is None or (Auth.UPD | Auth.EXECUTE) & ~authority_to_library(store, actor, lib):
+            return _no(messages.not_authorized_to_library(obj.library))
+    if (obj.library, new, typ) in store.objects:
+        return _no(messages.object_already_exists(new, obj.library))
+    old = obj.name
+    del store.objects[obj.key]
+    if typ == "*LIB":                          # everything in the library moves with its name
+        for inside in [o for o in store.objects.values() if o.library == old]:
+            del store.objects[inside.key]
+            inside.library = new
+            store.objects[inside.key] = inside
+        for p in store.profiles.values():
+            if p.current_library == old:
+                p.current_library = new
+    obj.name = new
+    store.objects[obj.key] = obj
+    store.on_change()
+    return _ok(f"Object {old} renamed to {new}.")
+
+
+def change_description(store: ProfileStore, actor: Profile, qualified: str, typ: str, text: str,
+                       search: list[str]) -> Done:
+    obj, err = locate(store, actor, qualified, typ, search)
+    if err:
+        return _no(err)
+    if not _allobj(store, actor) and _need_for(typ) & ~store.authority_to_object(actor, obj):
+        return _no(messages.not_authorized_to_object_2189(obj.name, obj.library, typ))
+    obj.text = text[:50]
+    store.on_change()
+    return _ok(f"Object {obj.name} in {obj.library} type {obj.type} description changed.")
+
+
+def objects_secured_by(store: ProfileStore, actor: Profile, autl: str) -> list[SecuredObject]:
+    return sorted((o for o in store.objects.values()
+                   if o.autl == autl and (_allobj(store, actor) or store.authority_to_object(actor, o) != Auth.NONE)),
+                  key=lambda o: (o.library, o.name, o.type))

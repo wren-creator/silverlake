@@ -22,7 +22,8 @@ from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
-from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrkautl_screen, wrklib_screen, wrkobj_screen
+from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrklib_screen
+from .worklists import WorkList, objects_in_list_screen
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -91,6 +92,8 @@ class SignonController:
         # ("dsp", Profile, list view or None), ("wrk", rows, page), or
         # ("plist", rows, page, renderer) for a list with paging and no options
         self.view: tuple | None = None
+        # views a work list opened (option 5 and the like), so Enter and F3 come back to the list
+        self.parents: list[tuple] = []
 
     def first(self) -> Screen:
         return signon_screen(self.display)
@@ -104,6 +107,7 @@ class SignonController:
             self.store.sign_off(self.profile)
         self.profile = None
         self.view = None
+        self.parents.clear()
 
     def handle(self, aid: str, values: dict[str, str]) -> Screen:
         if self.profile is not None:
@@ -201,8 +205,10 @@ class SignonController:
         return self._run(line)
 
     def _run(self, line: str) -> Screen:
+        return self._apply(commands.execute(self.store, self.profile, line, self.session), line)
+
+    def _apply(self, outcome: commands.Outcome, line: str) -> Screen:
         sess = self.session
-        outcome = commands.execute(self.store, self.profile, line, sess)
         text = outcome.message.text if outcome.message else ""
         if sess.mode == "cmdentry":
             sess.history.append("> " + line)
@@ -242,10 +248,12 @@ class SignonController:
             autl = spec[1]
             return ("plist", spec[2], 0, lambda rows, page: dspautl_screen(autl, rows, page))
         if kind == "wrkautl":
-            return ("plist", spec[1], 0, wrkautl_screen)
+            return ("work", WorkList("autls", spec[1], spec[2]))
         if kind == "wrkobj":
-            title = spec[2]
-            return ("plist", spec[1], 0, lambda rows, page: wrkobj_screen(rows, title, page))
+            return ("work", WorkList(spec[2], spec[1], spec[4], owner=spec[3] or ""))
+        if kind == "autlobjs":
+            name = spec[1]
+            return ("plist", spec[2], 0, lambda rows, page: objects_in_list_screen(name, rows, page))
         raise AssertionError(kind)
 
     def _draw_view(self, message: str = "") -> Screen:
@@ -253,6 +261,8 @@ class SignonController:
             return dspusrprf_screen(self.store, self.view[1])
         if self.view[0] == "plist":
             return self.view[3](self.view[1], self.view[2])
+        if self.view[0] == "work":
+            return self.view[1].screen(message)
         return wrkusrprf_screen(self.view[1], self.view[2], message)
 
     def _in_view(self, aid: str, values: dict[str, str]) -> Screen:
@@ -263,8 +273,9 @@ class SignonController:
                 step = 1 if aid == "ROLLUP" else -1
                 self.view = ("plist", rows, max(0, min(page + step, pages(len(rows)) - 1)), renderer)
                 return self._draw_view()
-            self.view = None                  # Enter, F3 and F12 all go back
-            return self._base()
+            return self._close_view()            # Enter, F3 and F12 all go back
+        if kind == "work":
+            return self._in_work(aid, values)
         if aid == "F3" or (kind == "wrk" and aid == "F12"):
             self.view = None
             return self._base()
@@ -294,3 +305,88 @@ class SignonController:
             self.view = ("dsp", target, self.view)
             return self._draw_view()
         return self._draw_view()
+
+    def _close_view(self) -> Screen:
+        """Back to the work list that opened this view, or to the menu."""
+        self.view = self.parents.pop() if self.parents else None
+        return self._draw_view() if self.view is not None else self._base()
+
+    # -- the work lists (WRKOBJ, WRKOBJOWN, WRKAUTL) --------------------------------------------
+
+    def _in_work(self, aid: str, values: dict[str, str]) -> Screen:
+        wl: WorkList = self.view[1]
+        if aid in ("F3", "F12"):
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            wl.page += 1 if aid == "ROLLUP" else -1
+            wl.shown()
+            return self._draw_view()
+        if aid == "F5":
+            wl.refresh()
+            return self._draw_view()
+        param = values.get("command", "").strip()
+        picks = [(i, values.get(f"opt{i}", "").strip()) for i in range(wl.per_page)]
+        picks = [(wl.page * wl.per_page + i, opt) for i, opt in picks if opt and wl.page * wl.per_page + i < len(wl.rows)]
+        new_opt, new_name = values.get("optnew", "").strip(), values.get("newname", "").strip()
+        if wl.kind == "autls" and (new_opt or new_name):
+            if new_opt != "1" or not new_name:
+                return self._draw_view("Option 1 needs a name for the new list." if new_opt == "1" or new_name
+                                       else f"Option {new_opt} is not valid.")
+            return self._work_exec(wl, f"CRTAUTL AUTL({new_name})")
+        if picks:
+            index, opt = picks[0]
+            line, problem = self._work_option(wl, wl.rows[index], opt, param)
+            if problem:
+                return self._draw_view(problem)
+            return self._work_exec(wl, line)
+        if param:
+            return self._work_exec(wl, param)
+        return self._draw_view()
+
+    def _work_option(self, wl: WorkList, row, opt: str, param: str) -> tuple[str | None, str]:
+        """The command a work list option runs. The options the command line parameters feed
+        are the ones the real display names ("Parameters for options 5, 7 and 13")."""
+        if wl.kind == "autls":
+            if opt == "5":
+                return f"DSPAUTL AUTL({row.name})", ""
+            if opt == "8":
+                return f"@AUTLOBJS {row.name}", ""
+        else:
+            ref = f"OBJ({row.library}/{row.name}) OBJTYPE({row.type})"
+            if opt == "5":
+                return f"DSPOBJAUT {ref}", ""
+            if opt == "7":
+                return (f"RNMOBJ {ref} NEWOBJ({param.split()[0]})", "") if param else \
+                    (None, "Type the new name on the command line for option 7.")
+            if opt == "13" and wl.kind == "objects":
+                return f"CHGOBJD {ref} TEXT('{param.replace(chr(39), chr(39) * 2)}')", ""
+            if opt == "9" and wl.kind == "owner":
+                return (f"CHGOBJOWN {ref} NEWOWN({param.split()[0]})", "") if param else \
+                    (None, "Type the new owner on the command line for option 9.")
+        if opt in ("1", "2", "3", "4", "8", "9", "13"):
+            return None, f"Option {opt} is not available in Silverlake yet."
+        return None, f"Option {opt} is not valid."
+
+    def _work_exec(self, wl: WorkList, line: str) -> Screen:
+        if line.startswith("@AUTLOBJS "):                       # option 8: objects the list secures
+            name = line.split()[1]
+            cmd = self.store.objects.get(("QSYS", "DSPAUTL", "*CMD"))
+            if cmd is None or commands.USE & ~self.store.authority_to_object(self.profile, cmd):
+                return self._draw_view(messages.not_authorized_to_command("DSPAUTL").text)
+            from ..system import objlist
+            self.parents.append(self.view)
+            self.view = self._open_view(("autlobjs", name, objlist.objects_secured_by(self.store, self.profile, name)))
+            return self._draw_view()
+        outcome = commands.execute(self.store, self.profile, line, self.session)
+        if outcome.view:
+            self.parents.append(self.view)
+            self.view = self._open_view(outcome.view)
+            return self._draw_view()
+        if outcome.signoff or outcome.go or outcome.cmdentry:
+            self.view = None
+            self.parents.clear()
+            return self._apply(outcome, line)
+        wl.refresh()
+        return self._draw_view(outcome.message.text if outcome.message else "")
