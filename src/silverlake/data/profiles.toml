@@ -149,6 +149,17 @@ name = "NOPWD"
 password = "*NONE"
 text = "PASSWORD(*NONE). Cannot sign on, can still own things and run jobs."
 
+# A clerk locked to one menu: limited capabilities *YES, so no command line. Nothing
+# stops the menu itself from offering a way out (see APPLIB/RESTRICT, option 9).
+[[profile]]
+name = "CLERK"
+user_class = "*USER"
+password = "CLERK"
+limited_capabilities = "*YES"
+initial_menu = "RESTRICT"
+current_library = "APPLIB"
+text = "Limited capabilities. Lives in one menu. The menu has a hole."
+
 [[profile]]
 name = "OLDTEMP"
 status = "*DISABLED"
@@ -259,3 +270,96 @@ name = "SCRATCH"
 owner = "STUDENT"
 public = "*CHANGE"
 text = "Student scratch library."
+
+# ---------------------------------------------------------------------------
+# Menus and the one program menus can reach. Layout follows a real MAIN menu;
+# the wording is ours. Option commands run with the user's own authority.
+# ---------------------------------------------------------------------------
+
+[[object]]
+name = "QCMD"
+type = "*PGM"
+owner = "QSYS"
+public = "*USE"
+text = "Command entry. Anyone who can call it can run commands."
+
+[[object]]
+name = "MAIN"
+type = "*MENU"
+owner = "QSYS"
+public = "*USE"
+text = "Main menu"
+[object.data]
+title = "Silverlake Main Menu"
+[[object.data.items]]
+opt = "1"
+text = "Display the library list"
+cmd = "DSPLIBL"
+[[object.data.items]]
+opt = "2"
+text = "Work with libraries"
+cmd = "WRKLIB LIB(*ALL)"
+[[object.data.items]]
+opt = "3"
+text = "Work with user profiles"
+cmd = "WRKUSRPRF"
+[[object.data.items]]
+opt = "4"
+text = "Application menu"
+cmd = "GO MENU(APPLIB/APPMENU)"
+[[object.data.items]]
+opt = "5"
+text = "Command entry"
+cmd = "CALL QCMD"
+[[object.data.items]]
+opt = "90"
+text = "Sign off"
+cmd = "SIGNOFF"
+
+[[object]]
+library = "APPLIB"
+name = "APPMENU"
+type = "*MENU"
+owner = "QSECOFR"
+public = "*USE"
+text = "Application menu"
+[object.data]
+title = "Application Menu"
+[[object.data.items]]
+opt = "1"
+text = "Who can use the customer file"
+cmd = "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE)"
+[[object.data.items]]
+opt = "2"
+text = "Who can use the payroll file"
+cmd = "DSPOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE)"
+[[object.data.items]]
+opt = "90"
+text = "Sign off"
+cmd = "SIGNOFF"
+
+[[object]]
+library = "APPLIB"
+name = "RESTRICT"
+type = "*MENU"
+owner = "QSECOFR"
+public = "*USE"
+text = "Clerk menu. Option 9 is the mistake."
+[object.data]
+title = "Clerk Menu"
+[[object.data.items]]
+opt = "1"
+text = "Who can use the customer file"
+cmd = "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE)"
+[[object.data.items]]
+opt = "2"
+text = "Display the library list"
+cmd = "DSPLIBL"
+[[object.data.items]]
+opt = "9"
+text = "Maintenance"
+cmd = "CALL QCMD"
+[[object.data.items]]
+opt = "90"
+text = "Sign off"
+cmd = "SIGNOFF"

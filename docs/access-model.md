@@ -57,6 +57,26 @@ The usual rules apply: `*ALLOBJ` always gets through, a private `*EXCLUDE` beats
 
 That a command needs `*USE` is IBM i behavior, but I did not read it on a command page. The refusal wording was seen on a real system. New commands get their object automatically, and a state file saved before a command existed gets one on the next start. After upgrading an old checkout, run `./reset.sh` to pick up new seed objects (an existing state file keeps its old ones).
 
+## Menus, GO and limited capabilities
+
+After sign-on a job lands on a menu, which is a `*MENU` object whose data is a title and up to 13 numbered options, each running a command. The layout follows a real IBM i main menu captured from PUB400 (the command line is at row 19, column 6, 153 long, not monocase). The wording is ours. The seed has `QSYS/MAIN`, `APPLIB/APPMENU` and `APPLIB/RESTRICT`.
+
+- **Options.** Typing `1` or `01` runs option 1's command. Anything that is not an option is run as a command, unless the profile is limited (below).
+- **GO.** `GO MENU(lib/name) RTNPNT(*YES)` needs `*USE` to the menu and its library. The menu stack is ten deep (an eleventh pushes the oldest out). F12 is the previous menu. F3 returns to the display where `GO` was typed with `RTNPNT(*YES)`. All from IBM's `GO` page. F3 on the initial menu does nothing, which is what a real system did.
+- **Sign-on fields.** Program, menu and current library can be typed on the sign-on screen. `INLPGM(*NONE)` shows the menu, `INLPGM(QCMD)` opens command entry, and any other program is refused because programs are not modeled. `INLMNU(*SIGNOFF)` signs the job straight off. A menu that cannot be found or used drops the job to command entry with the reason.
+- **`CALL QCMD`** opens command entry, where every command runs whatever the limit says.
+- **`CHGPRF`** changes your own initial program, initial menu or current library (needs `*USE` to what you point at).
+
+Limited capabilities (`LMTCPB`), from IBM's text:
+
+| | Program at sign-on or `CHGPRF` | Menu | Current library | Command line |
+|---|---|---|---|---|
+| `*NO` | yes | yes | yes | yes |
+| `*PARTIAL` | no, CPF2294 | yes | no, CPF2297 | yes |
+| `*YES` | no, CPF2294 | no, CPF2295 | no, CPF2297 | no |
+
+Menu options still run for a `*YES` user, and command entry still runs everything. That is the break-out the range exists for: `CLERK` (`LMTCPB(*YES)`, initial menu `APPLIB/RESTRICT`) cannot type `WRKUSRPRF`, but option 9 on that menu is `CALL QCMD`, and from command entry every command is available. Closing it is one object away: `RVKOBJAUT OBJ(QSYS/QCMD) OBJTYPE(*PGM) USER(*PUBLIC) AUT(*USE)`. The messages the table cites are documented, not seen. What a limited user sees when typing on a command line is not documented, so that text is ours. IBM's `INLMNU` text says `*YES` where its `LMTCPB` text says the menu is changeable under `*PARTIAL`; the `LMTCPB` text is followed. Not read on any page, so inferred: that running a command needs `*USE` to it, and that `*ALLOBJ` skips the library gate.
+
 ## Libraries and object authority from the command line
 
 | Command | What it does here |
@@ -138,6 +158,7 @@ Passwords equal the profile name, on purpose.
 | `OPERATOR` | `*SYSOPR` | `*JOBCTL` `*SAVSYS` | Operators can save and control jobs. |
 | `STUDENT` | `*USER` | none | The account most attacks start from. |
 | `GUEST` | `*USER` | none (`SPCAUT(*NONE)`) | Limited capabilities. |
+| `CLERK` | `*USER` | none | `LMTCPB(*YES)`, initial menu `APPLIB/RESTRICT`, current library `APPLIB`. The menu has a way out. |
 | `AUDITOR` `IOADMIN` `JOBMAN` `BACKUP` `SECONLY` `SVCTOOLS` `SPOOLMAN` | `*USER` | one each | Hand out exactly one thing and see what it is worth. |
 | `SVCACCT` | `*USER` | `*ALLOBJ` | An over-privileged service account. |
 | `LEGACY` | `*PGMR` | `*ALLOBJ` `*JOBCTL` | A programmer who kept `*ALLOBJ`. |
@@ -214,7 +235,7 @@ Then the `CRTLIB` test itself (create a throwaway library, look at it, delete it
 
 > Not authorized to command CRTLIB in library *LIBL.
 
-So the gate there is **authority to the command**, not to QSYS. A command is an object (`QSYS/CRTLIB *CMD`) with its own owner and public authority, and a site controls who may run it by changing that one object. PUB400 has evidently taken `CRTLIB` away from ordinary users. Silverlake does not model commands as objects yet, so today anyone can run any command it has. That is the next gap to close. Not yet learned: whether a user who can run `CRTLIB` also needs anything on `QSYS` (the test never got that far), and what authority a new library gets by default. The ID of that message is not shown on the message line, so Silverlake has the wording and no ID.
+So the gate there is **authority to the command**, not to QSYS. A command is an object (`QSYS/CRTLIB *CMD`) with its own owner and public authority, and a site controls who may run it by changing that one object. PUB400 has evidently taken `CRTLIB` away from ordinary users. Silverlake models commands as objects now (see above). Not yet learned: whether a user who can run `CRTLIB` also needs anything on `QSYS` (the test never got that far), and what authority a new library gets by default. The ID of that message is not shown on the message line, so Silverlake has the wording and no ID.
 
 Still inferred and unchecked: that `ADDLIBLE` needs `*USE` on the library, that `*ALLOBJ` skips the library gate, and what revoking an authorization list does to the public authority. The owners and public authorities of `QSYS2`, `QHLPSYS`, `QUSRSYS` and `QTEMP` in the seed are guesses.
 
@@ -223,8 +244,8 @@ Still inferred and unchecked: that `ADDLIBLE` needs `*USE` on the library, that 
 Said plainly, so nobody assumes otherwise:
 
 - F4 prompting and keyword abbreviation on the command line, `DSPUSRPRF` types other than `*BASIC`, and `WRKUSRPRF` options other than 5.
-- Authority to the initial program, menu, job description, message queue and output queue named on a profile, because there is no object model yet.
-- Limited capabilities enforcement, expired passwords and forced change, failed-attempt lockout (`MAXSIGN`), and the `QMAXSIGN` warnings.
+- Authority to the job description, message queue and output queue named on a profile.
+- Programs other than `QCMD`, so `INLPGM` and `CALL` cannot run anything else, and menu options that are not CL commands. Expired passwords and forced change, failed-attempt lockout (`MAXSIGN`), and the `QMAXSIGN` warnings.
 - Adopted authority, and the exceptions to `*ALLOBJ`.
 - Whether special authorities flow from a group profile. Silverlake does not pass them down.
 - Object types beyond those five, creating objects, generic names and `*ALL` on the object commands, `*PRINT` and `*OUTFILE` output, the `CRTAUT` and `CRTOBJAUD` library settings, and primary groups on objects.

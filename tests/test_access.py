@@ -224,11 +224,12 @@ def test_controller_flow_signon_home_signoff(store):
 
     s = c.handle("ENTER", {"user": "DEVADMIN", "password": "devadmin"})
     t = texts(s)
-    assert "*PGMR" in t and "*SECADM" in t and "explicit" in t
+    assert "Silverlake Main Menu" in t
     assert any(isinstance(f, Input) and f.name == "command" for f in s.fields)
 
     assert "WRKACTJOB in library *LIBL not found" in texts(c.handle("ENTER", {"command": "wrkactjob"}))
-    assert "Sign On" in texts(c.handle("F3", {}))
+    assert "Silverlake Main Menu" in texts(c.handle("F3", {}))     # F3 on the initial menu does nothing
+    assert "Sign On" in texts(c.handle("ENTER", {"command": "signoff"}))
     assert "Sign On" in texts(c.handle("ENTER", {}))      # signed off, back to sign-on
 
 
@@ -281,15 +282,19 @@ def test_custom_seed_assigns_any_combination(tmp_path):
 
 # -- every profile gets a screen that fits -----------------------------------------------------------
 
-def test_home_screen_renders_for_every_seed_profile(store):
-    """QSECOFR holds all eight special authorities, which is wider than the
-    screen. This is the test that found that, live."""
-    from silverlake.screens.home import home_screen
+def test_base_screen_renders_for_every_seed_profile(store):
+    """Every profile signs on to a screen that fits, with a long message on it."""
     from silverlake.screens.render import render
     for profile in store.profiles.values():
-        screen = home_screen(store, profile, message="x" * 200)
-        screen.validate()
-        assert render(screen)
+        if not profile.password or profile.status != "*ENABLED":
+            continue
+        c = SignonController("QPADEV0001", store)
+        s = c.handle("ENTER", {"user": profile.name, "password": profile.password})
+        if not any(isinstance(f, Input) and f.name == "command" for f in s.fields):
+            continue            # *SIGNOFF style profiles land back on sign-on
+        s = c.handle("ENTER", {"command": "x" * 200})
+        s.validate()
+        assert render(s)
 
 
 def test_wrap_keeps_every_line_inside_the_value_column():

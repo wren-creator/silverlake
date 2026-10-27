@@ -47,7 +47,9 @@ src/silverlake/
   screens/model.py     Text and Input fields, validation
   screens/render.py    Screen -> Clear Unit + Write To Display + Read MDT Fields
   screens/signon.py    sign-on screen and the session controller (command line, views)
-  screens/home.py      placeholder menu showing the access a profile holds
+  screens/menu.py      menu and command entry screens (real MAIN menu layout)
+  screens/home.py      wrap(), shared by the display screens
+  system/menus.py      *MENU data: title, options, validation
   screens/usrprf.py    DSPUSRPRF and WRKUSRPRF screens
   cl/parser.py         splits a command line into command, positional and keyword values
   cl/commands.py       binds parameters, runs the profile, library and object authority commands

@@ -25,6 +25,8 @@ class Outcome:
     # ("wrklib", [SecuredObject]), ("dspobjaut", SecuredObject, [(user, authority)])
     view: tuple | None = None
     signoff: bool = False
+    go: tuple | None = None          # (menu object, RTNPNT) for the controller to put on the stack
+    cmdentry: bool = False           # CALL QCMD: open command entry
 
 
 class BindError(ValueError):
@@ -45,8 +47,8 @@ CRT_PARAMS = [
     Param("USRPRF", "name", "", required=True), Param("PASSWORD", "password", "*NONE"),
     Param("PWDEXP", "yesno", "*NO"), Param("STATUS", "status", "*ENABLED"),
     Param("USRCLS", "class", "*USER"), Param("ASTLVL", "ignored", "*SYSVAL"),
-    Param("CURLIB", "name*", "*CRTDFT"), Param("INLPGM", "name*", "*NONE"),
-    Param("INLMNU", "name*", "MAIN"), Param("LMTCPB", "lmtcpb", "*NO"),
+    Param("CURLIB", "name*", "*CRTDFT"), Param("INLPGM", "qname*", "*NONE"),
+    Param("INLMNU", "qname*", "MAIN"), Param("LMTCPB", "lmtcpb", "*NO"),
     Param("TEXT", "text", "*BLANK"), Param("SPCAUT", "spcaut", "*USRCLS", 8),
     Param("GRPPRF", "name*", "*NONE"), Param("SUPGRPPRF", "names", "*NONE", 15),
     Param("AUT", "aut", "*EXCLUDE"),
@@ -82,12 +84,17 @@ RVKOBJAUT_PARAMS = [
     Param("ASPDEV", "ignored", "*"), Param("AUTL", "name*", "*NONE"),
 ]
 
+GO_PARAMS = [Param("MENU", "qname", "", required=True), Param("RTNPNT", "yesno", "*YES")]
+CALL_PARAMS = [Param("PGM", "qname", "", required=True)]
+CHGPRF_PARAMS = [Param("INLPGM", "qname*", SAME), Param("INLMNU", "qname*", SAME), Param("CURLIB", "name*", SAME)]
+
 COMMANDS = {
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
     "DLTUSRPRF": DLT_PARAMS, "WRKUSRPRF": WRK_PARAMS, "SIGNOFF": [],
     "CRTLIB": CRTLIB_PARAMS, "DLTLIB": DLTLIB_PARAMS, "DSPLIBL": DSPLIBL_PARAMS,
     "ADDLIBLE": ADDLIBLE_PARAMS, "RMVLIBLE": RMVLIBLE_PARAMS, "WRKLIB": WRKLIB_PARAMS,
     "DSPOBJAUT": DSPOBJAUT_PARAMS, "GRTOBJAUT": GRTOBJAUT_PARAMS, "RVKOBJAUT": RVKOBJAUT_PARAMS,
+    "GO": GO_PARAMS, "CALL": CALL_PARAMS, "CHGPRF": CHGPRF_PARAMS,
 }
 
 
@@ -142,6 +149,8 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
         if v.startswith("*"):
             return v
         return _word_ok(p.key, v)
+    if k == "qname*":                      # a special value, or a name qualified by library
+        return values[0] if values[0].startswith("*") else _qualified(p.key, values)
     if k == "names":
         return [] if values == ["*NONE"] else [_word_ok(p.key, v) for v in values]
     if k == "spcaut":
@@ -378,6 +387,22 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         if err:
             return Outcome(err)
         return Outcome(view=("dspobjaut", obj, objects.authority_rows(store, actor, obj)))
+    if name == "GO":
+        menu, err = objects.use_object(store, actor, b["MENU"], "*MENU", session.search_order())
+        return Outcome(err) if err else Outcome(go=(menu, b["RTNPNT"]))
+    if name == "CALL":
+        prog, err = objects.use_object(store, actor, b["PGM"], "*PGM", session.search_order())
+        if err:
+            return Outcome(err)
+        if (prog.library, prog.name) == ("QSYS", "QCMD"):
+            return Outcome(cmdentry=True)
+        return Outcome(messages.syntax(f"Program {prog.name} cannot be run: programs are not modeled yet."))
+    if name == "CHGPRF":
+        attrs = {k: v for k, v in (("initial_program", b.get("INLPGM", SAME)), ("initial_menu", b.get("INLMNU", SAME)),
+                                   ("current_library", b.get("CURLIB", SAME))) if v != SAME}
+        if not attrs:
+            return Outcome(messages.syntax("Nothing to change: give INLPGM, INLMNU or CURLIB."))
+        return Outcome(admin.change_own_profile(store, actor, session.search_order(), attrs).message)
     users = b.get("USER", [])
     if not users and b["AUTL"] == "*NONE":
         return Outcome(messages.syntax("Either USER or AUTL must be specified."))

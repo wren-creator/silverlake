@@ -10,7 +10,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import messages
+from . import menus, messages
 from .commandobjs import ensure_commands
 from .authority import (ALL, CHANGE, EXCLUDE, QSECURITY_LEVELS, Auth, AuthList, SecuredObject, SpecialAuthority,
                         UserClass, can_grant, class_authorities, name_auth, parse_auth,
@@ -286,6 +286,11 @@ def load(path: Path | str | None = None) -> ProfileStore:
             raise SeedError(f"object {o.library}/{o.name}: authorization list {o.autl} does not exist")
         if o.public is None and not o.autl:
             raise SeedError(f"object {o.library}/{o.name}: public *AUTL needs an authorization list")
+        if o.type == "*MENU":
+            try:
+                menus.parse(o.data, f"menu {o.library}/{o.name}")
+            except menus.MenuError as exc:
+                raise SeedError(str(exc)) from exc
     store = ProfileStore(system, profiles, objects, autls)
     ensure_commands(store)
     return store

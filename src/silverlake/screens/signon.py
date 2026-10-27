@@ -17,10 +17,10 @@ column, the right hand block, and the copyright column are exact.
 
 from ..cl import commands
 from ..proto import datastream as ds
-from ..system import admin, profiles
+from ..system import admin, menus, messages, objects, profiles
 from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
-from .home import home_screen
+from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import dsplibl_screen, dspobjaut_screen, pages, wrklib_screen
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
@@ -114,30 +114,115 @@ class SignonController:
         result = self.store.check_signon(user, values.get("password", ""))
         if result.profile is None:
             return signon_screen(self.display, result.message.line(), user.upper())
-        self.profile = result.profile
-        self.session = Session.for_profile(self.profile.current_library)
-        self.store.sign_on(self.profile)
-        return home_screen(self.store, self.profile)
+        return self._start(result.profile, values)
+
+    # -- sign-on values ---------------------------------------------------------------
+
+    def _refuse(self, profile: Profile, what: str) -> Screen:
+        return signon_screen(self.display, messages.signon_value_not_allowed(what).line(), profile.name)
+
+    def _start(self, profile: Profile, values: dict[str, str]) -> Screen:
+        """Honor the program, menu and library typed at sign-on, as limited capabilities
+        allows (IBM LMTCPB: *PARTIAL locks program and current library, *YES the menu too)."""
+        typed = {k: values.get(k, "").strip().upper() for k in ("program", "menu", "library")}
+        lmt = profile.limited_capabilities
+        if typed["program"] and lmt in ("*PARTIAL", "*YES"):
+            return self._refuse(profile, "Program")
+        if typed["menu"] and lmt == "*YES":
+            return self._refuse(profile, "Menu")
+        if typed["library"] and lmt in ("*PARTIAL", "*YES"):
+            return self._refuse(profile, "Current library")
+        library = typed["library"] or profile.current_library
+        if typed["library"] and self.store.find_library(typed["library"]) is None:
+            return signon_screen(self.display, messages.library_not_found(typed["library"]).line(), profile.name)
+        program = typed["program"] or profile.initial_program
+        menu = typed["menu"] or profile.initial_menu
+        if program not in ("*NONE", "QCMD", "QSYS/QCMD"):
+            return signon_screen(self.display, messages.program_not_found(program).line(), profile.name)
+        if program == "*NONE" and menu == "*SIGNOFF":
+            return signon_screen(self.display)
+
+        self.profile = profile
+        self.session = Session.for_profile(library)
+        self.store.sign_on(profile)
+        if program != "*NONE":
+            self.session.mode = "cmdentry"
+            return self._base()
+        obj, err = objects.use_object(self.store, profile, menu, "*MENU", self.session.search_order())
+        if err:
+            self.session.mode = "cmdentry"        # nowhere to land: command entry, with the reason
+            return self._base(err.line())
+        self.session.push_menu((obj.library, obj.name), False)
+        return self._base()
+
+    # -- the base display: a menu or command entry ------------------------------------------
+
+    def _menu(self) -> tuple[str, menus.Menu]:
+        library, name = self.session.menu_stack[-1]
+        return name, menus.parse(self.store.objects[(library, name, "*MENU")].data, name)
+
+    def _base(self, message: str = "") -> Screen:
+        if self.session.mode == "cmdentry" or not self.session.menu_stack:
+            return command_entry_screen(self.session.history, message)
+        name, menu = self._menu()
+        return menu_screen(SYSTEM_NAME, name, menu, message)
 
     # -- after sign-on ----------------------------------------------------------
 
     def _home(self, aid: str, values: dict[str, str]) -> Screen:
         if self.view is not None:
             return self._in_view(aid, values)
+        sess = self.session
+        if not sess.menu_stack:
+            sess.mode = "cmdentry"          # no menu to look at
         if aid in ("F3", "F12"):
-            self._sign_off()
-            return signon_screen(self.display)
+            if sess.mode == "cmdentry":
+                if sess.menu_stack:
+                    sess.mode = "menu"
+                    return self._base()
+                self._sign_off()
+                return signon_screen(self.display)
+            if aid == "F12":
+                sess.cancel()
+            else:
+                origin = sess.exit()
+                if origin:
+                    sess.mode = origin
+            return self._base()
         line = values.get("command", "").strip()
         if not line:
-            return home_screen(self.store, self.profile)
-        outcome = commands.execute(self.store, self.profile, line, self.session)
+            return self._base()
+        if sess.mode == "menu":
+            item = self._menu()[1].find(line)
+            if item is not None:
+                return self._run(item.cmd)
+            if self.profile.limited_capabilities == "*YES":
+                return self._base(messages.command_line_not_allowed().line())
+        return self._run(line)
+
+    def _run(self, line: str) -> Screen:
+        sess = self.session
+        outcome = commands.execute(self.store, self.profile, line, sess)
+        text = outcome.message.line() if outcome.message else ""
+        if sess.mode == "cmdentry":
+            sess.history.append("> " + line)
+            if text:
+                sess.history.append(text)
         if outcome.signoff:
             self._sign_off()
             return signon_screen(self.display)
         if outcome.view:
             self.view = self._open_view(outcome.view)
             return self._draw_view()
-        return home_screen(self.store, self.profile, outcome.message.line() if outcome.message else "")
+        if outcome.go:
+            menu, rtnpnt = outcome.go
+            sess.push_menu((menu.library, menu.name), bool(rtnpnt), sess.mode)
+            sess.mode = "menu"
+            return self._base()
+        if outcome.cmdentry:
+            sess.mode = "cmdentry"
+            return self._base()
+        return self._base(text)
 
     def _open_view(self, spec: tuple) -> tuple:
         kind = spec[0]
@@ -171,18 +256,18 @@ class SignonController:
                 self.view = ("plist", rows, max(0, min(page + step, pages(len(rows)) - 1)), renderer)
                 return self._draw_view()
             self.view = None                  # Enter, F3 and F12 all go back
-            return home_screen(self.store, self.profile)
+            return self._base()
         if aid == "F3" or (kind == "wrk" and aid == "F12"):
             self.view = None
-            return home_screen(self.store, self.profile)
+            return self._base()
         if kind == "dsp":
             self.view = self.view[2]       # back to the list we came from, if any
             if self.view is not None:
                 return self._draw_view()
-            return home_screen(self.store, self.profile)
+            return self._base()
         if aid == "F12":
             self.view = None
-            return home_screen(self.store, self.profile)
+            return self._base()
         _, rows, page = self.view
         if aid in ("ROLLUP", "ROLLDOWN"):
             step = 1 if aid == "ROLLUP" else -1

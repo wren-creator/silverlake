@@ -194,6 +194,34 @@ def not_authorized_to_command(cmd: str, lib: str = "*LIBL") -> Message:
     return Message("", f"Not authorized to command {cmd} in library {lib}.", VERIFIED_TEXT)
 
 
+# -- limited capabilities and CHGPRF. CPF2294, CPF2295 and CPF2297 and their text come from
+# IBM's CHGPRF page; which condition raises each is inferred from the parameter.
+
+def initial_program_cannot_change() -> Message:
+    return _doc("CPF2294", "Initial program value cannot be changed.")
+
+
+def initial_menu_cannot_change() -> Message:
+    return _doc("CPF2295", "Initial menu value cannot be changed.")
+
+
+def current_library_cannot_change() -> Message:
+    return _doc("CPF2297", "Current library value cannot be changed.")
+
+
+def command_line_not_allowed() -> Message:
+    """What a limited user sees on a command line is not documented, so this is ours."""
+    return Message("", "Commands cannot be run from a command line with limited capabilities.", NO_ID)
+
+
+def signon_value_not_allowed(what: str) -> Message:
+    return Message("", f"{what} cannot be changed at sign-on with limited capabilities.", NO_ID)
+
+
+def program_not_found(name: str) -> Message:
+    return Message("", f"Program {name} not found.", NO_ID)
+
+
 # Command line problems. No ID checked for these yet.
 
 def syntax(text: str) -> Message:

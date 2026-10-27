@@ -220,3 +220,43 @@ def delete(store: ProfileStore, actor: Profile, name: str, ownobjopt: tuple[str,
     del store.profiles[name]
     store.on_change()
     return _ok(" ".join([f"User profile {name} deleted."] + notes))
+
+
+def change_own_profile(store: ProfileStore, actor: Profile, search: list[str], attrs: dict) -> Result:
+    """CHGPRF: change your own initial program, initial menu or current library.
+
+    Limited capabilities decides what is allowed, from IBM's LMTCPB text: *PARTIAL
+    locks the program and the current library, *YES locks the menu as well. (IBM's
+    INLMNU text says *YES where its LMTCPB text says the menu may change under
+    *PARTIAL; the LMTCPB text is followed.) You also need *USE to what you point at."""
+    from . import objects
+    lmt = actor.limited_capabilities
+    if "initial_program" in attrs and lmt in ("*PARTIAL", "*YES"):
+        return _no(messages.initial_program_cannot_change())
+    if "initial_menu" in attrs and lmt == "*YES":
+        return _no(messages.initial_menu_cannot_change())
+    if "current_library" in attrs and lmt in ("*PARTIAL", "*YES"):
+        return _no(messages.current_library_cannot_change())
+    if (Auth.OBJMGT | USE) not in store.authority_to_profile(actor, actor):
+        return _no(messages.not_authorized_to_change(actor.name))
+
+    wanted = []
+    if attrs.get("initial_program", "*NONE") != "*NONE" and "initial_program" in attrs:
+        wanted.append((attrs["initial_program"], "*PGM"))
+    if attrs.get("initial_menu") not in (None, "*SIGNOFF"):
+        wanted.append((attrs["initial_menu"], "*MENU"))
+    for name, typ in wanted:
+        obj, err = objects.use_object(store, actor, name, typ, search)
+        if err:
+            return _no(err)
+    cur = attrs.get("current_library")
+    if cur and cur != "*CRTDFT":
+        lib = store.find_library(cur)
+        if lib is None:
+            return _no(messages.library_not_found(cur))
+        if USE not in objects.authority_to_library(store, actor, lib):
+            return _no(messages.not_authorized_to_library(cur))
+    for key, value in attrs.items():
+        setattr(actor, key, value)
+    store.on_change()
+    return _ok("Profile changed.")

@@ -132,16 +132,19 @@ def test_loopback_only_listener_address():
     assert listen_address()[0] == "127.0.0.1"
 
 
-def test_signon_to_home_and_back_over_a_real_socket():
+def test_signon_to_menu_and_back_over_a_real_socket():
     async def fn(c):
         await c.pump(lambda: c.records)
         c.send_input(0xF1, [(5, 52, "qsecofr"), (6, 52, "QSECOFR")])
         await c.pump(lambda: len(c.records) >= 2)
         text = signon_text(ds.split_gds(c.records[1])[1])
-        assert "*SECOFR" in text and "*SPLCTL" in text      # all eight, wrapped, not dropped
-        c.send_input(0x33, [])                               # F3
+        assert "Silverlake Main Menu" in text
+        c.send_input(0x33, [])                               # F3 on the initial menu does nothing
         await c.pump(lambda: len(c.records) >= 3)
-        assert "Sign On" in signon_text(ds.split_gds(c.records[2])[1])
+        assert "Silverlake Main Menu" in signon_text(ds.split_gds(c.records[2])[1])
+        c.send_input(0xF1, [(19, 6, "signoff")])
+        await c.pump(lambda: len(c.records) >= 4)
+        assert "Sign On" in signon_text(ds.split_gds(c.records[3])[1])
     run(with_server(fn))
 
 
@@ -182,7 +185,7 @@ def test_command_line_over_a_real_socket_and_disconnect_counts_the_session_out()
             c.send_input(0xF1, [(5, 52, "secadmin"), (6, 52, "SECADMIN")])
             await c.pump(lambda: len(c.records) >= 2)
             assert store.active == {"SECADMIN": 1}
-            c.send_input(0xF1, [(20, 7, "crtusrprf netuser text('from the wire')")])
+            c.send_input(0xF1, [(19, 6, "crtusrprf netuser text('from the wire')")])
             await c.pump(lambda: len(c.records) >= 3)
             assert "User profile NETUSER created." in signon_text(ds.split_gds(c.records[2])[1])
             assert store.get("NETUSER").text == "from the wire"

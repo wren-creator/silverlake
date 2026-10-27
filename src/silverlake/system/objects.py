@@ -92,6 +92,17 @@ def locate(store: ProfileStore, actor: Profile, qualified: str, typ: str,
     return obj, None
 
 
+def use_object(store: ProfileStore, actor: Profile, qualified: str, typ: str, search: list[str]):
+    """Find an object and require *USE to it, which running a program or going to a
+    menu takes (GO: "*USE authority for the menu", "*USE authority for the library")."""
+    obj, err = locate(store, actor, qualified, typ, search)
+    if err:
+        return None, err
+    if USE not in store.authority_to_object(actor, obj):
+        return None, messages.not_authorized_to_object(obj.name, obj.library, typ)
+    return obj, None
+
+
 # -- libraries ---------------------------------------------------------------------------------
 
 def create_library(store: ProfileStore, actor: Profile, name: str, text: str, aut: Auth | None) -> Done:
