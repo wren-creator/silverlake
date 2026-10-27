@@ -27,12 +27,11 @@
 - [ ] Spool leftovers: WRKOUTQ and its capture, WRKSPLF options 1, 2, 3, 4 (confirm), 6, 7, 9, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF, CRTOUTQ
 - [x] Phase 3c-3c step 3: message queues (DSPMSG, SNDMSG, CLRMSGQ, QSYSOPR, per-user queues in QUSRSYS), from the PUB400 captures
 - [ ] Message leftovers: the real SNDMSG prompt (needs a longer wait), inquiry messages and replies, F11 remove one, WRKMSGQ, CRTMSGQ/CHGMSGQ/DLTMSGQ, RMVMSG, break delivery to a live session, work station queues
-- [ ] Fuller Slack and LinkedIn post after phase 3c-3c ships, covering the options 2/4/8 batch too (merged with no fanfare 2026-10-27)
 - [x] DSPOBJD basic list, full page two, and Add New Users (F6), from the PUB400 captures
 - [ ] Work list options still to build: 3 (copy, CRTDUPOBJ), WRKAUTL 2 (needs a capture from a profile that may edit a list); edit screen F10 and F11 (the real host did not answer F10, retry with a longer wait); DSPOBJD page three and option 8, creation dates for non-library objects; F4 prompting, F11, F16 and F17 positioning, F17 and F18 top and bottom on WRKOBJOWN; capture the real WRKAUTL delete confirm and the F6 Add new users screen
-- [ ] More object types, *AUTL in the object table, DSPOBJD, generic names on RNMOBJ and CHGOBJD
-- [ ] Phase 3c-3c: jobs, spool and messages (WRKACTJOB, WRKSPLF, DSPMSG)
+- [ ] More object types (*DTAARA and *USRSPC next), *AUTL in the object table, generic names on RNMOBJ and CHGOBJD
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
+- [x] Phase 3c-3c complete: jobs, spool files and message queues, merged to main 2026-10-27
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
 - [ ] Phase 5: vulnerable and secure modes, seeded weak configs, exposed services, scenarios, flag checker, instructor and trainee docs
 - [ ] Silverlake 101 EPUB, same format as the Mainframe 10x series
