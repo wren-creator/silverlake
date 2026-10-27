@@ -10,6 +10,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .jobs import JobTable
 from . import menus, messages
 from .commandobjs import ensure_commands
 from .authority import (ALL, CHANGE, EXCLUDE, QSECURITY_LEVELS, Auth, AuthList, SecuredObject, SpecialAuthority,
@@ -65,6 +66,7 @@ class ProfileStore:
         self.objects = {o.key: o for o in (objects or [])}
         self.autls = {a.name: a for a in (autls or [])}
         self.active: dict[str, int] = {}          # profile name -> sessions signed on
+        self.jobs = JobTable()                    # live jobs, in memory only
         self.on_change = lambda: None             # persistence hook, set by the state layer
 
     # -- lookups ---------------------------------------------------------------

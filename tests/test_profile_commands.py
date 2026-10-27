@@ -50,7 +50,7 @@ def test_parser_rejects_malformed_lines(line):
 # -- binding and messages ------------------------------------------------------------
 
 def test_unknown_command_and_keyword_and_missing_name(store):
-    assert "WRKACTJOB in library *LIBL not found" in run(store, "QSECOFR", "WRKACTJOB")
+    assert "WRKSYSSTS in library *LIBL not found" in run(store, "QSECOFR", "WRKSYSSTS")
     assert "Keyword BAD not valid" in run(store, "QSECOFR", "CRTUSRPRF X BAD(1)")
     assert "Required parameter USRPRF" in run(store, "QSECOFR", "CRTUSRPRF")
     assert "SPCAUT not valid" in run(store, "QSECOFR", "CRTUSRPRF X SPCAUT(*NOPE)")

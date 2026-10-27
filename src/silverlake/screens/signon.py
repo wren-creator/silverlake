@@ -125,6 +125,7 @@ class SignonController:
     def _sign_off(self) -> None:
         if self.profile is not None:
             self.store.sign_off(self.profile)
+            self.store.jobs.end(self.session.job)
         self.profile = None
         self.view = None
         self.parents.clear()
@@ -169,6 +170,7 @@ class SignonController:
         self.profile = profile
         self.session = Session.for_profile(library)
         self.store.sign_on(profile)
+        self.session.job = self.store.jobs.start_interactive(profile.name, self.display)
         if program != "*NONE":
             self.session.mode = "cmdentry"
             return self._base()
@@ -271,6 +273,10 @@ class SignonController:
             return ("work", WorkList("autls", spec[1], spec[2]))
         if kind == "wrkobj":
             return ("work", WorkList(spec[2], spec[1], spec[4], owner=spec[3] or ""))
+        if kind == "wrkactjob":
+            sbs = spec[1]
+            own = self.session.job.qualified if self.session.job else ""
+            return ("work", WorkList("jobs", self.store.jobs.active(sbs), lambda: self.store.jobs.active(sbs), owner=own))
         if kind == "edtobjaut":
             return ("edit", EditAuth(spec[1]))
         if kind == "dspobjd":
@@ -397,6 +403,10 @@ class SignonController:
     def _work_option(self, wl: WorkList, row, opt: str, param: str) -> tuple[str | None, str]:
         """The command a work list option runs. The options the command line parameters feed
         are the ones the real display names ("Parameters for options 5, 7 and 13")."""
+        if wl.kind == "jobs":
+            if opt in ("2", "3", "4", "5", "6", "7", "8", "13"):
+                return None, f"Option {opt} is not available in Silverlake yet."
+            return None, f"Option {opt} is not valid."
         if wl.kind == "autls":
             if opt == "5":
                 return f"DSPAUTL AUTL({row.name})", ""

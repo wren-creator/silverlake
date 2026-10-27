@@ -84,6 +84,7 @@ RVKOBJAUT_PARAMS = [
     Param("ASPDEV", "ignored", "*"), Param("AUTL", "name*", "*NONE"),
 ]
 
+WRKACTJOB_PARAMS = [Param("SBS", "name*", "*ALL"), Param("CPUPCTLMT", "ignored", "*NONE"), Param("JOB", "ignored", "*ALL")]
 GO_PARAMS = [Param("MENU", "qname", "", required=True), Param("RTNPNT", "yesno", "*YES")]
 CALL_PARAMS = [Param("PGM", "qname", "", required=True)]
 CHGPRF_PARAMS = [Param("INLPGM", "qname*", SAME), Param("INLMNU", "qname*", SAME), Param("CURLIB", "name*", SAME)]
@@ -135,7 +136,7 @@ COMMANDS = {
     "CRTAUTL": CRTAUTL_PARAMS, "DLTAUTL": DLTAUTL_PARAMS, "ADDAUTLE": ADDAUTLE_PARAMS,
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
-    "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
+    "WRKACTJOB": WRKACTJOB_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
     "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS,
 }
@@ -440,6 +441,11 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         if not rows:
             return Outcome(messages.syntax("No user profiles found, or you are not authorized to any."))
         return Outcome(view=("wrkusrprf", rows))
+    if name == "WRKACTJOB":
+        sbs = b["SBS"].upper()
+        if sbs != "*ALL" and not any(j.name == sbs for j in store.jobs.active() if j.type == "SBS"):
+            return Outcome(messages.syntax(f"Subsystem {sbs} not found."))
+        return Outcome(view=("wrkactjob", sbs))
     return _run_library_command(store, actor, session, name, b)
 
 

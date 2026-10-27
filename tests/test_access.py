@@ -227,7 +227,7 @@ def test_controller_flow_signon_home_signoff(store):
     assert "Silverlake Main Menu" in t
     assert any(isinstance(f, Input) and f.name == "command" for f in s.fields)
 
-    assert "WRKACTJOB in library *LIBL not found" in texts(c.handle("ENTER", {"command": "wrkactjob"}))
+    assert "WRKSYSSTS in library *LIBL not found" in texts(c.handle("ENTER", {"command": "wrksyssts"}))
     assert "Silverlake Main Menu" in texts(c.handle("F3", {}))     # F3 on the initial menu does nothing
     assert "Sign On" in texts(c.handle("ENTER", {"command": "signoff"}))
     assert "Sign On" in texts(c.handle("ENTER", {}))      # signed off, back to sign-on

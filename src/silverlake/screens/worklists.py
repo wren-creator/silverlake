@@ -17,7 +17,7 @@ COMMAND_ROW, COMMAND_COL, COMMAND_LEN = 20, 6, 73
 
 @dataclass
 class WorkList:
-    kind: str                          # "objects", "owner" or "autls"
+    kind: str                          # "objects", "owner", "autls" or "jobs"
     rows: list
     requery: Callable[[], list]
     owner: str = ""                    # the profile named at the top of "owner"
@@ -27,7 +27,7 @@ class WorkList:
     first_row: int = field(init=False)
 
     def __post_init__(self) -> None:
-        self.per_page, self.first_row = {"objects": (11, 7), "owner": (8, 10), "autls": (10, 8)}[self.kind]
+        self.per_page, self.first_row = {"objects": (11, 7), "owner": (8, 10), "autls": (10, 8), "jobs": (9, 9)}[self.kind]
 
     @property
     def pages(self) -> int:
@@ -42,7 +42,7 @@ class WorkList:
         self.page = max(0, min(self.page, self.pages - 1))
 
     def screen(self, message: str = "") -> Screen:
-        return {"objects": _objects, "owner": _owner, "autls": _autls}[self.kind](self, message)
+        return {"objects": _objects, "owner": _owner, "autls": _autls, "jobs": _jobs}[self.kind](self, message)
 
 
 def _tail(rows: list, wl: WorkList, prompt: str, keys1: list[tuple[int, str]], keys2: list[tuple[int, str]],
@@ -125,6 +125,44 @@ def _owner(wl: WorkList, message: str) -> Screen:
                  [(1, "F3=Exit"), (14, "F4=Prompt"), (26, "F5=Refresh"), (39, "F9=Retrieve"),
                   (53, "F11=Display descriptions")],
                  [(1, "F12=Cancel"), (14, "F17=Top"), (26, "F18=Bottom"), (39, "F22=Display entire name")], message)
+
+
+def _jobs(wl: WorkList, message: str) -> Screen:
+    """Work with Active Jobs, laid out like the real display (captured). `owner` holds the
+    viewer's own job, which shows what it is doing right now."""
+    from ..system.jobs import now_stamp
+    date, clock = now_stamp()
+    rows: list = [
+        Text(0, 29, "Work with Active Jobs", ds.ATTR_WHITE), Text(0, 71, "SILVERLK", ds.ATTR_WHITE),
+        Text(1, 57, date, ds.ATTR_WHITE), Text(1, 67, clock, ds.ATTR_WHITE),
+        Text(2, 1, "CPU %:", ds.ATTR_GREEN), Text(2, 10, "  0,0", ds.ATTR_WHITE),
+        Text(2, 20, "Elapsed time:", ds.ATTR_GREEN), Text(2, 36, "00:00:00", ds.ATTR_WHITE),
+        Text(2, 49, "Active jobs:", ds.ATTR_GREEN), Text(2, 64, str(len(wl.rows)), ds.ATTR_WHITE),
+        Text(4, 1, "Type options, press Enter.", ds.ATTR_BLUE),
+        Text(5, 3, "2=Change", ds.ATTR_BLUE), Text(5, 14, "3=Hold", ds.ATTR_BLUE), Text(5, 23, "4=End", ds.ATTR_BLUE),
+        Text(5, 31, "5=Work with", ds.ATTR_BLUE), Text(5, 45, "6=Release", ds.ATTR_BLUE),
+        Text(5, 57, "7=Display message", ds.ATTR_BLUE),
+        Text(6, 3, "8=Work with spooled files", ds.ATTR_BLUE), Text(6, 31, "13=Disconnect ...", ds.ATTR_BLUE),
+        Text(7, 21, "Current", ds.ATTR_WHITE),
+        Text(8, 1, "Opt", ds.ATTR_WHITE), Text(8, 6, "Subsystem/Job", ds.ATTR_WHITE), Text(8, 21, "User", ds.ATTR_WHITE),
+        Text(8, 33, "Type", ds.ATTR_WHITE), Text(8, 39, "CPU %", ds.ATTR_WHITE),
+        Text(8, 46, "Function", ds.ATTR_WHITE), Text(8, 62, "Status", ds.ATTR_WHITE),
+    ]
+    for i, j in enumerate(wl.shown()):
+        r = wl.first_row + i
+        mine = j.qualified == wl.owner
+        rows.append(Input(r, 1, 2, f"opt{i}", monocase=True))
+        rows += [Text(r, 6, j.name if j.type == "SBS" else "  " + j.name, ds.ATTR_TURQUOISE),
+                 Text(r, 21, j.user, ds.ATTR_TURQUOISE), Text(r, 33, j.type, ds.ATTR_TURQUOISE),
+                 Text(r, 41, f"{j.cpu:.1f}".replace(".", ","), ds.ATTR_TURQUOISE)]
+        function = "CMD-WRKACTJOB" if mine else j.function
+        if function:
+            rows.append(Text(r, 46, function[:15], ds.ATTR_TURQUOISE))
+        rows.append(Text(r, 63, "RUN" if mine else j.status, ds.ATTR_TURQUOISE))
+    return _tail(rows, wl, "Parameters or command",
+                 [(1, "F3=Exit"), (11, "F5=Refresh"), (28, "F7=Find"), (41, "F10=Restart statistics")],
+                 [(1, "F11=Display elapsed data"), (28, "F12=Cancel"), (41, "F23=More options"),
+                  (60, "F24=More keys")], message)
 
 
 def _autls(wl: WorkList, message: str) -> Screen:

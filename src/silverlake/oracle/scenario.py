@@ -118,6 +118,11 @@ AUTHENTICATED["auth-objdesc"] = [
     {"key": "ROLLUP"}, {"key": "F12", "always": True}, {"key": "F3", "always": True},
     _SIGNOFF,
 ]
+# Read only: the three job, spool and message displays, looked at and left with F3. WRKACTJOB on a
+# shared system shows other people's job names, which stay in the local capture and nowhere else.
+AUTHENTICATED["auth-jobs"] = [
+    _SIGNON, *_cmd("WRKACTJOB"), *_cmd("WRKSPLF"), *_cmd("DSPMSG"), _SIGNOFF,
+]
 # Looks at the keys and option the edit screen and the work list offer beyond what is built, on the
 # same kind of throwaway job-local data area as auth-objopts. It only presses function keys after
 # the option numbers, never Enter on a screen it did not expect, and every back out runs whatever

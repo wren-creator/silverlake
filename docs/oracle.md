@@ -109,6 +109,15 @@ Two more runs on 2026-10-27: `auth-objdesc` (read-only, `DSPOBJD` on QGPL, basic
 - **F6 on Edit Object Authority opens Add New Users:** ten rows of user (10) and authority (8) fields, F11 and F17 and F18 on it. It is modeled and grants through the normal rules.
 - **F10 got no answer from the host.** The harness waited 15 seconds, saw nothing, and stopped with nothing more sent, so F11 and option 3 were never pressed and `CRTDUPOBJ`'s screen is still unseen. The scenario's job was left to time out on the host. The harness now keeps what it gathered and says which action stopped it.
 
+## What the jobs capture taught us
+
+The read-only `auth-jobs` scenario (2026-10-27) ran `WRKACTJOB`, `WRKSPLF` and `DSPMSG` as the test profile.
+
+- **`WRKACTJOB` is open to a basic profile and shows everyone.** 876 active jobs, system jobs and other users', with the function each is running. Silverlake's version does the same (see docs/jobs-spool-messages.md). Its layout is matched field for field: header block, options legend, nine job rows from row 9, option field of length 2 at column 1, a 73 long command line, the F3, F5, F7, F10, F11, F12, F23, F24 keys.
+- **`WRKSPLF` showed only the profile's own spool files**, one `QPJOBLOG` per past session, in `QEZJOBLOG`, with the device name in User Data. Layout and options (1 through 9) are noted for step 2.
+- **`DSPMSG` opened a queue named after the display device**, with a message from `QPGMR`, delivery `*NOTIFY`, and the keys F11, F13, F16. Noted for step 3.
+- The capture holds other people's job names and stays local, as every capture does.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

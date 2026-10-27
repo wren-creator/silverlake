@@ -359,7 +359,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
         if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl"):
             continue
-        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "SIGNOFF") for c in _fills(name)), name
+        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "SIGNOFF") for c in _fills(name)), name
 
 
 def test_the_one_scenario_that_changes_the_host_touches_only_its_own_library():
