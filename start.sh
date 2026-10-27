@@ -5,6 +5,27 @@ set -uo pipefail
 cd "$(dirname "$0")"
 source ./lib.sh
 
+usage() {
+  echo "usage: ./start.sh [-p PORT | --port PORT]"
+  echo "  Listens on 127.0.0.1, default port 5250. SILVERLAKE_PORT does the same."
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -p|--port)
+      [ $# -ge 2 ] || { bad "$1 needs a port number"; usage >&2; exit 2; }
+      PORT="$2"; shift 2 ;;
+    --port=*) PORT="${1#--port=}"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) bad "unknown option: $1"; usage >&2; exit 2 ;;
+  esac
+done
+case "$PORT" in
+  ''|*[!0-9]*) bad "port must be a number, not '$PORT'"; exit 2 ;;
+esac
+{ [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; } || { bad "port must be between 1 and 65535, not $PORT"; exit 2; }
+export SILVERLAKE_PORT="$PORT"
+
 [ -x .venv/bin/python ] || { bad "no .venv, run ./setup.sh first"; exit 1; }
 
 info "loopback-only guard"
@@ -17,19 +38,36 @@ if pid="$(running_pid)"; then
 fi
 
 mkdir -p "$STATE_DIR"
+if .venv/bin/python -c "import socket; socket.create_connection(('$HOST', $PORT), 0.5).close()" 2>/dev/null; then
+  bad "port $PORT is already in use. Pick another: ./start.sh --port $((PORT + 1))"
+  exit 1
+fi
 info "starting on $HOST:$PORT"
 nohup .venv/bin/python -m silverlake >"$LOG_FILE" 2>&1 &
 echo $! >"$PID_FILE"
-sleep 1
 
-if running_pid >/dev/null; then
+# Wait for our own process to say it is listening. Watching for the PID alone misses a crash
+# that lands after a short sleep, and probing the port alone can be fooled by something else
+# already holding it.
+listening=""
+for _ in $(seq 1 50); do
+  running_pid >/dev/null || break
+  if grep -q "listening on" "$LOG_FILE" 2>/dev/null; then
+    listening=yes
+    break
+  fi
+  sleep 0.1
+done
+
+if [ -n "$listening" ]; then
   ok "Silverlake is up"
   echo "  5250 sign-on   $HOST:$PORT   (tn5250 $HOST:$PORT)"
   echo "  logs:          $LOG_FILE"
   echo "  reset to seed: ./reset.sh"
 else
-  bad "exited right away, see $LOG_FILE"
+  bad "did not start listening on $HOST:$PORT, see $LOG_FILE"
   tail -n 5 "$LOG_FILE" >&2
+  if pid="$(running_pid)"; then kill "$pid" 2>/dev/null; fi
   rm -f "$PID_FILE"
   exit 1
 fi
