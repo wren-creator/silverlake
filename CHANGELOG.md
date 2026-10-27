@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Layout pass on Display Library List and Display Object Authority, which had been drawn from a guess while PUB400 captures of both sat in the oracle folder. They now match the captures cell for cell: the system name at the top right, the ASP Device column and rows from row 9 on the first, the header block, authorization list line, and User, Group, Authority table from row 10 on the second, `More...` and `Bottom` where the real display puts them, and F17 and F18 as Top and Bottom, which now work. Page sizes follow the real screens (12 and 8 rows). Left out on purpose, because each is a feature and not a position: DSPLIBL's option 5 (display objects in library) and its Opt column, and DSPOBJAUT's F11 detail authorities.
+
 - Sign-on lockout and password expiry. Three bad passwords in a row (`qmaxsign`, seeded at 3, `0` means guess forever) disable the profile, and the disabled state is saved. A good sign-on resets the count, unknown users are not counted, and `CHGUSRPRF STATUS(*ENABLED)` brings it back. An expired password (`PWDEXP(*YES)`, or older than `qpwdexpitv` days) lands on a Change Password display instead of a session. Built from IBM's descriptions of the system values, not from a capture, so the last-attempt messages and the Change Password layout are ours and sit on the verification list. Not built: device lockout, the warnings, CHGPWD and the other password rules.
 
 - Colors now follow the real host on every screen that has a capture: list rows and values green (they were turquoise or white), More... and Bottom white (they were blue), column headings white. A test holds the rules. The sign-on screen keeps its own turquoise block, which the real one draws.

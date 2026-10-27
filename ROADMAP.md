@@ -39,6 +39,7 @@
 - [ ] More object types (*DTAARA and *USRSPC next), *AUTL in the object table, generic names on RNMOBJ and CHGOBJD
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
 - [x] Sign-on lockout (QMAXSIGN, QMAXSGNACN) and password expiry (PWDEXP, QPWDEXPITV) with a Change Password display, built from IBM's descriptions, not a capture
+- [ ] Layout leftovers: DSPLIBL option 5 and Opt column, DSPOBJAUT F11 (detail authorities, no capture yet) and the Group column, WRKLIB and the other list screens with no capture, Top and Bottom on the remaining paged lists
 - [ ] Lockout and expiry follow-ups: device lockout (QMAXSGNACN 1), the warnings before the last attempt, QSECOFR exempt at the console, CHGPWD, password rules (QPWDMINLEN, QPWDRQDDIF), per-profile PWDEXPITV, an expiry warning before the day
 - [x] Phase 3c-3c complete: jobs, spool files and message queues, merged to main 2026-10-27
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)

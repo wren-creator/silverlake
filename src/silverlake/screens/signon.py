@@ -26,7 +26,7 @@ from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
-from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrklib_screen
+from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
                         WRKJOB_OPTIONS, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
@@ -121,6 +121,13 @@ class _AutlRow:
     @property
     def text(self) -> str:
         return self.autl.text
+
+
+def _plist(rows: list, renderer, per_page: int) -> tuple:
+    """A paged list with no options. The renderer carries its own page size so Roll and the
+    Top and Bottom keys know where the last page is."""
+    renderer.per_page = per_page
+    return ("plist", rows, 0, renderer)
 
 
 class SignonController:
@@ -318,15 +325,15 @@ class SignonController:
             return ("wrk", spec[1], 0)
         if kind == "dsplibl":
             entries = spec[1].entries()
-            return ("plist", entries, 0, lambda rows, page: dsplibl_screen(self.store, rows, page))
+            return _plist(entries, lambda rows, page: dsplibl_screen(self.store, rows, page), DSPLIBL_ROWS)
         if kind == "wrklib":
             return ("plist", spec[1], 0, wrklib_screen)
         if kind == "dspobjaut":
             obj = spec[1]
-            return ("plist", spec[2], 0, lambda rows, page: dspobjaut_screen(obj, rows, page))
+            return _plist(spec[2], lambda rows, page: dspobjaut_screen(obj, rows, page), DSPOBJAUT_ROWS)
         if kind == "dspautl":
             autl = spec[1]
-            return ("plist", spec[2], 0, lambda rows, page: dspautl_screen(autl, rows, page))
+            return _plist(spec[2], lambda rows, page: dspautl_screen(autl, rows, page), 11)
         if kind == "wrkautl":
             return ("work", WorkList("autls", spec[1], spec[2]))
         if kind == "wrkobj":
@@ -355,7 +362,7 @@ class SignonController:
             return ("dobjd", spec[1], spec[2], 0)
         if kind == "autlobjs":
             name = spec[1]
-            return ("plist", spec[2], 0, lambda rows, page: objects_in_list_screen(name, rows, page))
+            return _plist(spec[2], lambda rows, page: objects_in_list_screen(name, rows, page), 10)
         raise AssertionError(kind)
 
     def _draw_view(self, message: str = "") -> Screen:
@@ -397,9 +404,14 @@ class SignonController:
         kind = self.view[0]
         if kind == "plist":
             _, rows, page, renderer = self.view
+            last = max(1, -(-len(rows) // getattr(renderer, "per_page", PAGE_SIZE))) - 1
             if aid in ("ROLLUP", "ROLLDOWN"):
                 step = 1 if aid == "ROLLUP" else -1
-                self.view = ("plist", rows, max(0, min(page + step, pages(len(rows)) - 1)), renderer)
+                self.view = ("plist", rows, max(0, min(page + step, last)), renderer)
+                return self._draw_view()
+            if aid in ("F17", "F18") and getattr(renderer, "per_page", None) in (
+                    DSPLIBL_ROWS, DSPOBJAUT_ROWS):       # the displays that draw Top and Bottom
+                self.view = ("plist", rows, 0 if aid == "F17" else last, renderer)
                 return self._draw_view()
             return self._close_view()            # Enter, F3 and F12 all go back
         if kind == "work":
