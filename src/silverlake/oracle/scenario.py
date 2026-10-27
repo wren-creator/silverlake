@@ -14,6 +14,7 @@ real profile never racks up failed attempts.
 import asyncio
 import ipaddress
 import os
+import random
 import re
 import time
 from datetime import UTC, datetime
@@ -36,6 +37,10 @@ SCENARIOS: dict[str, list[dict]] = {
 # SIGNOFF, so the job does not linger on a shared system. F3 on the real MAIN
 # menu does not sign off (the first run on PUB400 showed that).
 USER_ENV, PASS_ENV = "SILVERLAKE_ORACLE_USER", "SILVERLAKE_ORACLE_PASS"
+# A scenario that creates something names it ${SILVERLAKE_ORACLE_TESTLIB}. The harness
+# makes a fresh random name for every run and overrides any value from the environment,
+# so a delete can only ever target a library this run created.
+TESTLIB_ENV = "SILVERLAKE_ORACLE_TESTLIB"
 _SIGNON = {"fill": {"0": "${%s}" % USER_ENV, "1": "${%s}" % PASS_ENV}, "key": "ENTER"}
 
 
@@ -47,6 +52,8 @@ def _cmd(line: str) -> list[dict]:
     return [{"fill": {"0": line}, "key": "ENTER"}, {"key": "F3"}]
 
 
+_TESTLIB = "${%s}" % TESTLIB_ENV
+
 AUTHENTICATED: dict[str, list[dict]] = {
     # Sign on, look at the first screen, sign off. Run this before any other.
     "auth-probe": [_SIGNON, _SIGNOFF],
@@ -54,6 +61,17 @@ AUTHENTICATED: dict[str, list[dict]] = {
     "auth-libs": [_SIGNON, *_cmd("DSPLIBL"), *_cmd("DSPOBJAUT OBJ(QSYS) OBJTYPE(*LIB)"),
                   *_cmd("DSPOBJAUT OBJ(QGPL) OBJTYPE(*LIB)"), _SIGNOFF],
 }
+# The only scenario that changes the host. Creates a throwaway library, looks at the
+# authority a new library gets, deletes it, and signs off. Delete and display only
+# run if the host said the library was created.
+AUTHENTICATED["auth-crtlib"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTLIB LIB({_TESTLIB}) TEXT('Silverlake oracle test, deleted at once')"}, "key": "ENTER",
+     "proceed_if": [_TESTLIB, "created"]},
+    *_cmd(f"DSPOBJAUT OBJ({_TESTLIB}) OBJTYPE(*LIB)"),
+    {"fill": {"0": f"DLTLIB LIB({_TESTLIB})"}, "key": "ENTER"},
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host
@@ -111,15 +129,27 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
         raise CaptureError(f"{name} sends a password. Use TLS (--tls) for anything but loopback.")
     # Resolve every value before connecting, so a missing variable cannot leave
     # a half finished session on someone else's system.
-    actions = [({int(k): expand(v) for k, v in a.get("fill", {}).items()}, a["key"]) for a in SCENARIOS[name]]
+    os.environ[TESTLIB_ENV] = "SLT" + "".join(random.choices("0123456789", k=5))
+    actions = [({int(k): expand(v) for k, v in a.get("fill", {}).items()}, a["key"],
+                [expand(t).lower() for t in a.get("proceed_if", [])], bool(a.get("always")))
+               for a in SCENARIOS[name]]
     client = Client(host, port, devname, tls=tls)
     await client.connect()
     captures: list[Capture] = []
+    skipped: list[int] = []
     try:
         captures.append(await client.wait_screen(timeout))
-        for i, (fill, key) in enumerate(actions):
+        skipping = False
+        for i, (fill, key, proceed_if, always) in enumerate(actions):
+            if skipping and not always:
+                skipped.append(i)
+                continue
             client.send_aid(key, fill)
             captures.append(await client.wait_screen(timeout))
+            if proceed_if:
+                seen = " ".join(r["text"] for r in captures[-1].snapshot["runs"]).lower()
+                if not all(t in seen for t in proceed_if):
+                    skipping = True       # the host did not do what we asked: ask nothing more, just sign off
             if name in AUTHENTICATED and i == 0 and _not_signed_on(captures[-1].snapshot):
                 # One attempt only. Never retype a password the host refused, and
                 # do not type commands into a screen we did not expect.
@@ -132,6 +162,8 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
         "target": f"{host}:{port}",
         "scenario": name,
         "captured_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "testlib": os.environ.get(TESTLIB_ENV) if "TESTLIB" in repr(SCENARIOS[name]) else None,
+        "skipped_actions": skipped,
         "snapshots": [c.snapshot for c in captures],
         "error_lines": [c.error_line for c in captures],
         # Raw host records, hex. Local only: this is the real system's wording.

@@ -193,7 +193,13 @@ A test profile on PUB400 ran `DSPLIBL` and `DSPOBJAUT` (read-only, over TLS). Wh
 - A basic user asking `DSPOBJAUT` about `QSYS` gets one row, `*PUBLIC *USE`.
 - The default library list is `QSYS`, `QSYS2`, `QUSRSYS`, `QHLPSYS`, the current library, `QGPL`, `QTEMP` (plus site libraries we do not copy).
 
-That also undid a guess. Silverlake first assumed `CRTLIB` needs `*ADD` to QSYS, but a real `QSYS` is `*USE`, which has no `*ADD`, so that cannot be what stops ordinary users. `CRTLIB` therefore has no authority check for now. Whether it works for a basic user on a real system, and what stops it if not, is unconfirmed: the safe test is `CRTLIB` then `DLTLIB` of a throwaway library on a test profile, which changes the host, so it needs the owner's say-so.
+That also undid a guess. Silverlake first assumed `CRTLIB` needs `*ADD` to QSYS, but a real `QSYS` is `*USE`, which has no `*ADD`, so that cannot be what stops ordinary users.
+
+Then the `CRTLIB` test itself (create a throwaway library, look at it, delete it, run once with the owner's approval on a test profile) was stopped before it began. A basic profile on PUB400 gets:
+
+> Not authorized to command CRTLIB in library *LIBL.
+
+So the gate there is **authority to the command**, not to QSYS. A command is an object (`QSYS/CRTLIB *CMD`) with its own owner and public authority, and a site controls who may run it by changing that one object. PUB400 has evidently taken `CRTLIB` away from ordinary users. Silverlake does not model commands as objects yet, so today anyone can run any command it has. That is the next gap to close. Not yet learned: whether a user who can run `CRTLIB` also needs anything on `QSYS` (the test never got that far), and what authority a new library gets by default. The ID of that message is not shown on the message line, so Silverlake has the wording and no ID.
 
 Still inferred and unchecked: that `ADDLIBLE` needs `*USE` on the library, that `*ALLOBJ` skips the library gate, and what revoking an authorization list does to the public authority. The owners and public authorities of `QSYS2`, `QHLPSYS`, `QUSRSYS` and `QTEMP` in the seed are guesses.
 

@@ -349,13 +349,85 @@ def test_a_password_is_never_sent_in_cleartext_beyond_loopback(monkeypatch):
         _asyncio.run(scenario.run_scenario("pub400.com", 23, "auth-probe"))
 
 
-def test_the_scenarios_hold_no_secret_and_only_read():
+def _fills(name):
+    return [a["fill"]["0"] for a in scenario.SCENARIOS[name] if "fill" in a and "1" not in a["fill"]]
+
+
+def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
-        blob = repr(scenario.SCENARIOS[name])
-        assert "${SILVERLAKE_ORACLE_PASS}" in blob or "PASS" not in blob.upper().replace("${SILVERLAKE_ORACLE_PASS}", "")
-        commands = [a["fill"]["0"] for a in scenario.SCENARIOS[name] if "fill" in a and "1" not in a["fill"]]
-        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "SIGNOFF") for c in commands), commands
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
+        assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
+        if name == "auth-crtlib":
+            continue
+        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "SIGNOFF") for c in _fills(name)), name
+
+
+def test_the_one_scenario_that_changes_the_host_touches_only_its_own_library():
+    cmds = _fills("auth-crtlib")
+    changing = [c for c in cmds if c.split()[0] in ("CRTLIB", "DLTLIB")]
+    assert [c.split()[0] for c in changing] == ["CRTLIB", "DLTLIB"]
+    assert all("${SILVERLAKE_ORACLE_TESTLIB}" in c for c in cmds if c.split()[0] != "SIGNOFF")
+    assert all(c.split()[0] in ("CRTLIB", "DSPOBJAUT", "DLTLIB", "SIGNOFF") for c in cmds)
+    actions = scenario.SCENARIOS["auth-crtlib"]
+    create = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("CRTLIB"))
+    delete = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("DLTLIB"))
+    assert actions[create]["proceed_if"] and create < delete                  # delete is gated on the create
+
+
+def _run_shared(name, monkeypatch, store, extra_env=None):
+    monkeypatch.setenv(scenario.USER_ENV, "STUDENT")
+    monkeypatch.setenv(scenario.PASS_ENV, "STUDENT")
+    for k, v in (extra_env or {}).items():
+        monkeypatch.setenv(k, v)
+
+    async def go():
+        server = await _srv.serve("127.0.0.1", 0, lambda display: _Signon(display, store))
+        try:
+            return await scenario.run_scenario("127.0.0.1", server.sockets[0].getsockname()[1], name)
+        finally:
+            server.close()
+            await server.wait_closed()
+    return _asyncio.run(go())
+
+
+def test_auth_crtlib_creates_looks_deletes_and_signs_off_locally(monkeypatch):
+    from silverlake.system import profiles
+    store = profiles.load()
+    cap = _run_shared("auth-crtlib", monkeypatch, store)
+    lib = cap["testlib"]
+    assert lib.startswith("SLT") and len(lib) == 8 and cap["skipped_actions"] == []
+    assert store.find_library(lib) is None                                   # created, then deleted
+    text = lambda i: " ".join(r["text"] for r in cap["snapshots"][i]["runs"])  # noqa: E731
+    assert f"Library {lib} created" in text(2) and "Display Object Authority" in text(3)
+    assert f"Library {lib} deleted" in text(5) and "Sign On" in text(6)
+    assert len(cap["snapshots"]) == 7
+
+
+def test_the_test_library_name_cannot_be_chosen_from_outside(monkeypatch):
+    from silverlake.system import profiles
+    store = profiles.load()
+    cap = _run_shared("auth-crtlib", monkeypatch, store, {scenario.TESTLIB_ENV: "APPLIB"})
+    assert cap["testlib"] != "APPLIB" and store.find_library("APPLIB") is not None
+
+
+def test_if_the_create_fails_nothing_is_displayed_or_deleted_and_the_job_signs_off(monkeypatch):
+    from silverlake.system import profiles
+    store = profiles.load()
+    sent = []
+    real = scenario.Client.send_aid
+    monkeypatch.setattr(scenario.Client, "send_aid",
+                        lambda self, key, fill=None: (sent.append(dict(fill or {})), real(self, key, fill))[1])
+    # Make the create fail: the library already exists under every name the run could pick.
+    monkeypatch.setattr(scenario.random, "choices", lambda *a, **k: list("00000"))
+    from silverlake.system.authority import SecuredObject
+    store.objects[("QSYS", "SLT00000", "*LIB")] = SecuredObject("SLT00000", "QSECOFR", public=profiles.EXCLUDE)
+    cap = _run_shared("auth-crtlib", monkeypatch, store)
+    commands = [f.get(0, "") for f in sent]
+    assert any(c.startswith("CRTLIB") for c in commands)
+    assert not any(c.startswith(("DLTLIB", "DSPOBJAUT")) for c in commands)
+    assert commands[-1] == "SIGNOFF" and cap["skipped_actions"]
+    assert store.find_library("SLT00000") is not None                          # someone else's, untouched
+    assert "Sign On" in " ".join(r["text"] for r in cap["snapshots"][-1]["runs"])
 
 
 def test_tls_uses_a_verifying_context_and_the_host_name(monkeypatch):

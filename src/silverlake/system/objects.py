@@ -32,8 +32,9 @@ NAME = re.compile(r"^[A-Z@#$][A-Z0-9@#$_]{0,9}$")
 SYSTEM_LIBRARIES = frozenset({"QSYS", "QGPL", "QUSRSYS", "QSYS2", "QHLPSYS", "QTEMP"})
 LIBCRTAUT = CHANGE          # "same as the create authority for QSYS", from QCRTAUT; *CHANGE assumed
 # CRTLIB has no authority check here. A real QSYS is *PUBLIC *USE (seen with DSPOBJAUT),
-# which has no *ADD, so "needs *ADD to QSYS" cannot be what stops ordinary users.
-# Whether CRTLIB works for a basic user, and what stops it if not, is unconfirmed.
+# which has no *ADD, so "needs *ADD to QSYS" cannot be what stops ordinary users. What
+# stopped a basic profile on a real system was authority to the command itself ("Not
+# authorized to command CRTLIB in library *LIBL."), and commands are not objects here yet.
 TYPES = ("*LIB", "*FILE")   # the object types modeled so far
 
 

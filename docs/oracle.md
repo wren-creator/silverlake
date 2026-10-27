@@ -77,6 +77,7 @@ A test profile on PUB400 signed on over TLS and ran `DSPLIBL` and `DSPOBJAUT` (2
 
 - **A real menu.** The main menu has its command line at row 19, column 6, 153 long, and not monocase. F3 on it did not sign the job off, so the first run left a disconnected job behind. Every scenario now ends with `SIGNOFF`, which worked.
 - **Real facts for the seed.** `QSYS` and `QGPL` owner and public authority, the default library list, and what a basic user sees from `DSPOBJAUT` (see `docs/access-model.md`).
+- **Commands are objects.** A guarded test (`auth-crtlib`) tried to create a throwaway library, look at its authority, delete it, and sign off. The host answered `Not authorized to command CRTLIB in library *LIBL.`, so the harness did not go on to display or delete anything and signed off. The create-gate, which skips everything but sign-off when the host does not say the library was created, is what made a refusal harmless. The run created and changed nothing.
 - **Real screens to match.** `DSPLIBL` has an option column (`5=Display objects in library`), a device column, and `F17=Top`/`F18=Bottom`. `DSPOBJAUT` has a Group column, a line for the authorization list, and `F11=Display detail object authorities`. Neither matches Silverlake's screens yet, and the placeholder menu bears no resemblance to the real one, which is what the next phase is for. `compare` on the capture reports every difference.
 
 ## Still open
