@@ -158,6 +158,36 @@ AUTHENTICATED["auth-dspjob"] = [
     {"key": "F12", "always": True}, {"key": "F3", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Read only: what the job screens have behind them that is not built yet. The profile's own job through
+# DSPJOB and WRKJOB: page two of each menu, options 11, 12, 14, 15 and 16 (call stack, locks, open files,
+# overrides, commitment control), and page two of the status and definition pages. Every screen is looked
+# at and left with F12. A check runs on the screen a step produced, so each way back to a menu carries the
+# check that the menu is really there: if it is not, no further option is pressed. Nothing is changed,
+# held, ended or sent.
+_MENU = {"proceed_if": ["Select one of the following"]}
+_BACK = {"key": "F12", "always": True, **_MENU}
+AUTHENTICATED["auth-dspjob2"] = [
+    _SIGNON, {"fill": {"0": "DSPJOB"}, "key": "ENTER", **_MENU},
+    {"key": "ROLLUP", **_MENU}, {"key": "ROLLDOWN", **_MENU},
+    *[step for opt in ("11", "12", "14", "15", "16") for step in (_optkey(opt), _BACK)],
+    _optkey("1"), {"key": "ROLLUP"}, _BACK,
+    _optkey("2"), {"key": "ROLLUP"}, _BACK,
+    {"key": "F12", "always": True},
+    {"fill": {"0": "WRKJOB"}, "key": "ENTER", **_MENU},
+    {"key": "ROLLUP", **_MENU}, {"key": "ROLLDOWN", **_MENU},
+    _optkey("12"), _BACK,
+    {"key": "F12", "always": True}, {"key": "F3", "always": True},
+    {**_SIGNOFF, "always": True},
+]
+# Read only: the output queue display. A queue that does not exist (the refusal wording), then the default
+# printer queue, then the job log queue the profile's own spool files sit in. Looked at and left with F3.
+# Not the bare WRKOUTQ: that lists every output queue on the host, and on a shared system it did not answer
+# in 15 seconds, which is load nobody asked for. A shared system lists other people's spool files and job
+# names, which stay in the local capture.
+AUTHENTICATED["auth-outq"] = [
+    _SIGNON, *_cmd("WRKOUTQ OUTQ(SLNOSUCH/NOQUEUE)"), *_cmd("WRKOUTQ OUTQ(QGPL/QPRINT)"),
+    *_cmd("WRKOUTQ OUTQ(QUSRSYS/QEZJOBLOG)"), _SIGNOFF,
+]
 # Looks at the keys and option the edit screen and the work list offer beyond what is built, on the
 # same kind of throwaway job-local data area as auth-objopts. It only presses function keys after
 # the option numbers, never Enter on a screen it did not expect, and every back out runs whatever
@@ -260,11 +290,14 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
             try:
                 captures.append(await client.wait_screen(timeout))
             except CaptureError as exc:
-                if not str(exc).startswith("no screen within"):
+                if not str(exc).startswith(("no screen within", "could not decode")):
                     raise
-                # The host answered nothing. Keep what was gathered, say where it stopped, and
-                # send nothing more: a key into a screen we cannot see is not worth guessing.
+                # The host answered nothing, or answered with a record we cannot read. Keep what was
+                # gathered, say where it stopped, and send nothing more: a key into a screen we cannot
+                # see is not worth guessing. An unreadable record is kept raw so the decoder can learn it.
                 stopped = {"action": i, "key": key, "reason": str(exc)}
+                if str(exc).startswith("could not decode"):
+                    stopped["raw_records_hex"] = [r.hex() for r in client._records]
                 break
             if proceed_if:
                 seen = " ".join(r["text"] for r in captures[-1].snapshot["runs"]).lower()

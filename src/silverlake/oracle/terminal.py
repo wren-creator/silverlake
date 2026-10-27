@@ -136,7 +136,7 @@ class Terminal:
             if x == ds.ESC:
                 break
             if x == ds.ORDER_SOH:
-                i += 1 + b[i + 1]
+                i += 2 + b[i + 1]       # the length counts the header bytes after itself (PUB400 sent 07 and seven bytes)
             elif x == ds.ORDER_SBA:
                 pos = self._addr(b[i + 1], b[i + 2])
                 i += 3

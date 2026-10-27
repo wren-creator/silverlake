@@ -142,6 +142,18 @@ The read-only `auth-msgs` scenario (2026-10-27) ran `DSPMSG`, `DSPMSG MSGQ(QSYSO
 - **Display Job has no command line.** It asks `Selection` with a two character field at row 20, column 6, where Work with Job has `Selection or command` and a 153 wide line.
 - **The attribute pages end with `Press Enter to continue.`** and offer F3, F5, F12 and F16 (back to the job menu). Status and definition show `More...`, run does not.
 
+## What the second job capture and the output queue capture taught us
+
+Taken from PUB400 on 2026-10-27, read only, the test profile's own job and two output queues.
+
+- **A decoder bug.** The host's Display Open Files record begins with a Start of Header that carries seven bytes after its length byte. The decoder skipped the length plus one and read the last header byte as an order, which failed on a bad address. It skips the length plus two now (web3270's client always did), with a test. No earlier capture had a header.
+- **The menus have a second page.** Display Job continues with 17 to 22 and 30 ("All of the above"), ending in `Bottom`. Work with Job has the same list with 19, 20 and 21 reading "Work with" and 40, 41, 42 (change, end, hold the job) added, and it ends in `More...`, so there is a third page nobody has seen.
+- **Page two of the status page** holds two rows (controlled end requested, system). **Page two of the definition page** holds the printer device, default output queue and library, the job date, formats and separators, and the clock with the day of the week.
+- **Call stack, locks, open files, overrides, commitment control** all have their own displays. A job at the main menu has a five program stack, holds a shared read lock on each library on its list, a no-update lock on its menu and display file, has two files open, and no overrides or commitment definitions. The locks, call stack and open files displays take options and keys we do not build (5 and 8 on locks, F10 and F11).
+- **A run of the bare `WRKOUTQ` did not answer in 15 seconds.** It lists every output queue on the host, and on a shared system that is load nobody asked for. The scenario no longer runs it, names one queue each time, and the harness now keeps what it gathered when a record cannot be read, the same as when nothing answers.
+- **Work with Output Queue** is a list with a status line (queue, library, status), options 1 to 9 on two rows, columns File, User, User Data, Sts, Pages, Copies, Form Type and Pty, a parameter line, and keys F3, F11 (view 2), F12, F20 (writers), F22 (printers), F24. A queue that does not exist answers `Output queue NOQUEUE in library SLNOSUCH not found.` on the menu's message line.
+- **The recon point.** A basic profile listing the job log queue sees every file in it, with the user and the job name of each, not only its own. The queue's display rule hides the contents, not the list. WRKOUTQ in Silverlake has to show the same thing.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

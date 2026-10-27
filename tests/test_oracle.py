@@ -357,9 +357,9 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2"):
             continue
-        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "SIGNOFF") for c in _fills(name)), name
+        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
 
 def test_the_one_scenario_that_changes_the_host_touches_only_its_own_library():
@@ -428,6 +428,23 @@ def test_the_dspjob_scenario_only_looks_at_its_own_job_and_presses_options_1_to_
     steps = scenario.SCENARIOS["auth-dspjob"][1:]
     assert [a["fill"]["0"] for a in steps if "fill" in a] == ["DSPJOB", "1", "2", "3", "SIGNOFF"]
     assert all(a["key"] in ("ENTER", "F3", "F12") for a in steps)
+
+
+def test_the_second_dspjob_scenario_only_looks_and_backs_out():
+    steps = scenario.SCENARIOS["auth-dspjob2"][1:]
+    fills = [a["fill"]["0"] for a in steps if "fill" in a]
+    assert fills == ["DSPJOB", "11", "12", "14", "15", "16", "1", "2", "WRKJOB", "12", "SIGNOFF"]   # no JOB parameter
+    assert all(a["key"] in ("ENTER", "F3", "F12", "ROLLUP", "ROLLDOWN") for a in steps)
+    for prev, a in zip(steps, steps[1:]):
+        if a.get("fill", {}).get("0", "x").isdigit() and prev.get("fill", {}).get("0") not in ("1", "2"):
+            assert prev["proceed_if"] == ["Select one of the following"]    # an option follows a checked menu
+
+
+def test_the_outq_scenario_only_lists_queues():
+    cmds = _fills("auth-outq")
+    assert all(c.split()[0] in ("WRKOUTQ", "SIGNOFF") for c in cmds)
+    assert all("OUTQ(" in c for c in cmds[:-1])                      # always one named queue, never the whole host
+    assert all(a["key"] in ("ENTER", "F3") for a in scenario.SCENARIOS["auth-outq"][1:])      # never an option
 
 
 def test_the_description_scenario_is_read_only():
@@ -529,3 +546,14 @@ def test_tls_uses_a_verifying_context_and_the_host_name(monkeypatch):
     with pytest.raises(ConnectionRefusedError):
         _asyncio.run(Client("127.0.0.1", 23).connect())
     assert seen["ssl"] is None and seen["server_hostname"] is None
+
+
+def test_a_start_of_header_skips_its_length_plus_two():
+    """PUB400's Display Open Files sends SOH with length 7 and seven bytes after it. Skipping one byte
+    short read the last header byte as an order and failed on a bad address."""
+    from silverlake.oracle.terminal import Terminal
+    body = (bytes([0x04, 0x11, 0x00, 0x00, 0x01, 0x07, 0, 0, 0, 0x18, 0, 0x8C, 0x14])
+            + bytes([0x11, 0x01, 0x02, 0x20]) + "HI".encode("cp037"))
+    t = Terminal()
+    t.apply(body)
+    assert [(r["row"], r["col"], r["text"]) for r in t.snapshot()["runs"]] == [(0, 2, "HI")]
