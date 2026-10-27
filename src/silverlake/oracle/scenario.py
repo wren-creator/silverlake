@@ -246,6 +246,17 @@ AUTHENTICATED["auth-callpgm"] = [
     {"fill": {"0": "CALL PGM(QSYS/QCMDEXC) PARM('CHKOBJ OBJ(QSYS/QCMDEXC) OBJTYPE(*PGM)' 12)"}, "key": "ENTER"}, {"key": "F3", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the PASE terminal, to settle what docs/pase.md lists as unverified (the screen layout, how the
+# shell words its refusals, what `id` prints, the default permissions of the top directories). CALL PGM(QP2TERM)
+# opens it, a handful of commands that only read run, and F3 leaves it. Nothing is written, no file is made, no
+# program is started beyond the shell's own built-ins and ls, id and cat. Looked at and left with F3.
+_PASE = [
+    {"fill": {"0": "CALL PGM(QP2TERM)"}, "key": "ENTER"},
+    *[{"fill": {"0": c}, "key": "ENTER"} for c in (
+        "pwd", "id", "ls -ld / /home /tmp /QOpenSys", "ls /nosuchdir", "cat /nosuchfile", "echo $PATH")],
+    {"key": "F3", "always": True}, {"key": "F3", "always": True},
+]
+AUTHENTICATED["auth-qp2term"] = [_SIGNON, *_PASE, {**_SIGNOFF, "always": True}]
 # Read only: the output queue display. A queue that does not exist (the refusal wording), then the default
 # printer queue, then the job log queue the profile's own spool files sit in. Looked at and left with F3.
 # Not the bare WRKOUTQ: that lists every output queue on the host, and on a shared system it did not answer

@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-splopts", "auth-pdm"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-splopts", "auth-pdm"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -598,3 +598,10 @@ def test_the_development_scenario_only_prompts_creates_and_refuses():
     prompted = [a["fill"]["0"] for a in actions if a.get("key") == "F4"]
     assert prompted == ["CRTBNDRPG", "CRTPF", "CRTDSPF", "CRTPRTF", "CRTSRCPF"]
     assert actions[-1].get("always") and actions[-1]["fill"] == {"0": "SIGNOFF"}
+
+
+def test_the_pase_scenario_only_reads():
+    fills = [a["fill"]["0"] for a in scenario.SCENARIOS["auth-qp2term"][1:] if "fill" in a]
+    assert fills[0] == "CALL PGM(QP2TERM)" and fills[-1] == "SIGNOFF"
+    assert {c.split()[0] for c in fills[1:-1]} <= {"pwd", "id", "ls", "cat", "echo"}
+    assert not any(ch in c for c in fills[1:-1] for ch in "|&;<>`")
