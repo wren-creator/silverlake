@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- DSPJOB and the three job attribute pages (status, definition, run), from a read-only capture of the real displays. They are also behind WRKJOB options 1, 2 and 3. The run page shows what CHGJOB changed. The job screens now use the colors the real host uses (green for labels, values and options, white titles, blue prompts and keys), which the capture showed older screens get wrong.
+
 - CRTMSGQ, CHGMSGQ and DLTMSGQ, built from IBM's command pages. A new queue is delivery *HOLD, severity 00, owned by its creator, and AUT sets who else can touch it. CHGMSGQ needs *USE and *DLT on the queue, DLTMSGQ needs *OBJEXIST on top, so the default *CHANGE lets anyone write to a queue and change it but not delete it. QSYSOPR cannot be deleted. WRKOBJ option 4 on a queue runs DLTMSGQ.
 
 - DSPJOBLOG and WRKJOB, from a read-only capture of the real displays. DSPJOBLOG shows the live log of a job, commands as `3>> COMMAND` and what they raised, the command itself last, so a session can read another session's log as it happens. The rule is quoted from IBM's page: `*JOBCTL` or the job's own user, and a job that has `*ALLOBJ` needs `*ALLOBJ` to read (JOBMAN reads a plain user's log and not QSECOFR's). The refusal is CPF2441. WRKJOB is the Work with Job menu, with option 4 (spool files), 10 (the log) and 13 (your library list) working, and it is behind WRKACTJOB option 5. Fixed on the way: F12 on a list opened from another screen went all the way to the menu, and now goes back one level.

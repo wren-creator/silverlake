@@ -249,20 +249,145 @@ def wrkjob_screen(job, system_name: str, message: str = "") -> Screen:
     """Work with Job, laid out like the real menu (captured, first page). The selection goes on the
     command line, as it does there. The second page of options is not built."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
-    v = lambda r, c, t: Text(r, c, t, ds.ATTR_WHITE)
+    v = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     rows: list = [
-        Text(0, 33, "Work with Job", ds.ATTR_WHITE), Text(1, 61, "System:", ds.ATTR_WHITE), v(1, 71, system_name),
+        Text(0, 33, "Work with Job", ds.ATTR_WHITE), g(1, 61, "System:"), v(1, 71, system_name),
         g(2, 1, "Job:"), v(2, 8, job.name), g(2, 23, "User:"), v(2, 31, job.user), g(2, 46, "Number:"), v(2, 56, job.number),
         Text(4, 1, "Select one of the following:", ds.ATTR_BLUE),
     ]
-    rows += [Text(r, c, t, ds.ATTR_WHITE) for r, c, t in WRKJOB_OPTIONS]
-    rows += [Text(18, 72, "More...", ds.ATTR_BLUE), Text(19, 1, "Selection or command", ds.ATTR_GREEN),
+    rows += [Text(r, c, t, ds.ATTR_GREEN) for r, c, t in WRKJOB_OPTIONS]
+    rows += [Text(18, 72, "More...", ds.ATTR_WHITE), Text(19, 1, "Selection or command", ds.ATTR_GREEN),
              Text(20, 1, "===>", ds.ATTR_GREEN), Input(20, 6, 153, "command"),
              Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F4=Prompt", ds.ATTR_BLUE),
              Text(22, 23, "F9=Retrieve", ds.ATTR_BLUE), Text(22, 37, "F12=Cancel", ds.ATTR_BLUE)]
     if message:
         rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
     return Screen(rows, cursor="command")
+
+
+DSPJOB_OPTIONS = [
+    (6, 6, "1. Display job status attributes"), (7, 6, "2. Display job definition attributes"),
+    (8, 6, "3. Display job run attributes, if active"), (9, 6, "4. Display spooled files"),
+    (11, 5, "10. Display job log, if active, on job queue, or pending"), (12, 5, "11. Display call stack, if active"),
+    (13, 5, "12. Display locks, if active"), (14, 5, "13. Display library list, if active"),
+    (15, 5, "14. Display open files, if active"), (16, 5, "15. Display file overrides, if active"),
+    (17, 5, "16. Display commitment control status, if active"),
+]
+
+
+def dspjob_screen(job, system_name: str, message: str = "") -> Screen:
+    """Display Job, laid out like the real menu (captured, first page). Unlike Work with Job it has
+    a two character selection field and no command line. The second page of options is not built."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    v = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    rows: list = [
+        Text(0, 34, "Display Job", ds.ATTR_WHITE), g(1, 61, "System:"), v(1, 71, system_name),
+        g(2, 1, "Job:"), v(2, 8, job.name), g(2, 23, "User:"), v(2, 31, job.user), g(2, 46, "Number:"), v(2, 56, job.number),
+        Text(4, 1, "Select one of the following:", ds.ATTR_BLUE),
+    ]
+    rows += [Text(r, c, t, ds.ATTR_GREEN) for r, c, t in DSPJOB_OPTIONS]
+    rows += [Text(18, 72, "More...", ds.ATTR_WHITE), g(19, 1, "Selection"), Input(20, 6, 2, "selection"),
+             Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F12=Cancel", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows, cursor="selection")
+
+
+JOB_TYPES = {"INT": "INTER", "BCH": "BATCH", "BCI": "BATCH"}      # only INTER was seen
+
+
+def _job_page(job, system_name: str, title: str, items: list, more: bool, message: str) -> Screen:
+    """The shared frame of the three attribute pages: title, job line, label and value rows, and the
+    keys. `items` are (row, label column, label, value column, value) or (row, label column, label)."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    v = lambda r, c, t: Text(r, c, str(t), ds.ATTR_GREEN)
+    rows: list = [
+        Text(0, (80 - len(title)) // 2, title, ds.ATTR_WHITE), g(1, 61, "System:"), v(1, 71, system_name),
+        g(2, 1, "Job:"), v(2, 8, job.name), g(2, 23, "User:"), v(2, 31, job.user), g(2, 46, "Number:"), v(2, 56, job.number),
+    ]
+    for item in items:
+        rows.append(g(item[0], item[1], item[2]))
+        if len(item) > 3:
+            rows.append(v(item[0], item[3], item[4]))
+    if more:
+        rows.append(Text(19, 72, "More...", ds.ATTR_WHITE))
+    rows += [Text(20, 1, "Press Enter to continue.", ds.ATTR_BLUE),
+             Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F5=Refresh", ds.ATTR_BLUE),
+             Text(22, 24, "F12=Cancel", ds.ATTR_BLUE), Text(22, 37, "F16=Job menu", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
+
+
+def jobstatus_screen(job, system_name: str, message: str = "") -> Screen:
+    """Display Job Status Attributes, first page (captured). Page two is not built. Every job in the
+    table is active. The pool id is a pick."""
+    when = job.started
+    d, t = when.strftime("%y-%m-%d"), when.strftime("%H:%M:%S")
+    return _job_page(job, system_name, "Display Job Status Attributes", [
+        (4, 1, "Status of job . . . . . . . . . . . . . . . :", 49, "ACTIVE"),
+        (5, 1, "Current user profile  . . . . . . . . . . . :", 49, job.user),
+        (6, 1, "Job user identity . . . . . . . . . . . . . :", 49, job.user),
+        (7, 3, "Set by  . . . . . . . . . . . . . . . . . :", 51, "*DEFAULT"),
+        (8, 1, "Entered system:"),
+        (9, 3, "Date  . . . . . . . . . . . . . . . . . . :", 49, d),
+        (10, 3, "Time  . . . . . . . . . . . . . . . . . . :", 49, t),
+        (11, 1, "Started:"),
+        (12, 3, "Date  . . . . . . . . . . . . . . . . . . :", 49, d),
+        (13, 3, "Time  . . . . . . . . . . . . . . . . . . :", 49, t),
+        (14, 1, "Subsystem . . . . . . . . . . . . . . . . . :", 49, job.subsystem),
+        (15, 3, "Subsystem pool ID . . . . . . . . . . . . :", 51, "2" if job.type == "INT" else "1"),
+        (16, 1, "Type of job . . . . . . . . . . . . . . . . :", 49, JOB_TYPES.get(job.type, job.type)),
+        (17, 1, "Special environment . . . . . . . . . . . . :", 49, "*NONE"),
+        (18, 1, "Program return code . . . . . . . . . . . . :", 49, "0"),
+    ], True, message)
+
+
+def jobdef_screen(job, system_name: str, message: str = "") -> Screen:
+    """Display Job Definition Attributes, first page (captured). Page two is not built. The
+    description is named after the user for an interactive job, as it was in the capture, and is
+    QDFTJOBD for the rest (a pick). Message logging shows what the capture showed."""
+    a = job.attrs
+    return _job_page(job, system_name, "Display Job Definition Attributes", [
+        (4, 1, "Job description . . . . . . . . . . . . . . . . . :", 55, job.user if job.type == "INT" else "QDFTJOBD"),
+        (5, 3, "Library . . . . . . . . . . . . . . . . . . . . :", 57, "QGPL"),
+        (6, 3, "ASP device  . . . . . . . . . . . . . . . . . . :", 57, "*SYSBAS"),
+        (7, 1, "Job queue . . . . . . . . . . . . . . . . . . . . :"),
+        (8, 3, "Library . . . . . . . . . . . . . . . . . . . . :"),
+        (9, 3, "ASP device  . . . . . . . . . . . . . . . . . . :"),
+        (10, 1, "Job priority (on job queue) . . . . . . . . . . . :", 55, a["JOBPTY"]),
+        (11, 1, "Output priority (on output queue) . . . . . . . . :", 55, a["OUTPTY"]),
+        (12, 1, "End severity  . . . . . . . . . . . . . . . . . . :", 55, "30"),
+        (13, 1, "Message logging:"),
+        (14, 3, "Level . . . . . . . . . . . . . . . . . . . . . :", 55, "4"),
+        (15, 3, "Severity  . . . . . . . . . . . . . . . . . . . :", 55, "0"),
+        (16, 3, "Text  . . . . . . . . . . . . . . . . . . . . . :", 55, "*SECLVL"),
+        (17, 1, "Log CL program commands . . . . . . . . . . . . . :", 55, "*YES"),
+        (18, 1, "Job log output  . . . . . . . . . . . . . . . . . :", 55, "*JOBEND"),
+    ], True, message)
+
+
+def jobrun_screen(job, system_name: str, message: str = "") -> Screen:
+    """Display Job Run Attributes (captured, one page). The run priority and the limits are the
+    attributes CHGJOB changes. Storage and CPU use are small made up numbers: nothing is measured."""
+    a = job.attrs
+    return _job_page(job, system_name, "Display Job Run Attributes", [
+        (4, 1, "Run priority  . . . . . . . . . . . . . . . . . . :", 55, a["RUNPTY"]),
+        (5, 1, "Time slice in milliseconds  . . . . . . . . . . . :", 55, a["TIMESLICE"]),
+        (6, 1, "Eligible for purge  . . . . . . . . . . . . . . . :", 55, a["PURGE"]),
+        (7, 1, "Default wait time in seconds  . . . . . . . . . . :", 55, a["DFTWAIT"]),
+        (8, 1, "Maximum CPU time in milliseconds  . . . . . . . . :", 55, a["CPUTIME"]),
+        (9, 3, "CPU time used . . . . . . . . . . . . . . . . . :", 57, int(job.cpu)),
+        (10, 1, "Maximum temporary storage in megabytes  . . . . . :", 55, a["MAXTMPSTG"]),
+        (11, 3, "Temporary storage used  . . . . . . . . . . . . :", 57, "1"),
+        (12, 3, "Peak temporary storage used . . . . . . . . . . :", 57, "1"),
+        (13, 1, "Maximum threads . . . . . . . . . . . . . . . . . :", 55, "*NOMAX"),
+        (14, 3, "Threads . . . . . . . . . . . . . . . . . . . . :", 57, "1"),
+        (15, 1, "Thread resources affinity:"),
+        (16, 3, "Group . . . . . . . . . . . . . . . . . . . . . :", 55, "*NOGROUP"),
+        (17, 3, "Level . . . . . . . . . . . . . . . . . . . . . :", 55, "*NORMAL"),
+        (18, 1, "Resources affinity group  . . . . . . . . . . . . :", 55, "*NO"),
+    ], False, message)
 
 
 def message_lines(q) -> list[str]:

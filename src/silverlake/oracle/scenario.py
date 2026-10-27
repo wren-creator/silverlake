@@ -148,6 +148,16 @@ AUTHENTICATED["auth-joblog"] = [
     *[{"key": "F12", "always": True}] * 2, *[{"key": "F3", "always": True}] * 2,
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the profile's own job through DSPJOB, then its status, definition and run attribute pages
+# (options 1, 2, 3), each looked at and left with F12. Nothing is changed, held, ended or sent.
+AUTHENTICATED["auth-dspjob"] = [
+    _SIGNON, {"fill": {"0": "DSPJOB"}, "key": "ENTER"},
+    {"fill": {"0": "1"}, "key": "ENTER"}, {"key": "F12", "always": True},
+    {"fill": {"0": "2"}, "key": "ENTER"}, {"key": "F12", "always": True},
+    {"fill": {"0": "3"}, "key": "ENTER"}, {"key": "F12", "always": True},
+    {"key": "F12", "always": True}, {"key": "F3", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 # Looks at the keys and option the edit screen and the work list offer beyond what is built, on the
 # same kind of throwaway job-local data area as auth-objopts. It only presses function keys after
 # the option numbers, never Enter on a screen it did not expect, and every back out runs whatever

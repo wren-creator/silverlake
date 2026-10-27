@@ -136,6 +136,12 @@ The read-only `auth-msgs` scenario (2026-10-27) ran `DSPMSG`, `DSPMSG MSGQ(QSYSO
 - **`SNDMSG` typed with no parameters got no answer in 15 seconds,** so the prompt screen was not captured, the harness stopped and sent nothing more, and the job was left to time out on the host. Silverlake's SNDMSG asks for TOUSR or TOMSGQ in a message line instead.
 - The capture holds other people's job and user names and stays local.
 
+## What the DSPJOB capture taught us
+
+- **Colors are not what Silverlake had been drawing.** On the real display the labels and the values and the numbered options are all green, the title and the `More...` marker are white, and the prompt, `Select one of the following:`, `Press Enter to continue.` and the key lines are blue. Silverlake's older screens draw values and options white. The job screens now follow the capture and the rest are on the roadmap for one pass. Run `compare --text` and count the `run only in A` lines to see where they stand.
+- **Display Job has no command line.** It asks `Selection` with a two character field at row 20, column 6, where Work with Job has `Selection or command` and a 153 wide line.
+- **The attribute pages end with `Press Enter to continue.`** and offer F3, F5, F12 and F16 (back to the job menu). Status and definition show `More...`, run does not.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

@@ -115,6 +115,8 @@ DSPJOBLOG_PARAMS = [Param("JOB", "jobq", "*", 3), Param("OUTPUT", "output", "*")
                     Param("OUTMBR", "ignored", "*FIRST"), Param("MSGF", "ignored", "*MSG"), Param("DUPJOBOPT", "ignored", "*SELECT")]
 WRKJOB_PARAMS = [Param("JOB", "jobq", "*", 3), Param("OUTPUT", "output", "*"), Param("OPTION", "ignored", "*SELECT"),
                  Param("SLTTHD", "ignored", "*INITIAL"), Param("DUPJOBOPT", "ignored", "*SELECT")]
+DSPJOB_PARAMS = [Param("JOB", "jobq", "*", 3), Param("OUTPUT", "output", "*"), Param("OPTION", "ignored", "*SELECT"),
+                 Param("SLTTHD", "ignored", "*INITIAL"), Param("DUPJOBOPT", "ignored", "*SELECT")]
 HLDSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
                   Param("CRTDATE", "ignored", "*ONLY"), Param("OPTION", "ignored", "*IMMED")]
@@ -178,7 +180,7 @@ COMMANDS = {
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "CRTMSGQ": CRTMSGQ_PARAMS, "CHGMSGQ": CHGMSGQ_PARAMS,
     "DLTMSGQ": DLTMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
-    "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
+    "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "DSPJOB": DSPJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
     "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS,
@@ -565,6 +567,9 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
     if name == "DSPJOBLOG":
         job, err = jobctl.display_log(store, actor, b["JOB"], session.job)
         return Outcome(err) if err else Outcome(view=("dspjoblog", job))
+    if name == "DSPJOB":
+        job, err = jobctl.work_with(store, actor, b["JOB"], session.job)
+        return Outcome(err) if err else Outcome(view=("dspjob", job))
     if name == "WRKJOB":
         job, err = jobctl.work_with(store, actor, b["JOB"], session.job)
         return Outcome(err) if err else Outcome(view=("wrkjob", job))

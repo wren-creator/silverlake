@@ -271,7 +271,7 @@ def test_wrkjob_layout_follows_the_capture_and_takes_a_selection_on_the_command_
     assert f[(0, 33)].text == "Work with Job" and f[(2, 8)].text == "QPADEV0015" and f[(2, 31)].text == "STUDENT"
     assert f[(6, 6)].text == "1. Display job status attributes" and f[(11, 5)].text.startswith("10. Display job log")
     assert [(i.row, i.col, i.length) for i in s.inputs()] == [(20, 6, 153)]
-    assert "Option 1 is not available" in _text(c.handle("ENTER", {"command": "1"}))
+    assert "Option 11 is not available" in _text(c.handle("ENTER", {"command": "11"}))
     assert "Option 99 is not valid" in _text(c.handle("ENTER", {"command": "99"}))
     s = c.handle("ENTER", {"command": "10"})
     assert {(x.row, x.col): x for x in s.fields}[(0, 31)].text == "Display Job Log"
@@ -317,4 +317,70 @@ def test_wrkactjob_option_5_opens_work_with_job(store):
 
 
 def test_new_commands_are_objects(store):
-    assert all(("QSYS", n, "*CMD") in store.objects for n in ("DSPJOBLOG", "WRKJOB"))
+    assert all(("QSYS", n, "*CMD") in store.objects for n in ("DSPJOBLOG", "WRKJOB", "DSPJOB"))
+
+
+# -- DSPJOB ------------------------------------------------------------------------------------------------------
+
+def test_dspjob_menu_follows_the_capture_with_a_two_character_selection(store):
+    c = _signed(store, "STUDENT", "QPADEV0021")
+    s = c.handle("ENTER", {"command": "dspjob"})
+    f = {(x.row, x.col): x for x in s.fields}
+    assert f[(0, 34)].text == "Display Job" and f[(2, 8)].text == "QPADEV0021" and f[(2, 31)].text == "STUDENT"
+    assert f[(9, 6)].text == "4. Display spooled files" and f[(12, 5)].text == "11. Display call stack, if active"
+    assert f[(19, 1)].text == "Selection" and [(i.row, i.col, i.length) for i in s.inputs()] == [(20, 6, 2)]
+    assert f[(22, 1)].text == "F3=Exit" and f[(22, 11)].text == "F12=Cancel" and (18, 72) in f
+    assert "Option 99 is not valid" in _text(c.handle("ENTER", {"selection": "99"}))
+    assert "Option 11 is not available" in _text(c.handle("ENTER", {"selection": "11"}))
+    assert "Page two" in _text(c.handle("ROLLUP", {}))
+    assert c.view[0] == "dspjobview"
+
+
+def test_dspjob_pages_show_the_jobs_own_attributes_and_f16_returns_to_the_menu(store):
+    c = _signed(store, "QSECOFR", "QPADEV0022")
+    c.handle("ENTER", {"command": "chgjob runpty(30)"})
+    c.handle("ENTER", {"command": "dspjob"})
+    s = c.handle("ENTER", {"selection": "1"})
+    f = {(x.row, x.col): x for x in s.fields}
+    assert f[(0, 25)].text == "Display Job Status Attributes" and f[(4, 49)].text == "ACTIVE"
+    assert (f[(5, 49)].text, f[(14, 49)].text, f[(16, 49)].text) == ("QSECOFR", "QINTER", "INTER")
+    assert f[(22, 37)].text == "F16=Job menu" and f[(20, 1)].text == "Press Enter to continue." and (19, 72) in f
+    c.handle("ENTER", {})                                                      # Enter goes back one level
+    assert c.view[0] == "dspjobview"
+    s = c.handle("ENTER", {"selection": "2"})
+    f = {(x.row, x.col): x for x in s.fields}
+    assert f[(0, 23)].text == "Display Job Definition Attributes" and f[(10, 55)].text == "5" and f[(16, 55)].text == "*SECLVL"
+    c.handle("F12", {})
+    s = c.handle("ENTER", {"selection": "3"})
+    f = {(x.row, x.col): x for x in s.fields}
+    assert f[(0, 27)].text == "Display Job Run Attributes" and f[(4, 55)].text == "30" and (19, 72) not in f   # CHGJOB shows here
+    c.handle("F16", {})
+    assert c.view[0] == "dspjobview" and not c.parents
+    c.handle("F3", {})
+    assert c.view is None
+
+
+def test_dspjob_options_4_and_10_and_13_work_and_follow_the_same_rules_as_wrkjob(store):
+    from silverlake.system import spool
+    c = _signed(store, "STUDENT", "QPADEV0023")
+    job = store.jobs.find("QPADEV0023")[0]
+    store.spool.append(spool.SpoolFile("QSYSPRT", "STUDENT", job.name, job.number, 1, "QPRINT", "QGPL"))
+    c.handle("ENTER", {"command": "dspjob"})
+    c.handle("ENTER", {"selection": "4"})
+    assert c.view[0] == "work" and [f.name for f in c.view[1].rows] == ["QSYSPRT"]
+    c.handle("F12", {})
+    assert {(x.row, x.col): x for x in c.handle("ENTER", {"selection": "10"}).fields}[(0, 31)].text == "Display Job Log"
+    c.handle("F12", {})
+    assert "Library List" in _text(c.handle("ENTER", {"selection": "13"}))
+    plain, pjob = _victim(store, "STUDENT", "QPADEV0024")
+    assert commands.execute(store, store.get("GUEST"), f"DSPJOB JOB({pjob.qualified})").message.id == "CPF1071"
+    assert commands.execute(store, store.get("JOBMAN"), f"DSPJOB JOB({pjob.qualified})").view
+    assert _run(store, "QSECOFR", "DSPJOB JOB(NOSUCH)")[1].message.id == "CPF1070"
+
+
+def test_wrkjob_options_1_to_3_open_the_same_pages(store):
+    c = _signed(store, "STUDENT", "QPADEV0025")
+    c.handle("ENTER", {"command": "wrkjob"})
+    assert {(x.row, x.col): x for x in c.handle("ENTER", {"command": "3"}).fields}[(0, 27)].text == "Display Job Run Attributes"
+    c.handle("F16", {})
+    assert c.view[0] == "wrkjobview"

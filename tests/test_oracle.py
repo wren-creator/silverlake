@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "SIGNOFF") for c in _fills(name)), name
 
@@ -422,6 +422,12 @@ def test_the_job_scenario_only_looks_at_its_own_job():
     fills = [a["fill"]["0"] for a in scenario.SCENARIOS["auth-joblog"][1:] if "fill" in a]
     assert fills == ["DSPJOBLOG", "WRKJOB", "SIGNOFF"]           # no JOB parameter, so only the profile's own job
     assert all(a["key"] in ("ENTER", "F3", "F12") for a in scenario.SCENARIOS["auth-joblog"][1:])
+
+
+def test_the_dspjob_scenario_only_looks_at_its_own_job_and_presses_options_1_to_3():
+    steps = scenario.SCENARIOS["auth-dspjob"][1:]
+    assert [a["fill"]["0"] for a in steps if "fill" in a] == ["DSPJOB", "1", "2", "3", "SIGNOFF"]
+    assert all(a["key"] in ("ENTER", "F3", "F12") for a in steps)
 
 
 def test_the_description_scenario_is_read_only():

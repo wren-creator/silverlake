@@ -28,7 +28,7 @@ from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
-                        WRKJOB_OPTIONS, dspjoblog_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
+                        WRKJOB_OPTIONS, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -299,6 +299,10 @@ class SignonController:
             return ("joblogview", spec[1], 0)
         if kind == "wrkjob":
             return ("wrkjobview", spec[1])
+        if kind == "dspjob":
+            return ("dspjobview", spec[1])
+        if kind == "jobpage":
+            return ("jobpageview", spec[1], spec[2])
         if kind == "wrkactjob":
             sbs = spec[1]
             own = self.session.job.qualified if self.session.job else ""
@@ -334,6 +338,11 @@ class SignonController:
             return dspjoblog_screen(self.view[1], jobctl.log_lines(self.view[1]), SYSTEM_NAME, self.view[2], message)
         if self.view[0] == "wrkjobview":
             return wrkjob_screen(self.view[1], SYSTEM_NAME, message)
+        if self.view[0] == "dspjobview":
+            return dspjob_screen(self.view[1], SYSTEM_NAME, message)
+        if self.view[0] == "jobpageview":
+            page = {"1": jobstatus_screen, "2": jobdef_screen, "3": jobrun_screen}[self.view[2]]
+            return page(self.view[1], SYSTEM_NAME, message)
         if self.view[0] == "msgview":
             return dspmsg_screen(self.view[1], SYSTEM_NAME, self.view[2], message)
         if self.view[0] == "spoolattr":
@@ -367,8 +376,10 @@ class SignonController:
             return self._in_msgview(aid)
         if kind == "joblogview":
             return self._in_joblog(aid)
-        if kind == "wrkjobview":
+        if kind in ("wrkjobview", "dspjobview"):
             return self._in_wrkjob(aid, values)
+        if kind == "jobpageview":
+            return self._in_jobpage(aid)
         if kind == "spoolattr":
             if aid == "F3":
                 self.view = None
@@ -597,25 +608,29 @@ class SignonController:
             return self._draw_view("F10 is not available in Silverlake yet.")
         return self._close_view()
 
-    WRKJOB_RUNS = {"1": None, "2": None, "3": None, "4": "WRKSPLF SELECT(*ALL) JOB({job})",
+    WRKJOB_RUNS = {"1": ("jobpage", "1"), "2": ("jobpage", "2"), "3": ("jobpage", "3"), "4": "WRKSPLF SELECT(*ALL) JOB({job})",
                    "10": "DSPJOBLOG JOB({job})", "13": None}
 
     def _in_wrkjob(self, aid: str, values: dict[str, str]) -> Screen:
-        """The selection goes on the command line: a number picks an option, anything else runs as a
-        command. Options 4 and 10 are built, 13 only for your own job, the rest say so."""
-        _, job = self.view
+        """Work with Job and Display Job share their options. On Work with Job the selection goes on
+        the command line: a number picks an option, anything else runs as a command. Display Job has
+        a two character selection field and takes numbers only. Options 1 to 4 and 10 are built, 13
+        only for your own job, the rest say so."""
+        kind, job = self.view
         if aid == "F3":
             self.view = None
             self.parents.clear()
             return self._base()
         if aid == "F12":
             return self._close_view()
-        if aid in ("F4", "F9"):
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            return self._draw_view("Page two of the options is not available in Silverlake yet.")
+        if kind == "wrkjobview" and aid in ("F4", "F9"):
             return self._draw_view(f"{aid} is not available in Silverlake yet.")
-        line = values.get("command", "").strip()
-        if not line:
+        line = values.get("selection" if kind == "dspjobview" else "command", "").strip()
+        if not line or (kind == "dspjobview" and aid != "ENTER"):
             return self._draw_view()
-        if line.isdigit():
+        if line.isdigit() or kind == "dspjobview":
             if line not in {t.split(".")[0] for _, _, t in WRKJOB_OPTIONS}:
                 return self._draw_view(f"Option {line} is not valid.")
             template = self.WRKJOB_RUNS.get(line)
@@ -623,6 +638,10 @@ class SignonController:
                 template = "DSPLIBL"
             if template is None:
                 return self._draw_view(f"Option {line} is not available in Silverlake yet.")
+            if isinstance(template, tuple):
+                self.parents.append(self.view)
+                self.view = self._open_view(("jobpage", job, template[1]))
+                return self._draw_view()
             line = template.format(job=job.qualified)
         outcome = commands.execute(self.store, self.profile, line, self.session)
         self._log(line, outcome)
@@ -635,6 +654,23 @@ class SignonController:
             self.parents.clear()
             return self._apply(outcome, line)
         return self._draw_view(outcome.message.text if outcome.message else "")
+
+    def _in_jobpage(self, aid: str) -> Screen:
+        """The attribute pages: F5 redraws, F16 goes back to the job menu, F3 leaves, and Enter and
+        F12 go back one level. Page two (More...) is not built."""
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid == "F5":
+            return self._draw_view()
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            return self._draw_view("Page two is not available in Silverlake yet.")
+        if aid == "F16":
+            while self.parents and self.view[0] not in ("wrkjobview", "dspjobview"):
+                self.view = self.parents.pop()
+            return self._draw_view()
+        return self._close_view()
 
     def _in_msgview(self, aid: str) -> Screen:
         _, q, top = self.view
