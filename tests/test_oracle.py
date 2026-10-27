@@ -278,3 +278,99 @@ def test_diff_survives_a_snapshot_missing_a_newer_key():
     old = json.loads(json.dumps(a))
     del old["fields"][0]["monocase"]
     assert any("monocase" in d for d in diff_snapshots(old, a)) is True
+
+
+# -- authenticated scenarios and TLS --------------------------------------------------------------
+
+import asyncio as _asyncio  # noqa: E402
+import ssl as _ssl  # noqa: E402
+
+from silverlake.net import server as _srv  # noqa: E402
+from silverlake.screens.signon import SignonController as _Signon  # noqa: E402
+
+
+def _run_local(name, user, password, monkeypatch):
+    monkeypatch.setenv(scenario.USER_ENV, user)
+    monkeypatch.setenv(scenario.PASS_ENV, password)
+
+    async def go():
+        server = await _srv.serve("127.0.0.1", 0, _Signon)
+        try:
+            port = server.sockets[0].getsockname()[1]
+            return await scenario.run_scenario("127.0.0.1", port, name)
+        finally:
+            server.close()
+            await server.wait_closed()
+    return _asyncio.run(go())
+
+
+def test_auth_probe_signs_on_then_off_against_local_silverlake(monkeypatch):
+    cap = _run_local("auth-probe", "STUDENT", "STUDENT", monkeypatch)
+    assert len(cap["snapshots"]) == 3
+    text = lambda i: " ".join(r["text"] for r in cap["snapshots"][i]["runs"])  # noqa: E731
+    assert "Sign On" in text(0) and "Selection or command" in text(1) and "Sign On" in text(2)
+
+
+def test_auth_libs_runs_every_command_and_returns_to_the_menu(monkeypatch):
+    cap = _run_local("auth-libs", "STUDENT", "STUDENT", monkeypatch)
+    text = lambda i: " ".join(r["text"] for r in cap["snapshots"][i]["runs"])  # noqa: E731
+    assert len(cap["snapshots"]) == 9
+    assert "Display Library List" in text(2) and "Display Object Authority" in text(4)
+    assert "Display Object Authority" in text(6) and "Sign On" in text(8)
+    assert all("Selection or command" in text(i) for i in (1, 3, 5, 7))
+
+
+def test_a_refused_signon_stops_after_one_attempt(monkeypatch):
+    with pytest.raises(scenario.CaptureError, match="did not get past sign-on"):
+        _run_local("auth-libs", "STUDENT", "wrong-password", monkeypatch)
+
+
+def test_a_refused_signon_sends_nothing_more(monkeypatch):
+    sent = []
+    real = scenario.Client.send_aid
+    monkeypatch.setattr(scenario.Client, "send_aid", lambda self, key, fill=None: (sent.append(key), real(self, key, fill))[1])
+    with pytest.raises(scenario.CaptureError):
+        _run_local("auth-libs", "NOSUCH", "x", monkeypatch)
+    assert sent == ["ENTER"]                      # the one sign-on attempt, and nothing after it
+
+
+def test_a_missing_variable_fails_before_any_connection(monkeypatch):
+    monkeypatch.delenv(scenario.USER_ENV, raising=False)
+    monkeypatch.delenv(scenario.PASS_ENV, raising=False)
+    # Port 1 on loopback has nothing listening. Reaching the connect would be a different error.
+    with pytest.raises(scenario.CaptureError, match="environment variable"):
+        _asyncio.run(scenario.run_scenario("127.0.0.1", 1, "auth-probe"))
+
+
+def test_a_password_is_never_sent_in_cleartext_beyond_loopback(monkeypatch):
+    monkeypatch.setenv(scenario.USER_ENV, "X")
+    monkeypatch.setenv(scenario.PASS_ENV, "Y")
+    with pytest.raises(scenario.CaptureError, match="Use TLS"):
+        _asyncio.run(scenario.run_scenario("pub400.com", 23, "auth-probe"))
+
+
+def test_the_scenarios_hold_no_secret_and_only_read():
+    for name in scenario.AUTHENTICATED:
+        blob = repr(scenario.SCENARIOS[name])
+        assert "${SILVERLAKE_ORACLE_PASS}" in blob or "PASS" not in blob.upper().replace("${SILVERLAKE_ORACLE_PASS}", "")
+        commands = [a["fill"]["0"] for a in scenario.SCENARIOS[name] if "fill" in a and "1" not in a["fill"]]
+        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT") for c in commands), commands
+
+
+def test_tls_uses_a_verifying_context_and_the_host_name(monkeypatch):
+    from silverlake.oracle.client import Client
+    seen = {}
+
+    async def fake_open(host, port, ssl=None, server_hostname=None):
+        seen.update(ssl=ssl, server_hostname=server_hostname)
+        raise ConnectionRefusedError
+
+    monkeypatch.setattr(_asyncio, "open_connection", fake_open)
+    with pytest.raises(ConnectionRefusedError):
+        _asyncio.run(Client("pub400.com", 992, tls=True).connect())
+    assert seen["server_hostname"] == "pub400.com"
+    assert seen["ssl"].verify_mode == _ssl.CERT_REQUIRED and seen["ssl"].check_hostname
+    seen.clear()
+    with pytest.raises(ConnectionRefusedError):
+        _asyncio.run(Client("127.0.0.1", 23).connect())
+    assert seen["ssl"] is None and seen["server_hostname"] is None

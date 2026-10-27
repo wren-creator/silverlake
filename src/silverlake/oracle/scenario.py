@@ -30,6 +30,28 @@ SCENARIOS: dict[str, list[dict]] = {
     ],
 }
 
+# Scenarios that sign on as a real (test) profile. The user and password come
+# from the environment, never from a file, and a password is never sent over a
+# cleartext connection to anything but loopback. F3 on a menu signs off, so the
+# job does not linger on a shared system.
+USER_ENV, PASS_ENV = "SILVERLAKE_ORACLE_USER", "SILVERLAKE_ORACLE_PASS"
+_SIGNON = {"fill": {"0": "${%s}" % USER_ENV, "1": "${%s}" % PASS_ENV}, "key": "ENTER"}
+
+
+def _cmd(line: str) -> list[dict]:
+    """Run one command from the menu's command line, then F3 back."""
+    return [{"fill": {"0": line}, "key": "ENTER"}, {"key": "F3"}]
+
+
+AUTHENTICATED: dict[str, list[dict]] = {
+    # Sign on, look at the first screen, sign off. Run this before any other.
+    "auth-probe": [_SIGNON, {"key": "F3"}],
+    # Read-only questions about libraries and authority.
+    "auth-libs": [_SIGNON, *_cmd("DSPLIBL"), *_cmd("DSPOBJAUT OBJ(QSYS) OBJTYPE(*LIB)"),
+                  *_cmd("DSPOBJAUT OBJ(QGPL) OBJTYPE(*LIB)"), {"key": "F3"}],
+}
+SCENARIOS.update(AUTHENTICATED)
+
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host
 ALLOW_ENV = "SILVERLAKE_ORACLE_HOSTS"
 
@@ -61,6 +83,13 @@ def check_target(host: str, state_dir: Path) -> None:
     stamp.write_text(str(now))
 
 
+def _not_signed_on(snapshot: dict) -> bool:
+    """Still at a password prompt, or the host answered with a message ID. Either
+    way the next action is not safe to send, so the run stops. Stopping is the
+    cautious side: a legitimate screen with a message ID ends the run early."""
+    return bool(snapshot["message_ids"]) or any(f["hidden"] for f in snapshot["fields"])
+
+
 def expand(value: str) -> str:
     def sub(m: re.Match) -> str:
         name = m.group(1)
@@ -71,18 +100,28 @@ def expand(value: str) -> str:
 
 
 async def run_scenario(host: str, port: int, name: str, devname: str | None = None,
-                       timeout: float = 15.0) -> dict:
+                       timeout: float = 15.0, tls: bool = False) -> dict:
     if name not in SCENARIOS:
         raise CaptureError(f"unknown scenario {name!r}, have: {', '.join(sorted(SCENARIOS))}")
-    client = Client(host, port, devname)
+    if name in AUTHENTICATED and not tls and not is_loopback(host):
+        raise CaptureError(f"{name} sends a password. Use TLS (--tls) for anything but loopback.")
+    # Resolve every value before connecting, so a missing variable cannot leave
+    # a half finished session on someone else's system.
+    actions = [({int(k): expand(v) for k, v in a.get("fill", {}).items()}, a["key"]) for a in SCENARIOS[name]]
+    client = Client(host, port, devname, tls=tls)
     await client.connect()
     captures: list[Capture] = []
     try:
         captures.append(await client.wait_screen(timeout))
-        for action in SCENARIOS[name]:
-            fill = {int(k): expand(v) for k, v in action.get("fill", {}).items()}
-            client.send_aid(action["key"], fill)
+        for i, (fill, key) in enumerate(actions):
+            client.send_aid(key, fill)
             captures.append(await client.wait_screen(timeout))
+            if name in AUTHENTICATED and i == 0 and _not_signed_on(captures[-1].snapshot):
+                # One attempt only. Never retype a password the host refused, and
+                # do not type commands into a screen we did not expect.
+                ids = ", ".join(captures[-1].snapshot["message_ids"]) or "none"
+                raise CaptureError(f"did not get past sign-on, stopping (message IDs: {ids}). "
+                                   "Nothing further was sent.")
     finally:
         await client.close()
     return {

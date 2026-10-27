@@ -1,6 +1,7 @@
 """A small 5250 client for capturing screens from a host, real or simulated."""
 
 import asyncio
+import ssl
 from dataclasses import dataclass, field
 
 from ..proto import datastream as ds
@@ -35,8 +36,8 @@ class Capture:
 
 
 class Client:
-    def __init__(self, host: str, port: int, devname: str | None = None) -> None:
-        self.host, self.port, self.devname = host, port, devname
+    def __init__(self, host: str, port: int, devname: str | None = None, tls: bool = False) -> None:
+        self.host, self.port, self.devname, self.tls = host, port, devname, tls
         self.term = Terminal()
         self.parser = tn.Parser()
         self._reader: asyncio.StreamReader | None = None
@@ -47,8 +48,12 @@ class Client:
         self._got_read = False
 
     async def connect(self, timeout: float = 10.0) -> None:
+        # TLS verifies the certificate and the host name, and fails closed. There
+        # is deliberately no way to turn verification off.
+        ctx = ssl.create_default_context() if self.tls else None
         self._reader, self._writer = await asyncio.wait_for(
-            asyncio.open_connection(self.host, self.port), timeout)
+            asyncio.open_connection(self.host, self.port, ssl=ctx,
+                                    server_hostname=self.host if ctx else None), timeout)
 
     async def close(self) -> None:
         if self._writer:

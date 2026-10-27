@@ -15,6 +15,27 @@ python -m silverlake.oracle diff A.json B.json [--fields-only] [--text]
 
 `compare` runs the same scenario on an in-process Silverlake and diffs it against a saved reference. A is always the reference.
 
+## Signing on as a test profile
+
+Menus and commands need a real sign-on, so the oracle can sign on as a **test profile**, never a real account. Put its name and password in `.env`:
+
+```
+cp .env.example .env && chmod 600 .env     # then fill in SILVERLAKE_ORACLE_USER and _PASS
+SILVERLAKE_ORACLE_HOSTS=pub400.com \
+  python -m silverlake.oracle capture pub400.com --tls --out captures/pub400/auth-probe.json auth-probe
+```
+
+(`--tls` connects on port 992 unless you give a port. Put the scenario name before `--out`.) The guard rails, all enforced in code and tested:
+
+- `.env` is gitignored, and the loader refuses a file other users can read, the way ssh refuses a loose key. It reads only `SILVERLAKE_ORACLE_*` names, a variable already in the shell wins, and it never prints a value.
+- A scenario that sends a password refuses to run over cleartext telnet to anything but loopback. TLS verifies the certificate and the host name, and there is no switch to turn that off.
+- Every value is resolved before connecting, so a missing variable cannot leave a half finished session on a shared system.
+- One sign-on attempt per run. If the host answers with a message ID or another password prompt, the run stops and sends nothing more.
+- The scenarios only run `DSPLIBL` and `DSPOBJAUT`, and a test enforces that. Captures record what the host sends and never what we type, so the password cannot reach a capture file.
+- Scenarios end with F3 on the menu, which signs the job off so it does not linger. A run that dies midway leaves a disconnected job until the host's timeout.
+
+`auth-probe` signs on, snapshots the first screen, and signs off. Run it first and look at the capture before running `auth-libs` (the library list and the authority to `QSYS` and `QGPL`). `compare` on an authenticated capture replays the scenario on local Silverlake as a seed profile (`--local-user`, default `STUDENT`), so the real credentials never meet our server.
+
 ## What is compared
 
 Structure, not wording: geometry, cursor, every input field (row, column, length, attribute, hidden, monocase, shift), where each text run starts and in what attribute, and which message IDs appear (`CPF1120` and friends). Wording is ours to write, so it is only compared with `--text`, and that is for local use.
@@ -53,7 +74,7 @@ A photo of a default sign-on display (Italian language, copyright 1980, 1996) se
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.
-- **Authenticated screens.** Menus and commands need a real sign-on. That means the user's own profile, with the password read from the environment, and a human deciding each run.
+- **Authenticated screens.** The harness can now sign on as a test profile (see above). What it has not done yet is run against a real host, so the post-sign-on screens are still unseen.
 - **The Query path against a real host.** The client answers a 5250 Query, and a test proves it, but PUB400's sign-on never sent one. It will appear after sign-on.
 - **Orders not yet seen on real streams.** Erase To Address attribute-count handling is unverified.
 - **Message text for IDs.** Phase 3 gives Silverlake real message IDs to compare.
