@@ -171,6 +171,15 @@ Taken from PUB400 on 2026-10-27, read only (`auth-callpgm`). It runs `DSPPGM` on
 - **A CALL on a missing program** says "Program NOSUCHPGM in library *LIBL not found." (second level text follows).
 - **QCMDEXC prints nothing when the command works**, says "Command NOSUCHCMD in library *LIBL not found." for an unknown one, and "A matching parenthesis not found." when the length parameter cuts the command in the middle of its parentheses.
 
+## What the development capture taught us
+
+Taken from PUB400 on 2026-10-27, read only (`auth-pdm`). It opens the PDM menu, runs `WRKMBRPDM`, `WRKOBJPDM` and `STRSEU` and one `CRTBNDRPG` against a library that does not exist (all refused before anything is made or locked), and opens the prompts of `CRTBNDRPG`, `CRTPF`, `CRTDSPF`, `CRTPRTF` and `CRTSRCPF` with F4 and leaves them with F12. Nothing is created, compiled, edited or locked.
+
+- **The PDM menu** (STRPDM) has four lines: 1 Work with libraries, 2 Work with objects, 3 Work with members, 9 Work with user-defined options, with F4, F9, F10 (command entry), F12 and F18 (change defaults).
+- **Refusals.** `WRKMBRPDM` on a library that is not there says "Library NOSUCH was not found." On QGPL/QCLSRC it says "You do not have authority to file QCLSRC in QGPL." (the file was either not readable or not there, and the message does not say which). `WRKOBJPDM LIB(QGPL)` said "PDM cannot complete the display list." `STRSEU` on a missing library says "Library NOSUCH not found."
+- **CRTBNDRPG on a missing member** says "Unable to open member NOPGM of file QRPGLESRC in library NOSUCH." even when the library is the thing that is missing.
+- **The prompts.** CRTBNDRPG: PGM (*CTLSPEC, library *CURLIB), SRCFILE (QRPGLESRC, *LIBL), SRCMBR (*PGM), SRCSTMF, GENLVL 10, TEXT (*SRCMBRTXT), DFTACTGRP (*YES), then F10 for more. CRTPF: FILE, SRCFILE QDDSSRC, SRCMBR *FILE, RCDLEN, GENLVL 20, FLAG 0, FILETYPE *DATA, MBR *FILE, TEXT. CRTDSPF and CRTPRTF both showed SRCFILE `*NONE` where IBM's default is QDDSSRC (a local default on that host). CRTSRCPF: FILE, RCDLEN 92, MBR *NONE, TEXT *BLANK. Enter with FILE empty says "Parameter FILE required." and a roll key at the end says "Already at bottom of area."
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

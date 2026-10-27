@@ -493,6 +493,43 @@ type = "*FILE"
 owner = "DEVELOPER"
 public = "*CHANGE"
 text = "RPG source. Wide open, but the library is locked."
+[object.data]
+attr = "PF-SRC"
+rcdlen = 92
+
+[[object]]
+library = "SRCLIB"
+name = "QRPGLESRC"
+type = "*FILE"
+owner = "DEVELOPER"
+public = "*CHANGE"
+text = "RPG IV source. Wide open, but the library is locked."
+[object.data]
+attr = "PF-SRC"
+rcdlen = 92
+[object.data.members.HELLO]
+type = "RPGLE"
+text = "The smallest program that shows a screen"
+file = "hello.rpgle"
+
+[[object]]
+library = "SRCLIB"
+name = "QDDSSRC"
+type = "*FILE"
+owner = "DEVELOPER"
+public = "*CHANGE"
+text = "DDS source. Wide open, but the library is locked."
+[object.data]
+attr = "PF-SRC"
+rcdlen = 92
+[object.data.members.HELLOD]
+type = "DSPF"
+text = "Display file for HELLO"
+file = "hellod.dds"
+[object.data.members.CUSTPF]
+type = "PF"
+text = "Customer physical file"
+file = "custpf.dds"
 
 [[object]]
 name = "SCRATCH"

@@ -327,6 +327,23 @@ def _with_source_files(o: dict) -> dict:
     seeded file its record layout (`dds_file`), in data/rpg. The text goes into the object, where a student
     can read and change it."""
     d = o.get("data")
+    if d and isinstance(d.get("members"), dict):
+        d = dict(d)
+        members = {}
+        for mname, m in d["members"].items():
+            m = dict(m)
+            if "file" in m:
+                try:
+                    text = (RPG_DIR / m.pop("file")).read_text()
+                except OSError as exc:
+                    raise SeedError(f"object {o['name']}: member {mname}: {exc}") from exc
+                m["lines"] = text.rstrip("\n").split("\n")
+            m.setdefault("lines", [])
+            m.setdefault("type", "")
+            m.setdefault("text", "")
+            members[mname.upper()] = m
+        d["members"] = members
+        o = {**o, "data": d}
     if not d or not ({"source_file", "dspf_file", "dds_file"} & d.keys()):
         return o
     d = dict(d)

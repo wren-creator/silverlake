@@ -8,7 +8,7 @@ are named in IGNORED so a copied command from a real system still runs."""
 import fnmatch
 from dataclasses import dataclass
 
-from ..system import admin, autls, jobctl, messages, msgq, objects, objlist, rpg, spool
+from ..system import admin, autls, jobctl, messages, msgq, objects, objlist, rpg, source, spool
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -181,10 +181,30 @@ DSPPGM_PARAMS = [Param("PGM", "qname", "", required=True), Param("OUTPUT", "outp
 DSPOBJD_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
                   Param("DETAIL", "detail", "*BASIC"), Param("ASPDEV", "ignored", "*"),
                   Param("OUTPUT", "output", "*")]
+CRTSRCPF_PARAMS = [Param("FILE", "qname", "", required=True), Param("RCDLEN", "number", "92"),
+                   Param("MBR", "name*", "*NONE"), Param("TEXT", "text", "*BLANK")]
+CRTBNDRPG_PARAMS = [Param("PGM", "qname*", "*CTLSPEC"), Param("SRCFILE", "qname", "QRPGLESRC"),
+                    Param("SRCMBR", "name*", "*PGM"), Param("SRCSTMF", "ignored", "*NONE"),
+                    Param("GENLVL", "ignored", "10"), Param("TEXT", "text", "*SRCMBRTXT"),
+                    Param("DFTACTGRP", "ignored", "*YES"), Param("USRPRF", "usrprfopt", "*USER"),
+                    Param("USEADPAUT", "yesno", "*YES")]
+
+
+def _crt_dds_params(first_default: str) -> list[Param]:
+    return [Param("FILE", "qname", "", required=True), Param("SRCFILE", "qname*", first_default),
+            Param("SRCMBR", "name*", "*FILE"), Param("GENLVL", "ignored", "20"),
+            Param("FLAG", "ignored", "0"), Param("TEXT", "text", "*SRCMBRTXT")]
+
+
+CRTPF_PARAMS = _crt_dds_params("QDDSSRC")
+CRTDSPF_PARAMS = _crt_dds_params("QDDSSRC")
+CRTPRTF_PARAMS = _crt_dds_params("QDDSSRC")
 DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU": ("MENU", "*MENU"),
                    "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ")}
 
 COMMANDS = {
+    "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTPF": CRTPF_PARAMS,
+    "CRTDSPF": CRTDSPF_PARAMS, "CRTPRTF": CRTPRTF_PARAMS,
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
     "DLTUSRPRF": DLT_PARAMS, "WRKUSRPRF": WRK_PARAMS, "SIGNOFF": [],
     "CRTLIB": CRTLIB_PARAMS, "DLTLIB": DLTLIB_PARAMS, "DSPLIBL": DSPLIBL_PARAMS,
@@ -411,6 +431,12 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
                         "or *AFTER, *BEFORE, *REPLACE followed by a library.")
     if k == "qname":
         return _qualified(p.key, values)
+    if k == "number":
+        if len(values) != 1 or not values[0].isdigit():
+            raise BindError(f"Value for parameter {p.key} not valid. Use a number.")
+        return int(values[0])
+    if k == "usrprfopt":
+        return _one(p.key, values, ("*USER", "*OWNER"))
     if k == "objtype":
         v = _one(p.key, values, objects.TYPES) if len(values) == 1 and values[0] in objects.TYPES else None
         if v is None:
@@ -743,6 +769,15 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "EDTOBJAUT":
         obj, err = objlist.edit_authority(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
         return Outcome(err) if err else Outcome(view=("edtobjaut", obj))
+    if name == "CRTSRCPF":
+        return Outcome(source.create_source_file(store, actor, session, b["FILE"], b["RCDLEN"], b["MBR"],
+                                                 b["TEXT"]).message)
+    if name == "CRTBNDRPG":
+        return Outcome(source.compile_rpg(store, actor, session, b["PGM"], b["SRCFILE"], b["SRCMBR"], b["TEXT"],
+                                          b["USRPRF"], b["USEADPAUT"]).message)
+    if name in ("CRTPF", "CRTDSPF", "CRTPRTF"):
+        return Outcome(source.compile_dds(store, actor, session, name[3:], b["FILE"], b["SRCFILE"], b["SRCMBR"],
+                                          b["TEXT"]).message)
     if name == "DSPPGM":
         prog, err = objects.use_object(store, actor, b["PGM"], "*PGM", session.search_order())
         return Outcome(err) if err else Outcome(view=("dsppgm", prog))

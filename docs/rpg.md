@@ -66,6 +66,17 @@ A program's `WORKSTN` file is a `*FILE` object with attribute DSPF that carries 
 - **Seeded.** `SCREEN` (ADVENTURE), `REPORT` (SALESRPT), `EMPINQ` (PAYLOOK), `SALADJ` (PAYADJ) and `RUNCMD`, all in APPLIB. The first two are named after the F-specs in the library's example programs.
 - A program with more than one display file gets their record formats merged, since the runtime takes one set.
 
+## Source and compiling
+
+Programs can now be made without editing a seed file. Source lives in source physical files and is compiled with the real command names.
+
+- **Source files and members.** `CRTSRCPF FILE(SCRATCH/QRPGLESRC)` makes a `*FILE` with attribute `PF-SRC` (record length 92 by default, which leaves 80 characters of line). Its `members` hold the lines, a type and a text. A line is the data of a source record, columns 1 to 80 of an RPG or DDS line. `SRCLIB` has `QRPGLESRC` (HELLO) and `QDDSSRC` (HELLOD, CUSTPF) to start from, and anyone may `CRTSRCPF` in a library they can add to. The editor and PDM are the next piece, so for now members come from the seed or from tests.
+- **CRTBNDRPG** `PGM(lib/name) SRCFILE(lib/QRPGLESRC) SRCMBR(*PGM) TEXT(*SRCMBRTXT) USRPRF(*USER) USEADPAUT(*YES)`. It reads the member, parses it with the runtime, checks that every file the program declares exists on the library list, is the right kind and may be used, and makes the `*PGM`. The prompt (F4) is not built. A program that already exists is replaced: the compiling user becomes the owner and the old public and private authorities are kept, and replacing needs `*OBJEXIST` to the old program. That replacement rule is from memory of IBM's REPLACE(*YES), not a page, and is on the verification list.
+- **CRTPF, CRTDSPF and CRTPRTF** `FILE(lib/name) SRCFILE(lib/QDDSSRC) SRCMBR(*FILE)` build a `*FILE` of that kind from a DDS member, checked by the runtime's DDS parsers. A file that exists is not replaced. A file with no source (`SRCFILE(*NONE)`, record length only) is not built. IBM's default for the source file is QDDSSRC, which is what is used here. The captured host showed `*NONE` for CRTDSPF and CRTPRTF, which looks like a local default.
+- **The listing.** Every compile prints QSYSPRT to QGPL/QPRINT as the user's spooled file in the job, with the source and the messages. A failed compile makes no object and says "Compilation failed. Program NAME not created in library LIB." (ours).
+- **From the real system.** The prompts of the five commands and their defaults, and the one message a compile gives for a member it cannot open: "Unable to open member NOPGM of file QRPGLESRC in library NOSUCH." That wording is used for any member that cannot be opened.
+- **Why it matters for the range.** Compiling a program that adopts (`USRPRF(*OWNER)`) makes *you* the owner, so it adopts you and nobody else. The way to get someone else's authority is to replace a program they own, which needs authority to it, or to be handed one. Adoption has to be the owner's decision.
+
 ## What it is not (yet)
 
 - **No compile step.** Source is parsed when the program is called, not by `CRTBNDRPG`. A syntax error shows as "ended abnormally" at call time instead of a compile listing. Nothing can create a program yet except the seed.

@@ -1,0 +1,8 @@
+     A* CUSTPF.DDS -- a small customer physical file. Compile with CRTPF.
+
+     A                                      UNIQUE
+     A          R CUSTREC
+     A            CUSTNO         5S 0
+     A            CNAME         20A
+     A            CITY          15A
+     A          K CUSTNO

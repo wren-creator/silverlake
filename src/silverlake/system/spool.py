@@ -351,6 +351,20 @@ def write_joblog(store: ProfileStore, job, entries: list[tuple[datetime, str, st
     return f
 
 
+def new_file(store: ProfileStore, session, actor: Profile, name: str, lines: list[str], user_data: str = "",
+             outq: tuple[str, str] = ("QGPL", "QPRINT")) -> SpoolFile:
+    """A spooled file of the session's job, owned by the user, with the next number in that job."""
+    job = session.job if session is not None else None
+    job_name = job.name if job else actor.name
+    number = job.number if job else "000000"
+    nos = [f.file_no for f in store.spool if f.job_number == number and f.job_name == job_name]
+    f = SpoolFile(name, actor.name, job_name, number, (max(nos) + 1) if nos else 1, outq[1], outq[0], user_data,
+                  "RDY", list(lines), datetime.now().isoformat(timespec="seconds"))
+    store.spool.append(f)
+    store.on_change()
+    return f
+
+
 def ensure_queues(store: ProfileStore) -> None:
     """A state file saved before output queues existed gets its two queues now."""
     from .authority import SecuredObject, USE

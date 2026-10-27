@@ -192,7 +192,6 @@ class Files:
 
     def _spool_out(self) -> bool:
         """Put what the program has printed on its output queue as spooled files of the job."""
-        job = self.session.job
         changed = False
         for pf in self.spool.files:
             text = pf.text()
@@ -203,13 +202,8 @@ class Files:
             if sf is None:
                 obj = self.printers[pf.name.upper()]
                 qlib, _, qname = obj.data.get("outq", DEFAULT_OUTQ).partition("/")
-                name = job.name if job else self.actor.name
-                number = job.number if job else "000000"
-                nos = [f.file_no for f in self.store.spool if f.job_number == number and f.job_name == name]
-                sf = spoolmod.SpoolFile(obj.name, self.actor.name, name, number, (max(nos) + 1) if nos else 1,
-                                        qname.upper(), qlib.upper(), obj.data.get("usrdta", ""), "RDY", lines,
-                                        datetime.now().isoformat(timespec="seconds"))
-                self.store.spool.append(sf)
+                sf = spoolmod.new_file(self.store, self.session, self.actor, obj.name, lines, obj.data.get("usrdta", ""),
+                                       (qlib.upper(), qname.upper()))
                 self._spooled[id(pf)] = sf
                 changed = True
             elif sf.lines != lines:

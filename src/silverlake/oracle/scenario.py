@@ -280,6 +280,24 @@ AUTHENTICATED["auth-edtautl"] = [
     _SIGNON, {"fill": {"0": "EDTAUTL AUTL(QPWFSERVER)"}, "key": "ENTER"},
     *[{"key": "F12", "always": True}] * 2, *[{"key": "F3", "always": True}] * 2, _SIGNOFF,
 ]
+# Read only: the development side. Where source lives and how it is compiled. PDM's start menu, a source
+# file and a library that do not exist (the refusal wording), QGPL's source file if it has one, the
+# object list for QGPL (first page only), and the prompts for CRTBNDRPG, CRTPF, CRTDSPF, CRTPRTF and
+# CRTSRCPF opened with F4 and left with F12, never Enter. One CRTBNDRPG is run against a library that is
+# not there and one STRSEU against a file that is not there: both are refused before anything is made or
+# locked, and what they say is the point. Nothing is created, compiled, edited or locked.
+AUTHENTICATED["auth-pdm"] = [
+    _SIGNON,
+    *_cmd("WRKMBRPDM FILE(NOSUCH/NOFILE)"), *_cmd("WRKMBRPDM FILE(QGPL/QCLSRC)"),
+    {"fill": {"0": "STRPDM"}, "key": "ENTER"}, {"key": "F3", "always": True},
+    {"fill": {"0": "WRKOBJPDM LIB(QGPL)"}, "key": "ENTER"}, {"key": "F3", "always": True},
+    *[step for cmd in ("CRTBNDRPG", "CRTPF", "CRTDSPF", "CRTPRTF", "CRTSRCPF")
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "ROLLUP"}, {"key": "F12", "always": True},
+                   {"key": "F12", "always": True})],
+    *_cmd("CRTBNDRPG PGM(NOSUCH/NOPGM) SRCFILE(NOSUCH/QRPGLESRC)"),
+    *_cmd("STRSEU SRCFILE(NOSUCH/NOFILE) SRCMBR(NOMBR)"),
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

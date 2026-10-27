@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-splopts"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-splopts", "auth-pdm"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -586,3 +586,15 @@ def test_a_start_of_header_skips_its_length_plus_two():
     t = Terminal()
     t.apply(body)
     assert [(r["row"], r["col"], r["text"]) for r in t.snapshot()["runs"]] == [(0, 2, "HI")]
+
+
+def test_the_development_scenario_only_prompts_creates_and_refuses():
+    actions = scenario.SCENARIOS["auth-pdm"]
+    entered = [a["fill"]["0"] for a in actions[1:-1] if "fill" in a and a["key"] == "ENTER"]
+    assert [c.split()[0] for c in entered] == ["WRKMBRPDM", "WRKMBRPDM", "STRPDM", "WRKOBJPDM", "CRTBNDRPG", "STRSEU"]
+    # the two commands that could do something are aimed at a library that is not there
+    assert all("NOSUCH" in c for c in entered if c.split()[0] in ("CRTBNDRPG", "STRSEU"))
+    # the creating commands are only ever prompted, never run, apart from that refused CRTBNDRPG
+    prompted = [a["fill"]["0"] for a in actions if a.get("key") == "F4"]
+    assert prompted == ["CRTBNDRPG", "CRTPF", "CRTDSPF", "CRTPRTF", "CRTSRCPF"]
+    assert actions[-1].get("always") and actions[-1]["fill"] == {"0": "SIGNOFF"}

@@ -1,0 +1,9 @@
+     A* HELLOD.DDS -- the display file for HELLO. Compile with CRTDSPF.
+
+     A                                      DSPSIZ(24 80 *DS3)
+
+     A          R GREET
+     A                                  1 33'HELLO'
+     A                                  3  3'Hello,'
+     A            WHO           20A  O  3 10
+     A                                 22  3'Press Enter to end'
