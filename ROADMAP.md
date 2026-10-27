@@ -24,7 +24,8 @@
 - [x] WRKAUTL 4 (confirm, DLTAUTL), 9 and 13, and creation dates on libraries made with CRTLIB
 - [x] Phase 3c-3c step 1: job table (sessions as interactive jobs, seeded system jobs) and WRKACTJOB, see docs/jobs-spool-messages.md
 - [x] Phase 3c-3c step 2: spool files (WRKSPLF, DSPSPLF, DLTSPLF, QPJOBLOG per session, *OUTQ objects, DSPDTA/OPRCTL rules), from the PUB400 captures
-- [ ] Spool leftovers: WRKOUTQ and its capture, WRKSPLF options 1, 2, 3, 4 (confirm), 6, 7, 9, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF, CRTOUTQ
+- [x] HLDSPLF, RLSSPLF and WRKSPLF options 3 and 6, WRKSPLF JOB filter, WRKACTJOB option 8, F17 and F18 on WRKOBJOWN and the edit screen
+- [ ] Spool leftovers: WRKOUTQ and its capture, WRKSPLF options 1, 2, 4 (confirm), 7, 9, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF, CRTOUTQ
 - [x] Phase 3c-3c step 3: message queues (DSPMSG, SNDMSG, CLRMSGQ, QSYSOPR, per-user queues in QUSRSYS), from the PUB400 captures
 - [ ] Message leftovers: the real SNDMSG prompt (needs a longer wait), inquiry messages and replies, F11 remove one, WRKMSGQ, CRTMSGQ/CHGMSGQ/DLTMSGQ, RMVMSG, break delivery to a live session, work station queues
 - [x] DSPOBJD basic list, full page two, and Add New Users (F6), from the PUB400 captures

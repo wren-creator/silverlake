@@ -406,6 +406,9 @@ class SignonController:
             wl.page += 1 if aid == "ROLLUP" else -1
             wl.shown()
             return self._draw_view()
+        if aid in ("F17", "F18") and wl.kind == "owner":          # Top and Bottom, as that display labels them
+            wl.page = 0 if aid == "F17" else wl.pages - 1
+            return self._draw_view()
         if aid == "F5":
             wl.refresh()
             return self._draw_view()
@@ -444,10 +447,15 @@ class SignonController:
                 if not spool.can_display(self.store, self.profile, f):
                     return None, "Not authorized to spooled file."
                 return f"@SPOOL{opt} {self.store.spool.index(f)}", ""
-            if opt in ("1", "2", "3", "4", "6", "7", "9"):
+            if opt in ("3", "6"):
+                verb = "HLDSPLF" if opt == "3" else "RLSSPLF"
+                return f"{verb} FILE({row.name}) JOB({row.job}) SPLNBR({row.file_no})", ""
+            if opt in ("1", "2", "4", "7", "9"):
                 return None, f"Option {opt} is not available in Silverlake yet."
             return None, f"Option {opt} is not valid."
         if wl.kind == "jobs":
+            if opt == "8" and row.type != "SBS":
+                return f"WRKSPLF SELECT(*ALL) JOB({row.qualified})", ""
             if opt in ("2", "3", "4", "5", "6", "7", "8", "13"):
                 return None, f"Option {opt} is not available in Silverlake yet."
             return None, f"Option {opt} is not valid."
@@ -641,6 +649,9 @@ class SignonController:
             return self._close_view()
         if aid in ("ROLLUP", "ROLLDOWN"):
             ea.page += 1 if aid == "ROLLUP" else -1
+            return self._draw_view()
+        if aid in ("F17", "F18"):
+            ea.page = 0 if aid == "F17" else ea.pages - 1
             return self._draw_view()
         if aid == "F6":
             self.parents.append(self.view)

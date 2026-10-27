@@ -113,7 +113,8 @@ def can_list(store: ProfileStore, actor: Profile, f: SpoolFile) -> bool:
     return q is None or Auth.READ in store.authority_to_object(actor, q)
 
 
-def select(store: ProfileStore, actor: Profile, user: str = "*CURRENT", name: str = "*ALL") -> list[SpoolFile]:
+def select(store: ProfileStore, actor: Profile, user: str = "*CURRENT", name: str = "*ALL",
+           job: tuple | None = None) -> list[SpoolFile]:
     """WRKSPLF SELECT(user ... name): *CURRENT is only your own files, a name or *ALL is every
     file you may list."""
     out = []
@@ -127,6 +128,10 @@ def select(store: ProfileStore, actor: Profile, user: str = "*CURRENT", name: st
             continue
         if name != "*ALL" and not fnmatch.fnmatchcase(f.name, name):
             continue
+        if job is not None:
+            jn, ju, jnum = job
+            if not (jn in ("*", f.job_name) and ju in ("*", f.user) and jnum in ("*", f.job_number)):
+                continue
         out.append(f)
     return sorted(out, key=lambda f: (f.stamp(), f.file_no))
 
@@ -165,6 +170,16 @@ def delete(store: ProfileStore, actor: Profile, f: SpoolFile) -> Done:
     store.spool.remove(f)
     store.on_change()
     return _ok(f"File {f.name} number {f.file_no} deleted.")
+
+
+def hold(store: ProfileStore, actor: Profile, f: SpoolFile, hold: bool) -> Done:
+    """HLDSPLF and RLSSPLF. The pages were not read for authority, so the same control rule as
+    delete applies (inferred). Holding a held file or releasing a ready one is not an error."""
+    if not can_control(store, actor, f):
+        return _no(_msg("CPF3492", "Not authorized to spooled file."))
+    f.status = "HLD" if hold else "RDY"
+    store.on_change()
+    return _ok(f"File {f.name} number {f.file_no} {'held' if hold else 'released'}.")
 
 
 # -- job logs --------------------------------------------------------------------------------------

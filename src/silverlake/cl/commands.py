@@ -89,12 +89,18 @@ DSPMSG_PARAMS = [Param("MSGQ", "msgqname", "*WRKUSR"), Param("OUTPUT", "output",
 SNDMSG_PARAMS = [Param("MSG", "msgtext", "", required=True), Param("TOMSGQ", "msgqs", "", 50), Param("TOUSR", "touser", ""),
                  Param("MSGTYPE", "msgtype", "*INFO"), Param("RPYMSGQ", "ignored", "*WRKSTN"), Param("CCSID", "ignored", "*JOB")]
 CLRMSGQ_PARAMS = [Param("MSGQ", "msgqname", "", required=True), Param("CLEAR", "clearopt", "*ALL")]
-WRKSPLF_PARAMS = [Param("SELECT", "splsel", "*CURRENT", 6), Param("JOB", "ignored", "*ALL"),
+WRKSPLF_PARAMS = [Param("SELECT", "splsel", "*CURRENT", 6), Param("JOB", "jobq", "*ALL", 3),
                   Param("PERIOD", "ignored", "*AVAIL"), Param("ASPDEV", "ignored", "*"),
                   Param("OUTPUT", "output", "*"), Param("DSPFMT", "ignored", "*INLENV"), Param("ASTLVL", "ignored", "*PRV")]
 DSPSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
                   Param("CRTDATE", "ignored", "*ONLY"), Param("FOLD", "ignored", "*NO")]
+HLDSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
+                  Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
+                  Param("CRTDATE", "ignored", "*ONLY"), Param("OPTION", "ignored", "*IMMED")]
+RLSSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
+                  Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
+                  Param("CRTDATE", "ignored", "*ONLY")]
 DLTSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
                   Param("CRTDATE", "ignored", "*ONLY"), Param("SELECT", "ignored", "*"), Param("ASPDEV", "ignored", "*")]
@@ -151,7 +157,7 @@ COMMANDS = {
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
-    "DLTSPLF": DLTSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
+    "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
     "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS,
 }
@@ -521,9 +527,15 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         user, fname = b["SELECT"]
         if user not in ("*CURRENT", "*ALL") and "*" not in user and user not in store.profiles:
             return Outcome(messages.Message("CPF33D1", f"User {user} does not exist.", messages.DOCUMENTED))
-        rows = spool.select(store, actor, user, fname)
-        return Outcome(view=("wrksplf", rows, lambda: spool.select(store, actor, user, fname)))
-    if name in ("DSPSPLF", "DLTSPLF"):
+        job = b["JOB"]
+        if job not in ("*", ("*ALL", "*", "*")) and user != "*ALL":
+            return Outcome(messages.syntax("JOB can only be given when SELECT names *ALL users."))
+        job = None if job in ("*", ("*ALL", "*", "*")) else job
+        rows = spool.select(store, actor, user, fname, job)
+        if not rows:
+            return Outcome(messages.syntax("No spooled files found."))
+        return Outcome(view=("wrksplf", rows, lambda: spool.select(store, actor, user, fname, job)))
+    if name in ("DSPSPLF", "DLTSPLF", "HLDSPLF", "RLSSPLF"):
         job = b["JOB"]
         if job == "*":
             j = session.job
@@ -533,6 +545,8 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
             return Outcome(err)
         if name == "DLTSPLF":
             return Outcome(spool.delete(store, actor, f).message)
+        if name in ("HLDSPLF", "RLSSPLF"):
+            return Outcome(spool.hold(store, actor, f, name == "HLDSPLF").message)
         return Outcome(view=("dspsplf", f))
     if name == "WRKACTJOB":
         sbs = b["SBS"].upper()

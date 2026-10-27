@@ -18,11 +18,11 @@ Laid out like the real display captured from PUB400 (title, CPU and elapsed head
 
 What the capture settled, and what is the point of the range: **a basic profile lists every active job on the system, other people's included.** Users, job names and what each job is running (the function column, such as `PGM-ARCPSTDA` or `CMD-STRQSH`) are visible without `*JOBCTL`. That is quiet reconnaissance, and it is on purpose. Your own job shows `CMD-WRKACTJOB` and `RUN` while the list is drawn.
 
-Options 2, 3, 4, 5, 6, 7, 8 and 13 are laid out as on the real display and say "not available yet". F7, F10, F11, F23 and F24 are on the screen and do nothing yet. The elapsed time, CPU % and per job CPU are always zero.
+Option 8 (work with spooled files) opens that job's files through `WRKSPLF JOB(...)`. Options 2, 3, 4, 5, 6, 7 and 13 are laid out as on the real display and say "not available yet". F7, F10, F11, F23 and F24 are on the screen and do nothing yet. The elapsed time, CPU % and per job CPU are always zero.
 
 ## Step 2: spool files (built)
 
-`WRKSPLF`, `DSPSPLF` and `DLTSPLF`, with the Work with All Spooled Files, Display Spooled File and Work with Spooled File Attributes displays laid out like the ones captured from PUB400. Options 5 (display) and 8 (attributes) work from the list. 1, 2, 3, 4, 6, 7 and 9 are drawn and say "not available yet". F19, F20, Find and Control on the display are not built. `WRKOUTQ` and the page-two attributes are not built, and their screens were not captured.
+`WRKSPLF`, `DSPSPLF` and `DLTSPLF`, with the Work with All Spooled Files, Display Spooled File and Work with Spooled File Attributes displays laid out like the ones captured from PUB400. Options 5 (display), 8 (attributes), 3 (hold) and 6 (release) work from the list. 3 and 6 run `HLDSPLF` and `RLSSPLF`, which follow the same control rule as delete (inferred, those pages were not read for authority). 1, 2, 4, 7 and 9 are drawn and say "not available yet". `WRKSPLF` takes `JOB(number/user/name)` when `SELECT` names `*ALL` users, and an empty result says "No spooled files found." on the message line. F19, F20, Find and Control on the display are not built. `WRKOUTQ` and the page-two attributes are not built, and their screens were not captured.
 
 **The model.** A spool file belongs to a job (number, user, name), has a file number within it, and sits on an output queue. Queues are `*OUTQ` objects in the object table, so `GRTOBJAUT`, `RVKOBJAUT` and `DSPOBJAUT` work on them. Spool files persist in the state file (a `spool` table), and job numbers do not restart under a saved job log. Two queues are seeded: `QUSRSYS/QEZJOBLOG` for job logs and `QGPL/QPRINT`.
 

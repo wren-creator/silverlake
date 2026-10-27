@@ -166,3 +166,72 @@ def test_the_new_commands_are_objects_and_dspobjaut_knows_outq(store):
     assert all(("QSYS", n, "*CMD") in store.objects for n in ("WRKSPLF", "DSPSPLF", "DLTSPLF"))
     out = commands.execute(store, store.get("QSECOFR"), "DSPOBJAUT OBJ(QGPL/QPRINT) OBJTYPE(*OUTQ)")
     assert out.view and out.view[0] == "dspobjaut"
+
+
+# -- housekeeping: HLDSPLF, RLSSPLF, options 3 and 6, JOB filter, WRKACTJOB option 8 ----------------------------
+
+def test_hold_and_release_follow_the_control_rule(store):
+    job = "JOB(100231/DEVELOPER/PAYRUN)"
+    assert _run(store, "STUDENT", f"HLDSPLF FILE(PAYRPT) {job}") == "Not authorized to spooled file."
+    assert next(f for f in store.spool if f.name == "PAYRPT").status == "RDY"
+    assert "held" in _run(store, "DEVELOPER", f"HLDSPLF FILE(PAYRPT) {job}")
+    assert next(f for f in store.spool if f.name == "PAYRPT").status == "HLD"
+    assert "released" in _run(store, "SPOOLMAN", f"RLSSPLF FILE(PAYRPT) {job}")           # *SPLCTL
+    assert next(f for f in store.spool if f.name == "PAYRPT").status == "RDY"
+
+
+def test_options_3_and_6_hold_and_release_from_the_list(store):
+    c = _signed(store, "DEVELOPER")
+    c.handle("ENTER", {"command": "wrksplf"})
+    assert "held" in _text(c.handle("ENTER", {"opt0": "3"}))
+    assert next(f for f in store.spool if f.name == "PAYRPT").status == "HLD"
+    assert "HLD" in _text(c._draw_view())
+    assert "released" in _text(c.handle("ENTER", {"opt0": "6"}))
+    assert "Option 4 is not available" in _text(c.handle("ENTER", {"opt0": "4"}))
+
+
+def test_wrksplf_job_filter_needs_select_all_and_narrows(store):
+    assert "JOB can only be given" in _run(store, "QSECOFR", "WRKSPLF JOB(100231/DEVELOPER/PAYRUN)")
+    c = _signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "wrksplf select(*all) job(100231/developer/payrun)"})
+    assert [f.name for f in c.view[1].rows] == ["PAYRPT"]
+
+
+def test_an_empty_spool_list_says_so_instead_of_an_empty_screen(store):
+    assert _run(store, "STUDENT", "WRKSPLF") == "No spooled files found."
+
+
+def test_wrkactjob_option_8_opens_that_jobs_spool_files(store):
+    c = _signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "wrkactjob"})
+    rows = c.view[1].rows
+    mine = next(i for i, j in enumerate(rows) if j.name == "QPADEV0001")
+    # no spool file yet for a live session, so the list says so and stays on the jobs
+    assert "No spooled files found." in _text(c.handle("ENTER", {f"opt{mine}": "8"}))
+    store.spool.append(spool.SpoolFile("QSYSPRT", "QSECOFR", "QPADEV0001", rows[mine].number, 1, "QPRINT", "QGPL"))
+    s = c.handle("ENTER", {f"opt{mine}": "8"})
+    assert c.view[0] == "work" and c.view[1].kind == "spool" and [f.name for f in c.view[1].rows] == ["QSYSPRT"]
+    c.handle("F12", {})
+    assert c.view is None or c.view[1].kind == "jobs"
+
+
+def test_f17_and_f18_jump_on_the_owner_list_and_the_edit_screen(store):
+    for i in range(12):
+        _run(store, "QSECOFR", f"CRTLIB TOPLIB{i:02d}")
+    c = _signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "wrkobjown usrprf(qsecofr)"})
+    assert c.view[1].pages > 1
+    c.handle("F18", {})
+    assert c.view[1].page == c.view[1].pages - 1
+    c.handle("F17", {})
+    assert c.view[1].page == 0
+    for u in ("STUDENT", "GUEST", "AUDITOR", "BACKUP", "OPERATOR", "JOBMAN", "SECONLY", "SPOOLMAN", "DEVELOPER", "IOADMIN"):
+        _run(store, "QSECOFR", f"GRTOBJAUT OBJ(TOPLIB00) OBJTYPE(*LIB) USER({u}) AUT(*USE)")
+    c.handle("F12", {})
+    c.handle("ENTER", {"command": "wrkobj qsys/toplib00 *lib"})
+    c.handle("ENTER", {"opt0": "2"})
+    assert c.view[1].pages > 1
+    c.handle("F18", {})
+    assert c.view[1].page == c.view[1].pages - 1
+    c.handle("F17", {})
+    assert c.view[1].page == 0
