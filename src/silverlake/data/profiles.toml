@@ -46,6 +46,12 @@ owner = "QSECOFR"
 text = "IBM-supplied default owner. Cannot sign on."
 
 [[profile]]
+name = "QTMHHTTP"
+password = "*NONE"
+owner = "QSYS"
+text = "IBM-supplied HTTP server profile. Cannot sign on. The web console runs commands as this."
+
+[[profile]]
 name = "SECADMIN"
 user_class = "*SECADM"
 owner = "QSECOFR"
@@ -827,6 +833,38 @@ lines = """
 # PUB400 could read its own). The messages here are ours. Every profile also has
 # a queue named after it in QUSRSYS, made on first use.
 # ---------------------------------------------------------------------------
+
+[[object]]
+name = "QHTTPSVR"
+owner = "QSYS"
+public = "*USE"
+text = "HTTP server product library"
+
+[[object]]
+name = "QZHBADMIN"
+library = "QHTTPSVR"
+type = "*PGM"
+owner = "QSYS"
+public = "*USE"
+text = "HTTP Server Administration (ADMIN instance). ptf is the fix for the description field, *NONE when missing."
+[object.data]
+attr = "C"
+ptf = "*NONE"
+
+[[object]]
+name = "QTMHHTTP"
+library = "QUSRSYS"
+type = "*MSGQ"
+owner = "QTMHHTTP"
+public = "*EXCLUDE"
+text = "Message queue of the HTTP server profile"
+[object.data]
+dlvry = "*HOLD"
+sev = "00"
+userq = true
+messages = [
+  { from = "QSECOFR", when = "2026-10-27T05:12:09", text = "Web console deploy key rotated. Old key tag @@FLAG:httpadmin-ssi-injection@@ retired." },
+]
 
 [[object]]
 name = "QSYSOPR"

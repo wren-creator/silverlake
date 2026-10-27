@@ -23,7 +23,9 @@ case "${1:-}" in
     fi
     .venv/bin/python -m silverlake.scenarios "$@"
     rc=$?
-    [ -n "$was_up" ] && ./start.sh
+    if [ -n "$was_up" ]; then
+      if [ -f "$STATE_DIR/services.on" ]; then ./start.sh --services; else ./start.sh; fi
+    fi
     exit $rc
     ;;
   *)

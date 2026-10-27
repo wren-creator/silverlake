@@ -29,6 +29,7 @@ The submission file is one `lesson-id = FLAG{...}` per line. State lessons (a ne
 
 - Python 3.12 or newer, and about 200 MB of disk. No Docker, no IBM media.
 - Port 5250 free on 127.0.0.1. `./start.sh --port 5251` if it is not.
+- For the optional network session, `./start.sh --services` also needs 2001 free (`SILVERLAKE_HTTPADMIN_PORT` moves it). `scenario.sh` keeps services on across its restart.
 - Linux, macOS, or WSL2.
 
 ## Common failures

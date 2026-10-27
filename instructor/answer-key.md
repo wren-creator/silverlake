@@ -17,6 +17,7 @@ The full per lesson key is `docs/scenarios.md`, which is generated from the scen
 | 2 | Credentials and recon: guessable passwords, service accounts holding more than they need, a message queue everyone can read. No exploits, just looking. |
 | 3 | Data leaves through ordinary features: a menu option that opens command entry, a default output queue that shows data to everyone, a copy that does not carry the original's protection. |
 | 4 | Programs that adopt an owner turn a caller's input into the owner's power: a command, a salary, a file override, a program found by library list order. |
+| 6 (optional) | A web console and an FTP server are doors too. They check the same passwords and the same authority, so a weak password or an over trusted service account follows the attacker in. |
 | 5 | Every fix was one setting or one line, none exotic. The gap between how little the attack needed and how ordinary the fix was is the course. |
 
 ## Lesson notes
@@ -34,6 +35,7 @@ The full per lesson key is `docs/scenarios.md`, which is generated from the scen
 | payadj-overadopt | adopts an owner with authority on the payroll file | `USRPRF(*USER)`, take public off the program |
 | empdir-override | adopted open honours the caller's override | owner who holds nothing on PAYROLL |
 | payrun-qtemp | calls a program with no library | call it with its library |
+| httpadmin-ssi-injection | the web console evaluates exec directives in a description, as QTMHHTTP (needs `--services`) | install the console fix, which escapes the field |
 
 ## Verification caveat
 

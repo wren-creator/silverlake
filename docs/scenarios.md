@@ -273,3 +273,30 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 **Fix:** Do not adopt a powerful owner in a program that runs user-supplied commands. Use an allow-list of commands and an owner with no special authority (the secure state makes QDFTOWN the owner and limits the commands). (`./scenario.sh set runcmd-qcmdexc secure`)
 
 **Reference:** IBM i Security Reference, adopted authority; QCMDEXC.
+
+## Group D: Network services (start with ./start.sh --services)
+
+### 12. A web console that runs commands found in a description
+
+**Where:** HTTP Server Administration console, 127.0.0.1:2001 (start the range with ./start.sh --services)
+
+**Real-world parallel:** A console that builds a page from a field an administrator typed, and evaluates what it finds there, turns a form into a command line. This is the weakness class of the 2026 IBM i HTTP Server Administration advisory, which needed only a low privilege account. Silverlake models the class, not the real parameter, which IBM has not published.
+
+**Vulnerability:** Create HTTP Server takes a description and the Manage page evaluates <!--#exec cmd="..." --> in it with no escaping. The command runs as QTMHHTTP, not as the person signed in. Any enabled profile can sign in, and the passwords are the profile names.
+
+**MITRE ATT&CK:** T1190 Exploit Public-Facing Application, T1059 Command and Scripting Interpreter, T1078 Valid Accounts
+
+**Exploit:**
+
+1. Find the console with a port scan of 127.0.0.1 or by trying 2001. Browse to /HTTPAdmin and sign in as STUDENT with the password STUDENT.
+2. Open Create HTTP Server. Name it ZZTEST and put <!--#exec cmd="DSPMSG MSGQ(QTMHHTTP)" --> in the description. Submit.
+3. Open Manage. The page shows what the command printed, run as QTMHHTTP. Read the message.
+4. From 5250 as STUDENT, DSPMSG MSGQ(QTMHHTTP) is refused. The web console reached what STUDENT cannot.
+
+**Consequence in the sim:** An ordinary profile reads the message queue of a system profile, and could run anything that profile may. The flag is in that queue.
+
+**Flag:** Through the web console on port 2001, make a server description run a command as the web server's profile and read its message queue.
+
+**Fix:** Install the fix for the console (the secure state records the PTF on QHTTPSVR/QZHBADMIN, after which the description is escaped and never evaluated). Do not expose the ADMIN instance beyond the people who run the web server, and require an administrator profile to use it. (`./scenario.sh set httpadmin-ssi-injection secure`)
+
+**Reference:** CWE-94 code injection; IBM i HTTP Server for i PTF levels; CISA CPG on reducing exposure of administrative interfaces.

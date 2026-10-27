@@ -71,7 +71,11 @@
 - [x] Phase 5d: a test per scenario that runs the exploit against the vulnerable state and asserts it fails against the secure one, so a code change cannot quietly break a lesson
 - [x] Phase 5e: instructor kit (agenda, answer key, rubric, setup runbook, session slides) in the format of Cross Creek
 - [ ] Phase 5a later: a live toggle, a QSECOFR-only command in the simulator that flips a scenario without a restart, so an instructor can apply a fix mid-class
-- [ ] Phase 5f: exposed services (HTTP Admin, FTP, host servers) on loopback only, after the native scenarios are solid. Deferred
+- [ ] Phase 5f: exposed services on loopback only, opt in with `./start.sh --services`, all in the one server process so they share the store and the lesson toggles. Services answer from the same profiles and authority as the 5250 side, and nothing ever reaches a shell. Broken into steps:
+  - [x] 5f-1: service plumbing plus the HTTP Admin console on 2001 (Basic auth against the profile store, a Create HTTP Server form whose description evaluates `exec` directives against the simulator's own commands as QTMHHTTP, and a fix flag), lesson `httpadmin-ssi-injection`, new lesson group D
+  - [ ] 5f-2: FTP on 2121 (cleartext sign-on, naming formats, file get through the normal authority checks, RCMD), lesson `ftp-limited-bypass` (limited capability does not stop FTP)
+  - [ ] 5f-3: host servers, the mapper on 4449 and the sign-on server on 8476 answering exchange attributes before any sign-on, lesson `hostsvr-recon`
+  - [ ] 5f later: TLS ports (2010, 990, 9476) with a throwaway cert, the real ports for FTP and the mapper (needs root), scenario docs and instructor kit pages for group D
 - [ ] Silverlake 101 EPUB, same format as the Mainframe 10x series
 
 ## Needs verification on a real system

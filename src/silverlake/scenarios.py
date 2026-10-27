@@ -38,7 +38,8 @@ from .system.profiles import ProfileStore
 DATA = Path(__file__).resolve().parent / "data"
 UNSET = "*UNSET"
 STATES = ("vulnerable", "secure")
-GROUPS = {"A": "Reconnaissance and credentials", "B": "Authority and data exposure", "C": "Programs and the library list"}
+GROUPS = {"A": "Reconnaissance and credentials", "B": "Authority and data exposure", "C": "Programs and the library list",
+          "D": "Network services (start with ./start.sh --services)"}
 
 
 class ScenarioError(ValueError):

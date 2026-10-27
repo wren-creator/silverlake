@@ -6,9 +6,14 @@ cd "$(dirname "$0")"
 source ./lib.sh
 
 usage() {
-  echo "usage: ./start.sh [-p PORT | --port PORT]"
+  echo "usage: ./start.sh [-p PORT | --port PORT] [--services]"
   echo "  Listens on 127.0.0.1, default port 5250. SILVERLAKE_PORT does the same."
+  echo "  --services also starts the network services (HTTP Admin on 2001), loopback only."
+  echo "  SILVERLAKE_SERVICES=1 does the same, and ./scenario.sh keeps it across its restart."
 }
+
+SERVICES_MARK="$STATE_DIR/services.on"
+SERVICES="${SILVERLAKE_SERVICES:-}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -16,6 +21,7 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { bad "$1 needs a port number"; usage >&2; exit 2; }
       PORT="$2"; shift 2 ;;
     --port=*) PORT="${1#--port=}"; shift ;;
+    --services) SERVICES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) bad "unknown option: $1"; usage >&2; exit 2 ;;
   esac
@@ -25,6 +31,11 @@ case "$PORT" in
 esac
 { [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; } || { bad "port must be between 1 and 65535, not $PORT"; exit 2; }
 export SILVERLAKE_PORT="$PORT"
+mkdir -p "$STATE_DIR"
+case "$SERVICES" in
+  ''|0|off|no) SERVICES=""; rm -f "$SERVICES_MARK" ;;
+  *) SERVICES=1; export SILVERLAKE_SERVICES=1; : >"$SERVICES_MARK" ;;
+esac
 
 [ -x .venv/bin/python ] || { bad "no .venv, run ./setup.sh first"; exit 1; }
 
@@ -41,6 +52,13 @@ mkdir -p "$STATE_DIR"
 if .venv/bin/python -c "import socket; socket.create_connection(('$HOST', $PORT), 0.5).close()" 2>/dev/null; then
   bad "port $PORT is already in use. Pick another: ./start.sh --port $((PORT + 1))"
   exit 1
+fi
+if [ -n "$SERVICES" ]; then
+  HTTP_PORT="${SILVERLAKE_HTTPADMIN_PORT:-2001}"
+  if .venv/bin/python -c "import socket; socket.create_connection(('$HOST', $HTTP_PORT), 0.5).close()" 2>/dev/null; then
+    bad "port $HTTP_PORT (HTTP Admin) is already in use. Set SILVERLAKE_HTTPADMIN_PORT to another"
+    exit 1
+  fi
 fi
 info "starting on $HOST:$PORT"
 nohup .venv/bin/python -m silverlake >"$LOG_FILE" 2>&1 &
@@ -62,6 +80,7 @@ done
 if [ -n "$listening" ]; then
   ok "Silverlake is up"
   echo "  5250 sign-on   $HOST:$PORT   (tn5250 $HOST:$PORT)"
+  [ -n "$SERVICES" ] && echo "  HTTP Admin     $HOST:${SILVERLAKE_HTTPADMIN_PORT:-2001}   (http://$HOST:${SILVERLAKE_HTTPADMIN_PORT:-2001}/HTTPAdmin)"
   echo "  logs:          $LOG_FILE"
   echo "  reset to seed: ./reset.sh"
 else

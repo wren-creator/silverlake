@@ -11,7 +11,7 @@ KIT = Path(__file__).resolve().parents[1] / "instructor"
 def test_the_kit_has_its_files():
     names = {p.name for p in KIT.iterdir()} | {"slides/" + p.name for p in (KIT / "slides").iterdir()}
     assert {"agenda.md", "answer-key.md", "rubric.md", "setup-runbook.md"} <= names
-    assert len([n for n in names if n.startswith("slides/session-")]) == 5
+    assert len([n for n in names if n.startswith("slides/session-")]) == 6
 
 
 def test_the_answer_key_covers_every_lesson_and_invents_none():
