@@ -23,6 +23,13 @@ password = "QSECOFR"
 text = "Security officer. Every special authority."
 
 [[profile]]
+name = "QSYS"
+user_class = "*SECOFR"
+password = "*NONE"
+owner = "QSYS"
+text = "IBM-supplied system profile. Owns the system libraries. Cannot sign on."
+
+[[profile]]
 name = "QDFTOWN"
 password = "*NONE"
 owner = "QSECOFR"
@@ -167,25 +174,43 @@ public = "*EXCLUDE"
 SECADMIN = "*ALL"
 OPERATOR = "*USE"
 
-# Public *CHANGE lets any user create a library (CRTLIB needs *ADD to QSYS, which is
-# inferred, not read on a command page). Set it to *USE for a locked down system.
+# Public authorities on QSYS (*USE) and QGPL (*CHANGE) and their owner (QSYS) were
+# read off a real IBM i with DSPOBJAUT. The others are guesses.
 [[object]]
 name = "QSYS"
-owner = "QSECOFR"
-public = "*CHANGE"
+owner = "QSYS"
+public = "*USE"
 text = "System library"
 
 [[object]]
+name = "QSYS2"
+owner = "QSYS"
+public = "*USE"
+text = "System library for CPI's"
+
+[[object]]
+name = "QHLPSYS"
+owner = "QSYS"
+public = "*USE"
+text = "System help library"
+
+[[object]]
 name = "QGPL"
-owner = "QSECOFR"
+owner = "QSYS"
 public = "*CHANGE"
 text = "General purpose library"
 
 [[object]]
 name = "QUSRSYS"
-owner = "QSECOFR"
+owner = "QSYS"
 public = "*CHANGE"
-text = "System user library"
+text = "System library for users"
+
+[[object]]
+name = "QTEMP"
+owner = "QSYS"
+public = "*CHANGE"
+text = "Temporary library, one per job on a real system"
 
 [[object]]
 name = "APPLIB"

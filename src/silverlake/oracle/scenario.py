@@ -32,10 +32,14 @@ SCENARIOS: dict[str, list[dict]] = {
 
 # Scenarios that sign on as a real (test) profile. The user and password come
 # from the environment, never from a file, and a password is never sent over a
-# cleartext connection to anything but loopback. F3 on a menu signs off, so the
-# job does not linger on a shared system.
+# cleartext connection to anything but loopback. Every scenario ends by typing
+# SIGNOFF, so the job does not linger on a shared system. F3 on the real MAIN
+# menu does not sign off (the first run on PUB400 showed that).
 USER_ENV, PASS_ENV = "SILVERLAKE_ORACLE_USER", "SILVERLAKE_ORACLE_PASS"
 _SIGNON = {"fill": {"0": "${%s}" % USER_ENV, "1": "${%s}" % PASS_ENV}, "key": "ENTER"}
+
+
+_SIGNOFF = {"fill": {"0": "SIGNOFF"}, "key": "ENTER"}
 
 
 def _cmd(line: str) -> list[dict]:
@@ -45,10 +49,10 @@ def _cmd(line: str) -> list[dict]:
 
 AUTHENTICATED: dict[str, list[dict]] = {
     # Sign on, look at the first screen, sign off. Run this before any other.
-    "auth-probe": [_SIGNON, {"key": "F3"}],
+    "auth-probe": [_SIGNON, _SIGNOFF],
     # Read-only questions about libraries and authority.
     "auth-libs": [_SIGNON, *_cmd("DSPLIBL"), *_cmd("DSPOBJAUT OBJ(QSYS) OBJTYPE(*LIB)"),
-                  *_cmd("DSPOBJAUT OBJ(QGPL) OBJTYPE(*LIB)"), {"key": "F3"}],
+                  *_cmd("DSPOBJAUT OBJ(QGPL) OBJTYPE(*LIB)"), _SIGNOFF],
 }
 SCENARIOS.update(AUTHENTICATED)
 

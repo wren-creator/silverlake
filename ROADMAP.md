@@ -13,8 +13,8 @@
 - [ ] Confirm the profile command message IDs and which condition raises each (CPF2204, CPF2217, CPF2228 and the rest are documented, not seen); safe read-only checks on PUB400 are an unknown command and DSPUSRPRF on your own profile
 - [x] Phase 3c-1: libraries and objects as real SQLite tables keyed by library, name and type; library authority checked before object authority; CRTLIB, DLTLIB, WRKLIB, DSPLIBL, ADDLIBLE, RMVLIBLE, DSPOBJAUT, GRTOBJAUT, RVKOBJAUT
 - [ ] Phase 3c-1 follow-ups: generic names and *ALL on GRTOBJAUT and RVKOBJAUT, more object types, WRKLIB options, CRTAUT on libraries, REFOBJ, *OUTFILE for DSPOBJAUT, DSPLIB, primary group on objects
-- [ ] Check on a real system: does CRTLIB need *ADD to QSYS (DSPOBJAUT QSYS *LIB as an ordinary user is a safe read-only check), the default library list, and the library-gate rule for *ALLOBJ
-- [ ] Phase 3c-2: *MENU objects, GO, INLMNU and INLPGM at sign-on, LMTCPB enforcement (and the break-outs it invites)
+- [ ] Check on a real system: does CRTLIB work for a basic user and what stops it if not (CRTLIB then DLTLIB of a throwaway library on a test profile, which changes the host, so the owner decides), and the library-gate rule for *ALLOBJ. Done already: QSYS and QGPL authority, the default library list, what DSPOBJAUT shows a basic user
+- [ ] Phase 3c-2: *MENU objects, GO, INLMNU and INLPGM at sign-on, LMTCPB enforcement (and the break-outs it invites). Match the real MAIN menu captured from PUB400 (command line at 19,6 and 153 long, not monocase), and bring DSPLIBL and DSPOBJAUT to the real layouts (option column, Group column, F11 detail, Top and Bottom keys)
 - [ ] Phase 3c-3: the rest of the dispatcher (WRKAUTL, WRKOBJ, jobs, spool, messages)
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)

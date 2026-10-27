@@ -7,7 +7,7 @@ from silverlake.cl.session import Session
 from silverlake.screens.model import Text
 from silverlake.screens.render import render
 from silverlake.screens.signon import SignonController
-from silverlake.system import profiles, state
+from silverlake.system import admin, profiles, state
 from silverlake.system.authority import ALL, CHANGE, EXCLUDE, USE, Auth
 from silverlake.system.authority import SecuredObject
 
@@ -48,9 +48,7 @@ def test_crtlib_aut_option_and_positional(store):
 def test_crtlib_refusals(store):
     assert "CPF2111" in run(store, "STUDENT", "CRTLIB APPLIB")
     assert "CPF2166" in run(store, "STUDENT", "CRTLIB 1BAD")
-    store.find_library("QSYS").public = USE                      # a locked down system
-    assert "CPF2138" in run(store, "STUDENT", "CRTLIB MYLIB")
-    assert "created" in run(store, "QSECOFR", "CRTLIB MYLIB")      # *ALLOBJ still can
+    assert "created" in run(store, "GUEST", "CRTLIB MYLIB")       # no authority check; see objects.py
 
 
 # -- DLTLIB --------------------------------------------------------------------------------------------
@@ -93,16 +91,18 @@ def test_dltlib_cannot_delete_what_you_have_no_objexist_to(store):
 
 def test_default_list_and_addlible_positions(store):
     s = Session()
-    assert s.search_order() == ["QSYS", "QUSRSYS", "QGPL"]
+    assert s.search_order() == ["QSYS", "QSYS2", "QUSRSYS", "QHLPSYS", "QGPL", "QTEMP"]   # as on a real system
     run(store, "QSECOFR", "ADDLIBLE APPLIB", s)
-    assert s.user_libs == ["APPLIB", "QGPL"]
+    assert s.user_libs == ["APPLIB", "QGPL", "QTEMP"]
     run(store, "QSECOFR", "ADDLIBLE SCRATCH POSITION(*LAST)", s)
     run(store, "QSECOFR", "ADDLIBLE SRCLIB POSITION(*AFTER APPLIB)", s)
-    assert s.user_libs == ["APPLIB", "SRCLIB", "QGPL", "SCRATCH"]
+    assert s.user_libs == ["APPLIB", "SRCLIB", "QGPL", "QTEMP", "SCRATCH"]
     run(store, "QSECOFR", "CRTLIB NEWL")
     run(store, "QSECOFR", "ADDLIBLE NEWL POSITION(*BEFORE QGPL)", s)
-    run(store, "QSECOFR", "ADDLIBLE QUSRSYS POSITION(*REPLACE SRCLIB)", s)
-    assert s.user_libs == ["APPLIB", "QUSRSYS", "NEWL", "QGPL", "SCRATCH"]
+    assert s.user_libs == ["APPLIB", "SRCLIB", "NEWL", "QGPL", "QTEMP", "SCRATCH"]
+    run(store, "QSECOFR", "CRTLIB OTHER")
+    run(store, "QSECOFR", "ADDLIBLE OTHER POSITION(*REPLACE SRCLIB)", s)
+    assert s.user_libs == ["APPLIB", "OTHER", "NEWL", "QGPL", "QTEMP", "SCRATCH"]
 
 
 def test_addlible_and_rmvlible_refusals(store):
@@ -113,7 +113,7 @@ def test_addlible_and_rmvlible_refusals(store):
     assert "CPF2149" in run(store, "STUDENT", "RMVLIBLE QSYS", s)            # system portion stays
     assert "CPF2149" in run(store, "STUDENT", "ADDLIBLE APPLIB POSITION(*AFTER NOWHERE)", s)
     assert "not valid" in run(store, "STUDENT", "ADDLIBLE APPLIB POSITION(*MIDDLE)", s)
-    assert s.user_libs == ["QGPL"]
+    assert s.user_libs == ["QGPL", "QTEMP"]
 
 
 def test_unqualified_names_resolve_through_the_library_list(store):
@@ -143,10 +143,10 @@ def test_wrklib_patterns(store):
     s = Session()
     def w(line):
         return names(execute(store, store.get("QSECOFR"), line, s).view)
-    assert w("WRKLIB") == ["QGPL", "QSYS", "QUSRSYS"]                   # *LIBL
+    assert w("WRKLIB") == ["QGPL", "QHLPSYS", "QSYS", "QSYS2", "QTEMP", "QUSRSYS"]   # *LIBL
     assert "QSYS" not in w("WRKLIB LIB(*ALLUSR)") and "APPLIB" in w("WRKLIB LIB(*ALLUSR)")
     assert w("WRKLIB LIB(S*)") == ["SCRATCH", "SRCLIB"]
-    assert w("WRKLIB LIB(*USRLIBL)") == ["QGPL"]
+    assert w("WRKLIB LIB(*USRLIBL)") == ["QGPL", "QTEMP"]
     assert "No libraries" in run(store, "QSECOFR", "WRKLIB LIB(ZZ*)", s)
     assert "not valid" in run(store, "QSECOFR", "WRKLIB LIB(*MID*)", s)
 
@@ -154,7 +154,8 @@ def test_wrklib_patterns(store):
 def test_dsplibl_view(store):
     out = execute(store, store.get("STUDENT"), "DSPLIBL", Session.for_profile("SCRATCH"))
     assert out.view[0] == "dsplibl"
-    assert out.view[1].entries() == [("QSYS", "SYS"), ("QUSRSYS", "SYS"), ("SCRATCH", "CUR"), ("QGPL", "USR")]
+    assert out.view[1].entries() == [("QSYS", "SYS"), ("QSYS2", "SYS"), ("QUSRSYS", "SYS"), ("QHLPSYS", "SYS"),
+                                     ("SCRATCH", "CUR"), ("QGPL", "USR"), ("QTEMP", "USR")]   # the real order
 
 
 # -- DSPOBJAUT -----------------------------------------------------------------------------------------------
@@ -169,7 +170,7 @@ def test_dspobjaut_shows_the_whole_list_to_whoever_can_manage_it(store):
     r = rows(store, "QSECOFR", "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE)")
     assert r == [("QSECOFR", "*ALL"), ("DEVELOPER", "*CHANGE"), ("GUEST", "*EXCLUDE"), ("*PUBLIC", "*USE")]
     # Anyone else sees only themselves.
-    assert rows(store, "STUDENT", "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE)") == [("STUDENT", "*USE")]
+    assert rows(store, "STUDENT", "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE)") == [("*PUBLIC", "*USE")]
     assert rows(store, "DEVELOPER", "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE)") == [("DEVELOPER", "*CHANGE")]
 
 
@@ -336,10 +337,10 @@ def signed_on(store, user):
 def test_library_list_is_per_session(store):
     a, b = signed_on(store, "STUDENT"), signed_on(store, "OPERATOR")
     a.handle("ENTER", {"command": "addlible applib"})
-    assert a.session.user_libs == ["APPLIB", "QGPL"] and b.session.user_libs == ["QGPL"]
+    assert a.session.user_libs == ["APPLIB", "QGPL", "QTEMP"] and b.session.user_libs == ["QGPL", "QTEMP"]
     a.handle("ENTER", {"command": "signoff"})
     c = signed_on(store, "STUDENT")
-    assert c.session.user_libs == ["QGPL"]                           # a new job starts fresh
+    assert c.session.user_libs == ["QGPL", "QTEMP"]                  # a new job starts fresh
 
 
 def test_views_render_page_and_go_back(store):
@@ -377,3 +378,26 @@ def test_every_view_renders_for_every_profile(store):
             c.view = None
             s = c.handle("ENTER", {"command": line})
             render(s)
+
+
+# -- facts read off a real IBM i (PUB400, DSPOBJAUT and DSPLIBL as a basic user) ----------------------------------
+
+def test_the_system_libraries_match_what_a_real_system_showed(store):
+    qsys, qgpl = store.find_library("QSYS"), store.find_library("QGPL")
+    assert (qsys.owner, qsys.public) == ("QSYS", USE)
+    assert (qgpl.owner, qgpl.public) == ("QSYS", CHANGE)
+    assert store.get("QSYS").password is None and "QSYS" in admin.PROTECTED
+
+
+def test_a_basic_user_asking_about_qsys_gets_one_public_row(store):
+    """Seen on a real system: DSPOBJAUT OBJ(QSYS) OBJTYPE(*LIB) as an ordinary user lists only *PUBLIC *USE."""
+    assert rows(store, "STUDENT", "DSPOBJAUT OBJ(QSYS) OBJTYPE(*LIB)") == [("*PUBLIC", "*USE")]
+    assert rows(store, "STUDENT", "DSPOBJAUT OBJ(QGPL) OBJTYPE(*LIB)") == [("*PUBLIC", "*CHANGE")]
+    full = rows(store, "QSECOFR", "DSPOBJAUT OBJ(QSYS) OBJTYPE(*LIB)")
+    assert full[0] == ("QSYS", "*ALL") and full[-1] == ("*PUBLIC", "*USE")
+
+
+def test_a_user_with_an_entry_sees_their_own_not_public(store):
+    assert rows(store, "DEVELOPER", "DSPOBJAUT OBJ(SRCLIB) OBJTYPE(*LIB)") == [      # an owner can manage, so sees all
+        ("DEVELOPER", "*ALL"), ("GRPDEV", "*CHANGE"), ("*PUBLIC", "*EXCLUDE")]
+    assert rows(store, "DEVELOPER", "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE)") == [("DEVELOPER", "*CHANGE")]

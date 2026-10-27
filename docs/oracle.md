@@ -71,6 +71,14 @@ Specific to PUB400, so deliberately not copied:
 
 A photo of a default sign-on display (Italian language, copyright 1980, 1996) settled the layout. It was consulted, not stored in this repo, and only positions were taken from it, never wording. Its status bar read `6/53`, the cursor at row 6, column 53, 1-based. That fixes the input field column exactly at `(5, 52)` zero-based. The right hand block (labels at col 47, values at col 69) and the copyright column (39) agree with PUB400 to the cell. Label columns (14) and the title column (34) are read off the photo and good to about one column. Colors come from PUB400, since a monochrome photo cannot confirm them.
 
+## What the first authenticated captures taught us
+
+A test profile on PUB400 signed on over TLS and ran `DSPLIBL` and `DSPOBJAUT` (2026-10-27).
+
+- **A real menu.** The main menu has its command line at row 19, column 6, 153 long, and not monocase. F3 on it did not sign the job off, so the first run left a disconnected job behind. Every scenario now ends with `SIGNOFF`, which worked.
+- **Real facts for the seed.** `QSYS` and `QGPL` owner and public authority, the default library list, and what a basic user sees from `DSPOBJAUT` (see `docs/access-model.md`).
+- **Real screens to match.** `DSPLIBL` has an option column (`5=Display objects in library`), a device column, and `F17=Top`/`F18=Bottom`. `DSPOBJAUT` has a Group column, a line for the authorization list, and `F11=Display detail object authorities`. Neither matches Silverlake's screens yet, and the placeholder menu bears no resemblance to the real one, which is what the next phase is for. `compare` on the capture reports every difference.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

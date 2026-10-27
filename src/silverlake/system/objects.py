@@ -12,10 +12,9 @@ Rules read from the IBM i 7.5 command reference:
   RVKOBJAUT  the owner, *OBJMGT (only for authority the caller can see), or
              *ALLOBJ.
   DSPOBJAUT  shows the full list only to someone with *OBJMGT; others see their
-             own entry.
+             own entry, or *PUBLIC when they have none (seen on a real system).
 
-Inferred, not read on a command page: that CRTLIB needs *ADD to QSYS, that
-ADDLIBLE needs *USE to the library, that an object whose library you cannot
+Inferred, not read on a command page: that ADDLIBLE needs *USE to the library, that an object whose library you cannot
 enter looks like "not authorized" and one that is not there looks like "not
 found" (a real enumeration leak, kept on purpose), and what revoking from an
 authorization list does to *PUBLIC."""
@@ -30,8 +29,11 @@ from .profiles import Profile, ProfileStore
 SA = SpecialAuthority
 
 NAME = re.compile(r"^[A-Z@#$][A-Z0-9@#$_]{0,9}$")
-SYSTEM_LIBRARIES = frozenset({"QSYS", "QGPL", "QUSRSYS", "QSYS2"})
+SYSTEM_LIBRARIES = frozenset({"QSYS", "QGPL", "QUSRSYS", "QSYS2", "QHLPSYS", "QTEMP"})
 LIBCRTAUT = CHANGE          # "same as the create authority for QSYS", from QCRTAUT; *CHANGE assumed
+# CRTLIB has no authority check here. A real QSYS is *PUBLIC *USE (seen with DSPOBJAUT),
+# which has no *ADD, so "needs *ADD to QSYS" cannot be what stops ordinary users.
+# Whether CRTLIB works for a basic user, and what stops it if not, is unconfirmed.
 TYPES = ("*LIB", "*FILE")   # the object types modeled so far
 
 
@@ -97,9 +99,6 @@ def create_library(store: ProfileStore, actor: Profile, name: str, text: str, au
         return _no(messages.library_name_not_valid(name))
     if store.find_library(name):
         return _no(messages.library_exists(name))
-    qsys = store.find_library("QSYS")
-    if qsys is not None and Auth.ADD not in authority_to_library(store, actor, qsys):
-        return _no(messages.creation_not_allowed(name))
     lib = SecuredObject(name, actor.name, public=LIBCRTAUT if aut is None else aut,
                         library="QSYS", type="*LIB", text=text)
     store.objects[lib.key] = lib
@@ -197,7 +196,15 @@ def authority_rows(store: ProfileStore, actor: Profile, obj: SecuredObject) -> l
     """DSPOBJAUT: (user, authority). Everyone with *OBJMGT sees the whole list,
     anyone else sees only themselves."""
     if not _can_manage(store, actor, obj):
-        return [(actor.name, name_auth(store.authority_to_object(actor, obj)) or "*EXCLUDE")]
+        # Seen on a real system: a basic user asking about QSYS gets one row, *PUBLIC.
+        # Someone with an entry of their own sees that entry instead.
+        if actor.name == obj.owner:
+            return [(actor.name, name_auth(obj.owner_auth))]
+        if actor.name in obj.private:
+            return [(actor.name, name_auth(obj.private[actor.name]) or "*EXCLUDE")]
+        if obj.public is None:
+            return [("*PUBLIC", "*AUTL")]
+        return [("*PUBLIC", name_auth(obj.public) or "*EXCLUDE")]
     rows = [(obj.owner, name_auth(obj.owner_auth))]
     rows += [(who, name_auth(a) or "*EXCLUDE") for who, a in sorted(obj.private.items())]
     if obj.public is None:

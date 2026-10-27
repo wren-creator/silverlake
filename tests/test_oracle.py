@@ -354,7 +354,8 @@ def test_the_scenarios_hold_no_secret_and_only_read():
         blob = repr(scenario.SCENARIOS[name])
         assert "${SILVERLAKE_ORACLE_PASS}" in blob or "PASS" not in blob.upper().replace("${SILVERLAKE_ORACLE_PASS}", "")
         commands = [a["fill"]["0"] for a in scenario.SCENARIOS[name] if "fill" in a and "1" not in a["fill"]]
-        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT") for c in commands), commands
+        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "SIGNOFF") for c in commands), commands
+        assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
 
 
 def test_tls_uses_a_verifying_context_and_the_host_name(monkeypatch):

@@ -46,11 +46,11 @@ Changes are saved to `state/silverlake.sqlite` and survive a restart. `./reset.s
 
 | Command | What it does here |
 |---|---|
-| `CRTLIB LIB(NAME) TEXT('...') AUT(...)` | Creates a library you own. `AUT` defaults to `*LIBCRTAUT`, which is `*CHANGE` here. `TYPE` is accepted but not stored. |
+| `CRTLIB LIB(NAME) TEXT('...') AUT(...)` | Creates a library you own. `AUT` defaults to `*LIBCRTAUT`, which is `*CHANGE` here. `TYPE` is accepted but not stored. No authority check yet, see below. |
 | `DLTLIB LIB(NAME)` | Needs `*USE` and `*OBJEXIST` on the library and `*OBJEXIST` on everything in it. What you may delete goes, and if anything is left, the library stays (`CPF2161` then `CPF2168`). Not for `QSYS`, `QGPL`, `QUSRSYS`, `QSYS2`, or a library on your list. |
-| `ADDLIBLE`, `RMVLIBLE`, `DSPLIBL` | Your library list: `QSYS` and `QUSRSYS` (system), `QGPL` (user), plus your profile's current library. `POSITION` takes `*FIRST`, `*LAST`, or `*AFTER`/`*BEFORE`/`*REPLACE` and a library. The list belongs to the job and starts fresh at each sign-on. |
+| `ADDLIBLE`, `RMVLIBLE`, `DSPLIBL` | Your library list, in the order a real system showed: `QSYS`, `QSYS2`, `QUSRSYS`, `QHLPSYS` (system), your profile's current library, then `QGPL` and `QTEMP` (user). `POSITION` takes `*FIRST`, `*LAST`, or `*AFTER`/`*BEFORE`/`*REPLACE` and a library. The list belongs to the job and starts fresh at each sign-on. |
 | `WRKLIB LIB(*LIBL)` | A paged list of libraries you have some authority to. Also `*ALL`, `*ALLUSR`, `*USRLIBL`, `*CURLIB`, a name, or `NAME*`. No options yet. |
-| `DSPOBJAUT OBJ(LIB/NAME) OBJTYPE(*FILE)` | Shows who holds what. Someone with `*OBJMGT` sees everyone, anyone else sees only themselves. |
+| `DSPOBJAUT OBJ(LIB/NAME) OBJTYPE(*FILE)` | Shows who holds what. Someone with `*OBJMGT` (or the owner) sees everyone. Anyone else sees their own entry, or a single `*PUBLIC` row when they have none. The last part was seen on a real system. |
 | `GRTOBJAUT OBJ(LIB/NAME) OBJTYPE(*LIB) USER(A B *PUBLIC) AUT(...)` | The owner, someone with `*OBJMGT`, or `*ALLOBJ`. Only the owner or `*ALLOBJ` may give `*OBJMGT`. `REPLACE(*NO)` adds to what is there, `*YES` sets it exactly, `*EXCLUDE` always replaces. `AUTL(name)` needs ownership or `*ALL`. |
 | `RVKOBJAUT OBJ(LIB/NAME) OBJTYPE(*FILE) USER(A *ALL *PUBLIC) AUT(...)` | Removes only the named authorities. A user left with nothing loses the entry altogether and falls through to groups and `*PUBLIC`, which is not the same as holding `*EXCLUDE`. |
 
@@ -130,8 +130,9 @@ Passwords equal the profile name, on purpose.
 | `NOPWD` | `*USER` | none | `PASSWORD(*NONE)`: cannot sign on. |
 | `OLDTEMP` | `*USER` | none | Disabled. |
 | `GRPDEV` | `*USER` | none | A group profile. |
+| `QSYS` `QDFTOWN` | `*SECOFR`, `*USER` | all eight, none | IBM-supplied profiles. `QSYS` owns the system libraries. Neither can sign on or be deleted. |
 
-The seed also holds libraries (`QSYS`, `QGPL`, `QUSRSYS`, `APPLIB`, `SRCLIB`, `SCRATCH`) and files in them (`APPLIB/PAYROLL` on an authorization list, `APPLIB/CUSTOMERS`, and `SRCLIB/QRPGSRC`) so authority has something real to be checked against. Libraries and objects are stored in SQL tables keyed by library, name and type; the seed validates that every object's library, owner and authorization list exist.
+The seed also holds libraries (`QSYS`, `QSYS2`, `QHLPSYS`, `QGPL`, `QUSRSYS`, `QTEMP`, `APPLIB`, `SRCLIB`, `SCRATCH`) and files in them (`APPLIB/PAYROLL` on an authorization list, `APPLIB/CUSTOMERS`, and `SRCLIB/QRPGSRC`) so authority has something real to be checked against. Libraries and objects are stored in SQL tables keyed by library, name and type; the seed validates that every object's library, owner and authorization list exist.
 
 ## Sign-on messages
 
@@ -174,7 +175,6 @@ IDs and wording come from IBM's 7.5 error lists for these commands. Which condit
 | `CPF2110` `CPF2209` | library not found (`ADDLIBLE`, `DLTLIB`; object commands) |
 | `CPF2111` | `CRTLIB` on a name that exists |
 | `CPF2166` | library name not valid |
-| `CPF2138` | no authority to create (no `*ADD` to QSYS, inferred) |
 | `CPF2182` | not authorized to the library (`DLTLIB`, `ADDLIBLE`) |
 | `CPF2216` | cannot use the library an object sits in |
 | `CPF2129` `CPF2167` | system library, or a library on the list, cannot be deleted |
@@ -185,7 +185,17 @@ IDs and wording come from IBM's 7.5 error lists for these commands. Which condit
 | `CPF2290` `CPF22A0` `CPF22A4` `CPF22A5` | `*EXCLUDE` with another authority, `*AUTL` for a user, `*EXCLUDE` from `*PUBLIC`, not on that list |
 | `CPF2283` | authorization list does not exist |
 
-Inferred and worth checking on a real system: that `CRTLIB` needs `*ADD` to QSYS (the seed sets QSYS public to `*CHANGE` so any user can create a library, `*USE` locks it down), that `ADDLIBLE` needs `*USE` on the library, and what revoking an authorization list does to the public authority. `DSPOBJAUT QSYS *LIB` run as an ordinary user on a real system would settle the first.
+### Checked against a real IBM i
+
+A test profile on PUB400 ran `DSPLIBL` and `DSPOBJAUT` (read-only, over TLS). What it showed, now in the seed:
+
+- `QSYS` is owned by `QSYS` with `*PUBLIC` authority `*USE`. `QGPL` is owned by `QSYS` with `*PUBLIC` `*CHANGE`.
+- A basic user asking `DSPOBJAUT` about `QSYS` gets one row, `*PUBLIC *USE`.
+- The default library list is `QSYS`, `QSYS2`, `QUSRSYS`, `QHLPSYS`, the current library, `QGPL`, `QTEMP` (plus site libraries we do not copy).
+
+That also undid a guess. Silverlake first assumed `CRTLIB` needs `*ADD` to QSYS, but a real `QSYS` is `*USE`, which has no `*ADD`, so that cannot be what stops ordinary users. `CRTLIB` therefore has no authority check for now. Whether it works for a basic user on a real system, and what stops it if not, is unconfirmed: the safe test is `CRTLIB` then `DLTLIB` of a throwaway library on a test profile, which changes the host, so it needs the owner's say-so.
+
+Still inferred and unchecked: that `ADDLIBLE` needs `*USE` on the library, that `*ALLOBJ` skips the library gate, and what revoking an authorization list does to the public authority. The owners and public authorities of `QSYS2`, `QHLPSYS`, `QUSRSYS` and `QTEMP` in the seed are guesses.
 
 ## Not modeled yet
 

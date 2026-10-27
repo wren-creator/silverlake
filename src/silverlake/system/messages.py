@@ -123,10 +123,6 @@ def not_authorized_to_use_library(lib: str) -> Message:
     return _doc("CPF2216", f"Not authorized to use library {lib}.")
 
 
-def creation_not_allowed(lib: str) -> Message:
-    return _doc("CPF2138", f"Creation of library {lib} not allowed.")
-
-
 def system_library(lib: str) -> Message:
     return _doc("CPF2129", f"Clear or delete of system library {lib} canceled.")
 

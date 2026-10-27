@@ -1,14 +1,15 @@
 """What a signed-on job carries between commands: its library list.
 
-The default list is a simplification. A real one has a system portion, product
-libraries, a current library and a user portion, built from system values we do
-not model. Here: QSYS and QUSRSYS in the system portion, QGPL in the user
-portion, plus the profile's current library when it names one."""
+The default list follows a real IBM i (DSPLIBL on PUB400): QSYS, QSYS2, QUSRSYS
+and QHLPSYS in the system portion, then the current library, then QGPL and QTEMP
+in the user portion. A real list is built from system values we do not model, and
+a real site adds its own libraries. QTEMP is one library per job on a real
+system and one shared library here."""
 
 from dataclasses import dataclass, field
 
-SYSTEM_PORTION = ("QSYS", "QUSRSYS")
-DEFAULT_USER_PORTION = ("QGPL",)
+SYSTEM_PORTION = ("QSYS", "QSYS2", "QUSRSYS", "QHLPSYS")
+DEFAULT_USER_PORTION = ("QGPL", "QTEMP")
 MAX_USER_ENTRIES = 250       # IBM: "A maximum of 250 libraries"
 
 
