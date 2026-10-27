@@ -119,3 +119,26 @@ def test_a_real_client_can_sign_on_list_and_get_a_file_over_sockets(store):
 
     rows = asyncio.run(go())
     assert rows and "Chen" in " ".join(rows)
+
+
+def test_limited_capability_does_not_stop_ftp_until_the_exit_program_is_registered(store):
+    s, ok = login(store, "CLERK")
+    assert code(ok) == 230
+    s.handle("CWD APPLIB")
+    assert "DAILYOPS" in s.handle("LIST").data
+    assert "Month end" in s.handle("RETR DAILYOPS").data
+    store.objects[("QUSRSYS", "FTPEXIT", "*PGM")].data["registered"] = "yes"
+    assert code(s.handle("LIST")) == 550 and code(s.handle("RETR DAILYOPS")) == 550
+
+
+def test_the_exit_program_leaves_unlimited_profiles_alone(store):
+    store.objects[("QUSRSYS", "FTPEXIT", "*PGM")].data["registered"] = "yes"
+    s, _ = login(store, "OPERATOR")
+    assert s.handle("RETR APPLIB/PAYROLL").data
+
+
+def test_the_notes_are_for_the_clerk_only(store):
+    s, _ = login(store, "STUDENT")
+    s.handle("CWD APPLIB")
+    assert "DAILYOPS" not in s.handle("LIST").data
+    assert code(s.handle("RETR DAILYOPS")) == 550

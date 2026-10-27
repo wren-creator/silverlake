@@ -24,7 +24,7 @@ def store():
 
 
 def test_the_registry_loads_every_lesson_with_a_group_and_a_summary():
-    assert len(REG) == 12
+    assert len(REG) == 13
     for s in REG.values():
         assert s.group in scenarios.GROUPS and s.summary and s.title
 

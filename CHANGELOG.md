@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Lesson `ftp-limited-bypass`. CLERK has no command line on the 5250 and a menu with no way out, but CLERK has `*USE` on `APPLIB/DAILYOPS`, and FTP only knows authority, so the clerk's own password over FTP lists and gets it (the flag). The fix registers a request exit program, recorded on `QUSRSYS/FTPEXIT`, that turns away limited capability profiles. Instructor kit gets the lesson in the answer key and the optional network session.
+
 - FTP on 127.0.0.1:2121 with the other services. Sign-on goes through the profile store (clear text, bad attempts count), `RETR` and `LIST` obey the same file authority as DSPPFM, and both naming formats work. Read only: nothing can be written, deleted or made. No lesson on it yet.
 
 - Network services, first one. `./start.sh --services` (or `SILVERLAKE_SERVICES=1`) now also starts the HTTP Server Administration console on 127.0.0.1:2001, in the same process as the 5250 server, so it signs in against the same profiles and sees lesson toggles at once. A new lesson group D and lesson `httpadmin-ssi-injection`: the Create HTTP Server description is evaluated for `exec` directives and the command runs as QTMHHTTP, so an ordinary profile reads a system profile's message queue (the flag) that the 5250 side refuses it. The command goes to Silverlake's own dispatcher, never a shell. The secure state records the fix PTF on `QHTTPSVR/QZHBADMIN` and the field is escaped. IBM has not published the real parameter, so this models the bug class, not the bug. `scenario.sh` keeps services on across its restart. Details in docs/services.md. FTP and the host servers are the next two steps.

@@ -12,6 +12,8 @@ Everything in Silverlake is reached through 5250 unless you start it with `./sta
 
 `ftp 127.0.0.1 2121`. Sign-on is the profile store's, in clear text (TLS is not built, so `AUTH` is refused), and bad attempts count against the profile. After that it is the same authority as the 5250 side: `RETR` reads a physical file only if the profile may, through the finder `DSPPFM` uses, and a listing leaves out what the profile has no authority to. Naming format 0 (`LIB/FILE`) and 1 (`/QSYS.LIB/LIB.LIB/FILE.FILE`) both work. A file comes back as its raw record text.
 
+The `ftp-limited-bypass` lesson: FTP does not know what limited capability is, so a profile with no command line can still list and get what it may read. The secure state registers a request exit program (a record on `QUSRSYS/FTPEXIT`) that turns away limited capability profiles. That is a simplification of a real exit point, which can refuse any single request.
+
 Read only on purpose: there is no `STOR`, `DELE`, `MKD`, `RMD` or `RNFR`. Not built: members other than the first, IFS directories, `SITE`, active mode (`PORT`), TLS.
 
 ## The HTTP console

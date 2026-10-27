@@ -458,6 +458,33 @@ records = [
 
 [[object]]
 library = "APPLIB"
+name = "DAILYOPS"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*EXCLUDE"
+text = "Daily operations notes. The clerk may read them, if anything lets the clerk past the menu."
+[object.private]
+CLERK = "*USE"
+[object.data]
+attr = "PF"
+dds_file = "dailyops.pf"
+records = [
+  { NOTE = "Month end close ticket @@FLAG:ftp-limited-bypass@@" },
+]
+
+[[object]]
+library = "QUSRSYS"
+name = "FTPEXIT"
+type = "*PGM"
+owner = "QSYS"
+public = "*USE"
+text = "FTP server request exit program. registered is no until someone adds it. It turns away limited capability profiles."
+[object.data]
+attr = "C"
+registered = "no"
+
+[[object]]
+library = "APPLIB"
 name = "PAYOUTQ"
 type = "*OUTQ"
 owner = "SECADMIN"

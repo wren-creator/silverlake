@@ -276,7 +276,32 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 ## Group D: Network services (start with ./start.sh --services)
 
-### 12. A web console that runs commands found in a description
+### 12. A clerk with no command line who can still use FTP
+
+**Where:** FTP server, 127.0.0.1:2121 (start the range with ./start.sh --services)
+
+**Real-world parallel:** Limiting a profile's capabilities stops it at the 5250 command line, and only there. Every other way in, FTP among them, applies the profile's authority and nothing more. It is a standard finding on IBM i reviews, and the usual remedy is an FTP exit program.
+
+**Vulnerability:** CLERK has LMTCPB(*YES) and the menu offers no way out, but CLERK has *USE on APPLIB/DAILYOPS and the FTP server does not know what limited capability is. The password is the profile name, and FTP sends it in clear text.
+
+**MITRE ATT&CK:** T1078 Valid Accounts, T1021 Remote Services, T1005 Data from Local System
+
+**Exploit:**
+
+1. Sign on to the 5250 as CLERK (the password is the profile name) and confirm there is no command line.
+2. ftp 127.0.0.1 2121 and log in as CLERK with the same password.
+3. cd APPLIB, then ls. DAILYOPS is listed.
+4. get DAILYOPS and read the file.
+
+**Consequence in the sim:** The clerk, who was never meant to leave the menu, reads the operations notes. The restriction held in one place and not in the other.
+
+**Flag:** Use the clerk's own password over FTP to read the daily operations notes in APPLIB.
+
+**Fix:** Register a request exit program on the FTP server that turns away limited capability profiles (the secure state records it on QUSRSYS/FTPEXIT), turn off FTP where it is not needed, and require TLS so passwords are not sent in clear text. (`./scenario.sh set ftp-limited-bypass secure`)
+
+**Reference:** IBM i Security Reference, limited capability and FTP exit points; CIS controls on network services; CISA CPG on encrypting data in transit.
+
+### 13. A web console that runs commands found in a description
 
 **Where:** HTTP Server Administration console, 127.0.0.1:2001 (start the range with ./start.sh --services)
 

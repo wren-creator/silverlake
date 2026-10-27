@@ -24,6 +24,7 @@ from ..system.profiles import Profile, ProfileStore
 log = logging.getLogger("silverlake.ftp")
 
 OS_LEVEL = "V7R4M0"
+EXIT_KEY = ("QUSRSYS", "FTPEXIT", "*PGM")
 MAX_LINE = 1024
 IDLE = 60.0
 DATA_WAIT = 5.0
@@ -38,6 +39,11 @@ class Step:
     after: list[Reply] = field(default_factory=list)
     pasv: bool = False
     close: bool = False
+
+
+def exit_program_registered(store: ProfileStore) -> bool:
+    obj = store.objects.get(EXIT_KEY)
+    return bool(obj) and obj.data.get("registered", "no") == "yes"
 
 
 def _name(path: str) -> str:
@@ -156,7 +162,16 @@ class FtpSession:
             return self.cwd
         return _name(self.cwd) if self.cwd.startswith("/QSYS.LIB/") else None
 
+    def _turned_away(self) -> Step | None:
+        """The request exit program, once registered, refuses profiles whose capabilities are limited. Without
+        it FTP does not know what limited capability is: that is a rule of the 5250 menu, not of the server."""
+        if exit_program_registered(self.store) and self.actor.limited_capabilities != "*NO":
+            return Step([(550, "Request rejected by the FTP server exit program.")])
+        return None
+
     def _list(self, arg: str) -> Step:
+        if (no := self._turned_away()):
+            return no
         if self.namefmt == 1 and self.cwd == "/":
             return self._data("QSYS.LIB\r\n")
         if self.namefmt == 1 and self.cwd == "/QSYS.LIB" or (self.namefmt == 1 and not self._current_library()):
@@ -180,6 +195,8 @@ class FtpSession:
         return dbfiles._allobj(self.store, self.actor)
 
     def _retr(self, arg: str) -> Step:
+        if (no := self._turned_away()):
+            return no
         spec = _name(arg) if self.namefmt == 1 else arg.upper().split(".")[0]
         if "/" not in spec and self._current_library():
             spec = f"{self._current_library()}/{spec}"

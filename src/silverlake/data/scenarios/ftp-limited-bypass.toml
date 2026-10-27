@@ -1,0 +1,29 @@
+id = "ftp-limited-bypass"
+title = "A clerk with no command line who can still use FTP"
+group = "D"
+summary = "Limited capability is a rule of the 5250 menu, so FTP lets the clerk read what the clerk may read until an exit program says otherwise."
+
+[[change]]
+target = "object:QUSRSYS/FTPEXIT/*PGM"
+field = "data.registered"
+vulnerable = "no"
+secure = "yes"
+
+[flag]
+kind = "text"
+task = "Use the clerk's own password over FTP to read the daily operations notes in APPLIB."
+
+[doc]
+where = "FTP server, 127.0.0.1:2121 (start the range with ./start.sh --services)"
+parallel = "Limiting a profile's capabilities stops it at the 5250 command line, and only there. Every other way in, FTP among them, applies the profile's authority and nothing more. It is a standard finding on IBM i reviews, and the usual remedy is an FTP exit program."
+vulnerability = "CLERK has LMTCPB(*YES) and the menu offers no way out, but CLERK has *USE on APPLIB/DAILYOPS and the FTP server does not know what limited capability is. The password is the profile name, and FTP sends it in clear text."
+mitre = ["T1078 Valid Accounts", "T1021 Remote Services", "T1005 Data from Local System"]
+steps = [
+  "Sign on to the 5250 as CLERK (the password is the profile name) and confirm there is no command line.",
+  "ftp 127.0.0.1 2121 and log in as CLERK with the same password.",
+  "cd APPLIB, then ls. DAILYOPS is listed.",
+  "get DAILYOPS and read the file.",
+]
+consequence = "The clerk, who was never meant to leave the menu, reads the operations notes. The restriction held in one place and not in the other."
+fix = "Register a request exit program on the FTP server that turns away limited capability profiles (the secure state records it on QUSRSYS/FTPEXIT), turn off FTP where it is not needed, and require TLS so passwords are not sent in clear text."
+reference = "IBM i Security Reference, limited capability and FTP exit points; CIS controls on network services; CISA CPG on encrypting data in transit."

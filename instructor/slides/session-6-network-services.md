@@ -15,9 +15,14 @@ Needs `./start.sh --services`. Everything still binds to 127.0.0.1.
 - The command ran as QTMHHTTP, not as STUDENT. Try the same command at the 5250 as STUDENT and compare.
 - Silverlake models the class of bug, not IBM's real parameter, which is unpublished.
 
-## Slide 4: Fix and re-run
+## Slide 4: ftp-limited-bypass
+- Sign on to the 5250 as CLERK: no command line. Now `ftp 127.0.0.1 2121`, same user and password.
+- `cd APPLIB`, `ls`, `get DAILYOPS`. Limited capability only ever applied to the menu.
+- The password crossed the wire in clear text. Say so out loud.
+
+## Slide 5: Fix and re-run
 - `./scenario.sh set httpadmin-ssi-injection secure`. The About page shows the PTF and the description is escaped.
 - Ask: what else should limit who can reach the console?
 
-## Slide 5: Debrief
+## Slide 6: Debrief
 - Nothing here needed an exploit kit. A browser, a profile and a field that was trusted.

@@ -132,7 +132,7 @@ def test_a_submission_is_scored_flag_by_flag_and_state_lessons_need_no_submissio
     rows = {sid: ok for sid, ok, _ in flags.score(store, {"qsysopr-recon": flags.flag("qsysopr-recon"),
                                                           "qprint-report-leak": "FLAG{000000000000}"}, REG)}
     assert rows["qsysopr-recon"] and not rows["qprint-report-leak"] and not rows["runcmd-qcmdexc"]
-    assert len(rows) == 12
+    assert len(rows) == 13
 
 
 def test_the_submission_file_format():
@@ -166,7 +166,7 @@ def test_command_line_scores_and_shows(tmp_path, monkeypatch, capsys):
     sub.write_text(f"qsysopr-recon={flags.flag('qsysopr-recon')}\n")
     assert flags.main(["check", str(sub)]) == 1
     out = capsys.readouterr().out
-    assert "[+] qsysopr-recon" in out and "1 of 12" in out
+    assert "[+] qsysopr-recon" in out and "1 of 13" in out
     assert flags.main(["show"]) == 0
     shown = capsys.readouterr().out
     assert flags.flag("qsysopr-recon") in shown and flags.password("OPERATOR") in shown
