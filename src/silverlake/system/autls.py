@@ -11,11 +11,10 @@ Rules read from the IBM i 7.5 command reference pages:
   CHGAUTLE   same, and *PUBLIC may be changed but never given *AUTLMGT.
   RMVAUTLE   the owner, *ALLOBJ, or *AUTLMGT, and a *AUTLMGT user may only remove someone
              whose authorities they hold too. *PUBLIC cannot be removed.
-  WRKAUTL    shows lists you have some authority to.
+  WRKAUTL    shows lists you have some authority to. Public authority counts (seen on a real system).
 
 Inferred, not read on a page: that a *AUTLMGT user may only hand out authorities they hold
-themselves (the page says "only to the *AUTLMGT level"), that DSPAUTL needs the owner, *ALLOBJ
-or an entry on the list, that an entry already on the list counts as an error when added,
+themselves (the page says "only to the *AUTLMGT level"), that DSPAUTL needs some authority to the list (seen: public *USE is enough), that an entry already on the list counts as an error when added,
 and that QIBM_DB_SECADM (which the pages also name) does not exist here."""
 
 import fnmatch
@@ -42,7 +41,10 @@ def can_change(store: ProfileStore, actor: Profile, autl: AuthList) -> bool:
 
 
 def can_see(store: ProfileStore, actor: Profile, autl: AuthList) -> bool:
-    return _full(store, actor, autl) or actor.name in autl.entries
+    """Some authority to the list, and public authority counts: a real basic profile on PUB400
+    lists many lists it neither owns nor has an entry on, and displays one with only a
+    *PUBLIC *USE row."""
+    return _full(store, actor, autl) or actor.name in autl.entries or autl.public != EXCLUDE
 
 
 def visible(store: ProfileStore, actor: Profile, pattern: str = "*ALL") -> list[AuthList]:
@@ -176,5 +178,9 @@ def display(store: ProfileStore, actor: Profile, name: str):
 
 def entry_rows(autl: AuthList) -> list[tuple[str, str]]:
     from .authority import name_auth
-    rows = [(u, name_auth(a) or "*EXCLUDE") for u, a in sorted(autl.entries.items())]
-    return rows + [(PUBLIC, name_auth(autl.public) or "*EXCLUDE")]
+    def show(a: Auth) -> str:     # the *AUTLMGT part last, so a display can split it off
+        base = name_auth(a & ~Auth.AUTLMGT) or "*EXCLUDE"
+        return base + (" *AUTLMGT" if Auth.AUTLMGT in a else "")
+
+    rows = [(u, show(a)) for u, a in sorted(autl.entries.items())]
+    return rows + [(PUBLIC, show(autl.public))]

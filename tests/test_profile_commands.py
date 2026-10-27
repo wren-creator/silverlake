@@ -271,8 +271,11 @@ def signed_on(store, user):
 def test_command_line_reports_completion_and_error_messages(store):
     c = signed_on(store, "SECADMIN")
     assert "User profile ZOE created." in texts(c.handle("ENTER", {"command": "crtusrprf zoe"}))
-    assert "CPF2214" in texts(c.handle("ENTER", {"command": "crtusrprf zoe"}))
-    assert "CPF2217" in texts(c.handle("ENTER", {"command": "dspusrprf qsecofr"}))
+    # After sign-on the message line shows the text alone, as a real system does (seen on PUB400)
+    s = c.handle("ENTER", {"command": "crtusrprf zoe"})
+    assert "User profile ZOE already exists." in texts(s) and "CPF" not in texts(s)
+    s = c.handle("ENTER", {"command": "dspusrprf qsecofr"})
+    assert "Not authorized to user profile QSECOFR." in texts(s) and "CPF" not in texts(s)
 
 
 def test_signoff_command_and_sessions_are_counted(store):
@@ -319,7 +322,7 @@ def test_wrkusrprf_option_5_rechecks_authority(store):
     c = signed_on(store, "QSECOFR")
     c.handle("ENTER", {"command": "wrkusrprf"})
     run(store, "QSECOFR", "DLTUSRPRF AAA")                       # gone while the list is on screen
-    assert "CPF2204" in texts(c.handle("ENTER", {"opt0": "5"}))
+    assert "User profile AAA not found." in texts(c.handle("ENTER", {"opt0": "5"}))
 
 
 # -- rendering -----------------------------------------------------------------------------------------------------

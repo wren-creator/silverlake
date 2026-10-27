@@ -156,3 +156,34 @@ def test_deleting_a_profile_removes_its_list_entries(store):
     run(store, "DEVELOPER", "ADDAUTLE MYLIST TEMPUSR *USE")
     assert "deleted" in run(store, "QSECOFR", "DLTUSRPRF TEMPUSR")
     assert "TEMPUSR" not in store.autls["MYLIST"].entries
+
+
+def test_public_authority_counts_as_some_authority_for_seeing_a_list(store):
+    """Seen on PUB400: a basic profile lists many lists it neither owns nor has an entry on,
+    and can display one with only a *PUBLIC *USE row."""
+    run(store, "DEVELOPER", "CRTAUTL OPENLIST")                     # AUT defaults to *CHANGE
+    run(store, "DEVELOPER", "CRTAUTL SHUTLIST AUT(*EXCLUDE)")
+    seen = [a.name for a in execute(store, store.get("STUDENT"), "WRKAUTL").view[1]]
+    assert seen == ["OPENLIST"]
+    assert execute(store, store.get("STUDENT"), "DSPAUTL OPENLIST").view[2] == [("*PUBLIC", "*CHANGE")]
+    assert "CPF2207" in run(store, "STUDENT", "DSPAUTL SHUTLIST")
+
+
+def test_dspautl_screen_follows_the_real_layout(store):
+    run(store, "DEVELOPER", "CRTAUTL MYLIST AUT(*USE)")
+    run(store, "DEVELOPER", "ADDAUTLE MYLIST STUDENT AUT(*CHANGE *AUTLMGT)")
+    c = SignonController("QPADEV0001", store)
+    c.handle("ENTER", {"user": "DEVELOPER", "password": "DEVELOPER"})
+    s = c.handle("ENTER", {"command": "dspautl mylist"})
+    runs = {(f.row, f.col): f.text for f in s.fields if isinstance(f, Text)}
+    assert runs[(5, 14)] == "Object" and runs[(6, 13)] == "Authority" and runs[(6, 24)] == "Mgt"
+    assert runs[(7, 1)] == "STUDENT" and runs[(7, 13)] == "*CHANGE" and runs[(7, 24)] == "X"
+    assert runs[(8, 1)] == "*PUBLIC" and (8, 24) not in runs
+    assert runs[(3, 67)] == "*NONE"
+
+
+def test_messages_after_sign_on_show_text_without_the_id(store):
+    c = SignonController("QPADEV0001", store)
+    c.handle("ENTER", {"user": "STUDENT", "password": "STUDENT"})
+    s = c.handle("ENTER", {"command": "dspautl nosuch"})
+    assert "Authorization list NOSUCH does not exist." in texts(s) and "CPF" not in texts(s)

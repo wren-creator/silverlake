@@ -60,6 +60,14 @@ AUTHENTICATED: dict[str, list[dict]] = {
     # Read-only questions about libraries and authority.
     "auth-libs": [_SIGNON, *_cmd("DSPLIBL"), *_cmd("DSPOBJAUT OBJ(QSYS) OBJTYPE(*LIB)"),
                   *_cmd("DSPOBJAUT OBJ(QGPL) OBJTYPE(*LIB)"), _SIGNOFF],
+    # Read-only questions about finding objects and authorization lists. The two last ones
+    # are expected to be refused, and the refusal wording is what is being collected.
+    "auth-objects": [_SIGNON, *_cmd("WRKOBJ OBJ(QSYS/QGPL) OBJTYPE(*LIB)"),
+                     *_cmd("WRKOBJ OBJ(QSYS/QSYS*) OBJTYPE(*LIB)"),
+                     *_cmd("WRKOBJOWN USRPRF(*CURRENT) OBJTYPE(*LIB)"),
+                     *_cmd("WRKOBJ OBJ(SLNOSUCH/*ALL)"),
+                     *_cmd("WRKAUTL AUTL(*ALL)"), *_cmd("DSPAUTL AUTL(QPWFSERVER)"),
+                     *_cmd("WRKOBJOWN USRPRF(QSYS)"), _SIGNOFF],
 }
 # The only scenario that changes the host. Creates a throwaway library, looks at the
 # authority a new library gets, deletes it, and signs off. Delete and display only

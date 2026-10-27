@@ -74,18 +74,32 @@ def dspobjaut_screen(obj, authority_rows: list[tuple[str, str]], page: int = 0) 
 
 
 def dspautl_screen(autl, entry_rows: list[tuple[str, str]], page: int = 0) -> Screen:
-    page, shown = _clamp(entry_rows, page)
+    """Laid out like the real Display Authorization List captured from PUB400: two header rows
+    (Object / List over Authority / Mgt), entries from row 7 with the user at column 1, the
+    object authority at 13 and the list management mark at 24. The Mgt mark is an X for
+    *AUTLMGT, which is assumed (the capture only had a *PUBLIC row)."""
+    per_page = 11
+    pages_ = max(1, -(-len(entry_rows) // per_page))
+    page = max(0, min(page, pages_ - 1))
+    shown = entry_rows[page * per_page:(page + 1) * per_page]
     rows: list[Text | Input] = [
-        Text(0, 26, "Display Authorization List", ds.ATTR_WHITE),
-        Text(1, 2, "Authorization list . :", ds.ATTR_GREEN), Text(1, 25, autl.name, ds.ATTR_WHITE),
-        Text(1, 40, "Owner . . . . . . . :", ds.ATTR_GREEN), Text(1, 62, autl.owner, ds.ATTR_WHITE),
-        Text(2, 2, "Text  . . . . . . . :", ds.ATTR_GREEN), Text(2, 25, autl.text[:50], ds.ATTR_WHITE),
-        Text(4, 2, "User", ds.ATTR_WHITE), Text(4, 16, "Authority", ds.ATTR_WHITE),
+        Text(0, 27, "Display Authorization List", ds.ATTR_WHITE),
+        Text(2, 1, "Object . . . . . . . :", ds.ATTR_GREEN), Text(2, 26, autl.name, ds.ATTR_WHITE),
+        Text(2, 42, "Owner  . . . . . . . :", ds.ATTR_GREEN), Text(2, 67, autl.owner, ds.ATTR_WHITE),
+        Text(3, 3, "Library  . . . . . :", ds.ATTR_GREEN), Text(3, 28, "QSYS", ds.ATTR_WHITE),
+        Text(3, 42, "Primary group  . . :", ds.ATTR_GREEN), Text(3, 67, "*NONE", ds.ATTR_WHITE),
+        Text(5, 14, "Object", ds.ATTR_WHITE), Text(5, 24, "List", ds.ATTR_WHITE),
+        Text(6, 1, "User", ds.ATTR_WHITE), Text(6, 13, "Authority", ds.ATTR_WHITE), Text(6, 24, "Mgt", ds.ATTR_WHITE),
     ]
     for i, (user, auth) in enumerate(shown):
-        r = FIRST_ROW + i
-        rows += [Text(r, 2, user, ds.ATTR_TURQUOISE), Text(r, 16, auth[:60], ds.ATTR_TURQUOISE)]
-    _footer(rows, page, len(entry_rows), "F3=Exit   F12=Cancel   Page Up/Down")
+        r = 7 + i
+        rows += [Text(r, 1, user, ds.ATTR_TURQUOISE),
+                 Text(r, 13, auth.removesuffix(" *AUTLMGT")[:10], ds.ATTR_TURQUOISE)]
+        if auth.endswith("*AUTLMGT"):
+            rows.append(Text(r, 24, "X", ds.ATTR_TURQUOISE))
+    rows.append(Text(18, 67, "More..." if page < pages_ - 1 else "Bottom", ds.ATTR_BLUE))
+    rows.append(Text(19, 1, "Press Enter to continue.", ds.ATTR_BLUE))
+    rows.append(Text(21, 1, "F3=Exit   F12=Cancel", ds.ATTR_BLUE))
     return Screen(rows)
 
 

@@ -151,7 +151,7 @@ class SignonController:
         obj, err = objects.use_object(self.store, profile, menu, "*MENU", self.session.search_order())
         if err:
             self.session.mode = "cmdentry"        # nowhere to land: command entry, with the reason
-            return self._base(err.line())
+            return self._base(err.text)
         self.session.push_menu((obj.library, obj.name), False)
         return self._base()
 
@@ -203,7 +203,7 @@ class SignonController:
     def _run(self, line: str) -> Screen:
         sess = self.session
         outcome = commands.execute(self.store, self.profile, line, sess)
-        text = outcome.message.line() if outcome.message else ""
+        text = outcome.message.text if outcome.message else ""
         if sess.mode == "cmdentry":
             sess.history.append("> " + line)
             if text:
@@ -290,7 +290,7 @@ class SignonController:
                 return self._draw_view(f"Option {opt} is not valid.")
             target, err = admin.display(self.store, self.profile, rows[index].name)
             if err:
-                return self._draw_view(err.line())
+                return self._draw_view(err.text)
             self.view = ("dsp", target, self.view)
             return self._draw_view()
         return self._draw_view()

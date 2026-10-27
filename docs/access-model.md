@@ -85,9 +85,9 @@ Menu options still run for a `*YES` user, and command entry still runs everythin
 - `ADDAUTLE`, `CHGAUTLE`, `RMVAUTLE`: the owner, `*ALLOBJ`, or a user holding `*AUTLMGT` on the list. Only the owner or `*ALLOBJ` can give `*AUTLMGT`. `*PUBLIC` is always on the list: it cannot be added or removed, can be changed, and can never hold `*AUTLMGT`. `*AUTLMGT` is not part of `*ALL`.
 - `AUT` takes `*EXCLUDE` alone, or a list of authorities. `*ALL`, `*CHANGE` or `*USE` can only be joined by `*AUTLMGT` (CPF22AA, CPF22AB, CPF22AC), and `*EXCLUDE` cannot join anything (CPF2290).
 - `DLTAUTL`: the owner or `*ALLOBJ`, and never while the list still secures an object (CPF2279). `PAYAUTL` secures `APPLIB/PAYROLL`, so it cannot be deleted until the file is moved off it.
-- `DSPAUTL` and `WRKAUTL` show lists you own or hold an entry on. `*ALLOBJ` sees them all.
+- `DSPAUTL` and `WRKAUTL` show lists you own, hold an entry on, or that have public authority above `*EXCLUDE`. `*ALLOBJ` sees them all. The public rule came from a real capture, where a basic profile listed many lists it neither owns nor has an entry on.
 
-Inferred, not read on a page: that a `*AUTLMGT` user may only hand out or remove authorities they hold themselves (the pages say "only to the *AUTLMGT level" and "at least the same specific authorities"), that `DSPAUTL` needs the owner, `*ALLOBJ` or an entry, and that adding someone who is already on the list is an error. IBM also names `QIBM_DB_SECADM` as an alternative to those rights, which does not exist here. A list owned by a deleted profile is not handled yet. The ID wording of the completion messages is ours (the pages list none). Generic list names (`PAY*`) are not supported yet.
+Inferred, not read on a page: that a `*AUTLMGT` user may only hand out or remove authorities they hold themselves (the pages say "only to the *AUTLMGT level" and "at least the same specific authorities"), that adding someone who is already on the list is an error. IBM also names `QIBM_DB_SECADM` as an alternative to those rights, which does not exist here. A list owned by a deleted profile is not handled yet. The ID wording of the completion messages is ours (the pages list none). Generic list names (`PAY*`) are not supported yet.
 
 ## Finding objects and changing owners
 
