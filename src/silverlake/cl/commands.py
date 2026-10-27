@@ -768,6 +768,8 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
             return Outcome(err)
         if (prog.library, prog.name) == ("QSYS", "QCMD"):
             return Outcome(cmdentry=True)
+        if (prog.library, prog.name) == ("QSYS", "QP2TERM"):
+            return Outcome(view=("pase",))
         run, why = rpg.start(store, actor, prog, session)
         if why:
             return Outcome(why)

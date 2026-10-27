@@ -30,6 +30,7 @@ from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_scr
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
                         WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from . import jobextra, pdm, pfm, prompt
+from . import pase as paseui
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -392,6 +393,8 @@ class SignonController:
             return ("widget", spec[1])
         if kind == "dsppfm":
             return ("widget", pfm.PfmView(self._ctx(), spec[1]))
+        if kind == "pase":
+            return ("widget", paseui.PaseTerm(self._ctx()))
         if kind == "dsppgm":
             return _plist([0, 1], lambda rows, page: dsppgm_screen(spec[1], page), 1)
         if kind == "wrkactjob":

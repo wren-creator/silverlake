@@ -47,6 +47,8 @@ The lessons are written up in [docs/scenarios.md](docs/scenarios.md) (instructor
 
 The network services (the HTTP Admin console, FTP and the host servers) are opt in: `./start.sh --services`. Ports are not all the standard ones: 5250 for the 5250 session (real: 23), 2001 for the console (same), 2121 for FTP (real: 21), 4449 for the host server mapper (real: 449) and 8476 for the sign-on server (same), with TLS on 5992, 2010, 2990 and 9476 once `./setup.sh` has made a certificate. All are loopback only and can be moved, see the table in [docs/services.md](docs/services.md#ports).
 
+PASE is simulated, in a first slice: `CALL PGM(QP2TERM)` opens a small shell over a virtual IFS, see [docs/pase.md](docs/pase.md).
+
 Teaching it? [instructor/](instructor/) has the agenda, answer key, rubric, setup runbook and session slides.
 
 Connect with any 5250 client, for example `tn5250 127.0.0.1:5250`. `start.sh` refuses a port that is already in use and tells you the next one to try, and it only says "up" once the server reports it is listening, so a crash during startup shows up as a failure with the log tail instead of a false "up". It always binds to 127.0.0.1. `SILVERLAKE_PORT` does the same as `--port`.

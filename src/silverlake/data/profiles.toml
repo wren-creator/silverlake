@@ -698,6 +698,13 @@ public = "*USE"
 text = "Command entry. Anyone who can call it can run commands."
 
 [[object]]
+name = "QP2TERM"
+type = "*PGM"
+owner = "QSYS"
+public = "*USE"
+text = "PASE terminal. CALL QP2TERM opens the simulated shell."
+
+[[object]]
 name = "MAIN"
 type = "*MENU"
 owner = "QSYS"

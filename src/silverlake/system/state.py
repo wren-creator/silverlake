@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .commandobjs import ensure_commands
 from .authority import AuthList, SecuredObject, SpecialAuthority, UserClass, name_auth, parse_auth
+from . import ifs
 from .spool import ensure_queues, from_row, to_row
 from .profiles import DEFAULT_SEED, Profile, ProfileStore, System, load
 
@@ -29,6 +30,7 @@ def to_dict(store: ProfileStore) -> dict:
                    "qpwdrqddgt": sysd.qpwdrqddgt, "qpwdlmtajc": sysd.qpwdlmtajc, "qpwdlmtrep": sysd.qpwdlmtrep,
                    "qpwdrqddif": sysd.qpwdrqddif},
         "scenarios": dict(store.scenarios),
+        "ifs": ifs.to_rows(store.ifs),
         "profiles": [{
             "name": p.name, "user_class": p.user_class.value,
             "special": None if p.special_authorities is None else sorted(a.value for a in p.special_authorities),
@@ -79,6 +81,7 @@ def from_dict(data: dict) -> ProfileStore:
     store = ProfileStore(System(**data["system"]), profiles, objects, autls,
                          [from_row(r) for r in data.get("spool", [])])
     store.scenarios = dict(data.get("scenarios", {}))
+    store.ifs = ifs.from_rows(data["ifs"]) if "ifs" in data else ifs.load_seed()      # an older state gets the seed IFS
     ensure_queues(store)
     ensure_commands(store)      # a state saved before a command existed gets its object now
     return store
@@ -144,7 +147,8 @@ class StateDB:
         d = to_dict(store)
         with self.db:      # one transaction, so a crash never leaves half a state
             self.db.execute("INSERT OR REPLACE INTO kv (key, value) VALUES ('state', ?)",
-                            (json.dumps({"system": d["system"], "profiles": d["profiles"], "scenarios": d["scenarios"]}),))
+                            (json.dumps({"system": d["system"], "profiles": d["profiles"], "scenarios": d["scenarios"],
+                                        "ifs": d["ifs"]}),))
             for table in ("objects", "object_auth", "autls", "autl_entries", "spool"):
                 self.db.execute(f"DELETE FROM {table}")
             for o in d["objects"]:

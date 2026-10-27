@@ -1,0 +1,104 @@
+# The seed IFS. Paths, owners and permissions are chosen to be plausible, not read off a real system, and the
+# ones that matter for a lesson are called out in docs/pase.md. `public` and `owner_mode` use r, w and x with
+# dashes for what is missing. `private` gives a profile its own mode. Files carry their text in `content`.
+# The mapped /QSYS.LIB is not here, it comes from the library and object store.
+
+[[node]]
+path = "/"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/usr"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/usr/bin"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/etc"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/etc/motd"
+kind = "file"
+owner = "QSYS"
+owner_mode = "rw-"
+public = "r--"
+content = "Welcome to Silverlake. This is a simulated system, for practice.\n"
+
+[[node]]
+path = "/QOpenSys/etc/profile"
+kind = "file"
+owner = "QSYS"
+owner_mode = "rw-"
+public = "r--"
+content = "# system wide profile, read by every PASE shell at start\nPATH=/QOpenSys/usr/bin:/usr/bin\nexport PATH\n"
+
+[[node]]
+path = "/home"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/home/QSECOFR"
+owner = "QSECOFR"
+public = "---"
+
+[[node]]
+path = "/home/STUDENT"
+owner = "STUDENT"
+public = "---"
+
+[[node]]
+path = "/home/STUDENT/notes.txt"
+kind = "file"
+owner = "STUDENT"
+owner_mode = "rw-"
+public = "---"
+content = "Things to try: ls, cat, cd, id.\n"
+
+[[node]]
+path = "/home/OPERATOR"
+owner = "OPERATOR"
+public = "---"
+
+[[node]]
+path = "/home/OPERATOR/.profile"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rw-"
+public = "r--"
+content = "# operator login settings\nexport EDITOR=vi\n"
+
+[[node]]
+path = "/home/DEVELOPER"
+owner = "DEVELOPER"
+public = "r-x"
+
+[[node]]
+path = "/home/DEVELOPER/build.sh"
+kind = "file"
+owner = "DEVELOPER"
+owner_mode = "rwx"
+public = "r-x"
+content = "#!/QOpenSys/usr/bin/ksh\necho building\n"
+
+[[node]]
+path = "/home/CLERK"
+owner = "CLERK"
+public = "---"
+
+[[node]]
+path = "/tmp"
+owner = "QSYS"
+public = "rwx"

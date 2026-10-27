@@ -89,6 +89,7 @@ class ProfileStore:
         self.member_locks: dict[tuple, str] = {}  # (library, file, member) -> job, while an editor has it open; memory only
         self.bad_signons: dict[str, int] = {}     # consecutive bad passwords per profile, memory only
         self.scenarios: dict[str, str] = {}       # scenario id -> "vulnerable" or "secure", saved with the state
+        self.ifs: dict = {}                       # path -> system.ifs.Node, the virtual IFS, saved with the state
         self.today = lambda: date.today()         # a test swaps this to move the clock
 
     # -- lookups ---------------------------------------------------------------
@@ -506,6 +507,8 @@ def load(path: Path | str | None = None) -> ProfileStore:
             raise SeedError(f"spool file {f.name}: output queue {f.outq_lib}/{f.outq} does not exist")
     store = ProfileStore(system, profiles, objects, autls, spool)
     ensure_commands(store)
+    from . import ifs                     # imported late: ifs imports this module
+    store.ifs = ifs.load_seed()
     return store
 
 
