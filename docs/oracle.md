@@ -154,6 +154,15 @@ Taken from PUB400 on 2026-10-27, read only, the test profile's own job and two o
 - **Work with Output Queue** is a list with a status line (queue, library, status), options 1 to 9 on two rows, columns File, User, User Data, Sts, Pages, Copies, Form Type and Pty, a parameter line, and keys F3, F11 (view 2), F12, F20 (writers), F22 (printers), F24. A queue that does not exist answers `Output queue NOQUEUE in library SLNOSUCH not found.` on the menu's message line.
 - **The recon point.** A basic profile listing the job log queue sees every file in it, with the user and the job name of each, not only its own. The queue's display rule hides the contents, not the list. WRKOUTQ in Silverlake has to show the same thing.
 
+## What the third and fourth job captures taught us
+
+Taken from PUB400 on 2026-10-27, read only, the test profile's own job. `auth-dspjob3` and `auth-dspjob4` never press option 30 ("all of the above", which may print), never option 4, and never Enter on a prompt.
+
+- **F11 on the locks display does not open a screen, it flips the view.** The first run assumed it opened another display and sent an F12 to come back, which went straight past the locks list to the menu. Every check in that run was gated on the screen it expected, so the run stopped there instead of pressing anything unplanned. The same flip happens on the call stack (activation group view) and on Display Open Files (I/O details). The scenario was split in two so one surprise only costs what comes after it.
+- **Options 17 to 22 all answer on a job at the main menu.** Communications status and media library attributes are empty lists, there is one thread and no mutexes, the job holds four activation groups, and its environment variables are PASE's (the long names and values are cut and marked with a `>` in the next column).
+- **Work with Job has a third page**, 43 (release job) and 45 (work with the JVM, if active). Option 40 opens the Change Job prompt, with job priority shown as `*SAME` and output priority as the job's own value.
+- **The local compare is noisy** when a scenario's step order differs from the local flow, since it pairs screens by position. A direct comparison of each screen's text positions against the matching capture screen is the quicker check, and left only the deliberately omitted keys, the job name and thread id.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

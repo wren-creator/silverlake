@@ -46,8 +46,11 @@ def test_wrkjob_page_two_adds_change_end_and_hold(store):
     f = at(c.handle("ROLLUP", {}))
     assert f[(8, 5)] == "19. Work with mutexes, if active"
     assert [f[(r, 5)] for r in (15, 16, 17)] == ["40. Change job", "41. End job", "42. Hold job"]
-    assert f[(18, 67)] == "     More..."                                   # a third page exists, not built
-    assert "third page" in text(c.handle("ROLLUP", {}))
+    assert f[(18, 67)] == "     More..."                                   # a third page exists
+    third = at(c.handle("ROLLUP", {}))
+    assert third[(6, 5)] == "43. Release job" and third[(8, 5)].startswith("45. Work with Java")
+    assert third[(18, 67)] == "      Bottom"
+    assert at(c.handle("ROLLUP", {}))[(18, 67)] == "      Bottom"             # nowhere further to go
 
 
 def test_wrkjob_option_42_holds_and_41_ends_the_job(store):

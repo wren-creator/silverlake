@@ -377,6 +377,7 @@ WRKJOB_PAGE2 = [
     (13, 5, "30. All of the above"),
     (15, 5, "40. Change job"), (16, 5, "41. End job"), (17, 5, "42. Hold job"),
 ]
+WRKJOB_PAGE3 = [(6, 5, "43. Release job"), (8, 5, "45. Work with Java Virtual Machine, if active")]
 DSPJOB_PAGE2 = [
     (6, 5, "17. Display communications status, if active"), (7, 5, "18. Display activation groups, if active"),
     (8, 5, "19. Display mutexes, if active"), (9, 5, "20. Display threads, if active"),
@@ -392,7 +393,7 @@ def _more(row: int, last: bool) -> Text:
 
 def wrkjob_screen(job, system_name: str, message: str = "", page: int = 0) -> Screen:
     """Work with Job, laid out like the real menu (captured, first page). The selection goes on the
-    command line, as it does there. Page two (captured) adds 40 to 42. Options 17 to 22 and 30 are not built."""
+    command line, as it does there. Page two (captured) adds 40 to 42 and page three 43 and 45. Options 30 and 45 are not built."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     v = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     rows: list = [
@@ -400,8 +401,8 @@ def wrkjob_screen(job, system_name: str, message: str = "", page: int = 0) -> Sc
         g(2, 1, "Job:"), v(2, 8, job.name), g(2, 23, "User:"), v(2, 31, job.user), g(2, 46, "Number:"), v(2, 56, job.number),
         Text(4, 1, "Select one of the following:", ds.ATTR_BLUE),
     ]
-    rows += [Text(r, c, t, ds.ATTR_GREEN) for r, c, t in (WRKJOB_PAGE2 if page else WRKJOB_OPTIONS)]
-    rows += [_more(18, False), Text(19, 1, "Selection or command", ds.ATTR_GREEN),
+    rows += [Text(r, c, t, ds.ATTR_GREEN) for r, c, t in (WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3)[page]]
+    rows += [_more(18, page == 2), Text(19, 1, "Selection or command", ds.ATTR_GREEN),
              Text(20, 1, "===>", ds.ATTR_GREEN), Input(20, 6, 153, "command"),
              Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F4=Prompt", ds.ATTR_BLUE),
              Text(22, 23, "F9=Retrieve", ds.ATTR_BLUE), Text(22, 37, "F12=Cancel", ds.ATTR_BLUE)]
@@ -578,25 +579,35 @@ CALL_STACK = [("", "QCMD", "0519"), ("", "QUICMENU", "00C1"), ("1", "QUIMNDRV", 
               ("2", "QUIMGFLW", "04D9"), ("3", "QUICMD", "056F")]     # as captured at the main menu
 
 
-def callstack_screen(job, system_name: str, message: str = "") -> Screen:
+def callstack_screen(job, system_name: str, message: str = "", alt: bool = False) -> Screen:
     """Display Call Stack. An interactive job shows the captured stack (a command line or another
-    menu is assumed to look the same). Any other job has no stack here, so the list is empty."""
+    menu is assumed to look the same). Any other job has no stack here, so the list is empty. F11
+    flips to the activation group view and back (both captured). F22 is not built."""
+    from .jobextra import thread_id
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
-    rows = _job_head(job, system_name, "Display Call Stack") + [
-        g(3, 1, "Thread:"), g(3, 11, "00000001"),
-        Text(6, 1, "Type", ds.ATTR_WHITE), Text(6, 7, "Program", ds.ATTR_WHITE),
-        Text(6, 32, "Statement", ds.ATTR_WHITE), Text(6, 50, "Procedure", ds.ATTR_WHITE),
-    ]
+    rows = _job_head(job, system_name, "Display Call Stack") + [g(3, 1, "Thread:"), g(3, 11, thread_id(job))]
+    if alt:
+        rows += [Text(5, 32, "------Activation Group------", ds.ATTR_WHITE), Text(5, 62, "Control", ds.ATTR_WHITE),
+                 Text(6, 1, "Type", ds.ATTR_WHITE), Text(6, 7, "Program", ds.ATTR_WHITE), Text(6, 32, "Name", ds.ATTR_WHITE),
+                 Text(6, 44, "Number", ds.ATTR_WHITE), Text(6, 62, "Boundary", ds.ATTR_WHITE)]
+    else:
+        rows += [Text(6, 1, "Type", ds.ATTR_WHITE), Text(6, 7, "Program", ds.ATTR_WHITE),
+                 Text(6, 32, "Statement", ds.ATTR_WHITE), Text(6, 50, "Procedure", ds.ATTR_WHITE)]
     stack = CALL_STACK if job.type == "INT" else []
     for i, (kind, prog, stmt) in enumerate(stack):
         r = 7 + i
         if kind:
             rows.append(g(r, 1, f"{kind:>4}"))
-        rows += [g(r, 7, f"{prog:<10} QSYS"), g(r, 32, f"{'':>11}/{stmt}")]
-    rows += [_more(20, True),
-             Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 16, "F5=Refresh", ds.ATTR_BLUE),
-             Text(21, 60, "F12=Cancel", ds.ATTR_BLUE), Text(22, 1, "F16=Job menu", ds.ATTR_BLUE),
-             Text(22, 16, "F17=Top", ds.ATTR_BLUE), Text(22, 29, "F18=Bottom", ds.ATTR_BLUE)]
+        rows.append(g(r, 7, f"{prog:<10} QSYS"))
+        if alt:
+            rows += [g(r, 32, "*DFTACTGRP"), g(r, 44, "0000000000000001"), g(r, 62, "Yes" if i == 0 else "No")]
+        else:
+            rows.append(g(r, 32, f"{'':>11}/{stmt}"))
+    keys = ([(21, 1, "F3=Exit"), (21, 11, "F5=Refresh"), (21, 24, "F11=Display statements"), (21, 49, "F12=Cancel"),
+             (21, 62, "F16=Job menu"), (22, 1, "F17=Top"), (22, 11, "F18=Bottom")] if alt else
+            [(21, 1, "F3=Exit"), (21, 16, "F5=Refresh"), (21, 29, "F11=Display activation group"), (21, 60, "F12=Cancel"),
+             (22, 1, "F16=Job menu"), (22, 16, "F17=Top"), (22, 29, "F18=Bottom")])
+    rows += [_more(20, True)] + [Text(r, c, t, ds.ATTR_BLUE) for r, c, t in keys]
     if message:
         rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
     return Screen(rows)
@@ -620,35 +631,44 @@ def job_locks(job) -> list[tuple[str, str, str, str]]:
 LOCK_ROWS = 9      # rows 11 to 19
 
 
-def joblocks_screen(job, system_name: str, top: int = 0, message: str = "", work: bool = False) -> Screen:
+def joblocks_screen(job, system_name: str, top: int = 0, message: str = "", work: bool = False,
+                    alt: bool = False) -> Screen:
     """Display Job Locks, and Work with Job Locks from WRKJOB. The real displays take options (5, and 8
-    on the work one) and F10 and F11. None is built, so the Opt column and those keys are left out
-    rather than drawn dead."""
+    on the work one), which are not built, so the Opt column is left out rather than drawn dead. F10
+    opens the record locks display and F11 flips to the thread view (Scope and Thread columns). The
+    real thread view offers a third, member lock data, which is not drawn."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     locks = job_locks(job)
     top = max(0, min(top, max(0, len(locks) - 1) // LOCK_ROWS * LOCK_ROWS))
     title = "Work with Job Locks" if work else "Display Job Locks"
     rows = _job_head(job, system_name, title.rjust(len(title) + (80 - len(title)) // 2 - 12), 12) + [
         g(4, 1, "Job status:"), g(4, 15, "ACTIVE"),
-        Text(9, 30, "Object", ds.ATTR_WHITE), Text(9, 58, "Member", ds.ATTR_WHITE), Text(9, 66, "ASP", ds.ATTR_WHITE),
-        Text(10, 6, "Object", ds.ATTR_WHITE), Text(10, 18, "Library", ds.ATTR_WHITE), Text(10, 30, "Type", ds.ATTR_WHITE),
-        Text(10, 41, "Lock", ds.ATTR_WHITE), Text(10, 50, "Status", ds.ATTR_WHITE),
-        Text(10, 58, "Locks", ds.ATTR_WHITE), Text(10, 66, "Device", ds.ATTR_WHITE),
+        Text(9, 30, "Object", ds.ATTR_WHITE), Text(10, 6, "Object", ds.ATTR_WHITE), Text(10, 18, "Library", ds.ATTR_WHITE),
+        Text(10, 30, "Type", ds.ATTR_WHITE), Text(10, 41, "Lock", ds.ATTR_WHITE), Text(10, 50, "Status", ds.ATTR_WHITE),
     ]
+    rows += ([Text(10, 58, "Scope", ds.ATTR_WHITE), Text(10, 67, "Thread", ds.ATTR_WHITE)] if alt else
+             [Text(9, 58, "Member", ds.ATTR_WHITE), Text(9, 66, "ASP", ds.ATTR_WHITE),
+              Text(10, 58, "Locks", ds.ATTR_WHITE), Text(10, 66, "Device", ds.ATTR_WHITE)])
     for i, (obj, lib, typ, lock) in enumerate(locks[top:top + LOCK_ROWS]):
         r = 11 + i
         rows += [g(r, 6, obj), g(r, 18, lib), g(r, 30, typ), g(r, 41, lock), g(r, 51, "HELD")]
+        if alt:
+            rows.append(g(r, 58, "*JOB"))
     rows.append(_more(20, top + LOCK_ROWS >= len(locks)))
-    rows += [Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F5=Refresh", ds.ATTR_BLUE),
-             Text(22, 1, "F12=Cancel", ds.ATTR_BLUE), Text(22, 14, "F16=Job menu", ds.ATTR_BLUE)]
+    rows += [Text(r, c, t, ds.ATTR_BLUE) for r, c, t in (
+        [(21, 1, "F3=Exit"), (21, 11, "F5=Refresh"), (21, 32, "F10=Display job record locks"),
+         (22, 1, "F11=Display member lock data"), (22, 32, "F12=Cancel"), (22, 45, "F16=Job menu")] if alt else
+        [(21, 1, "F3=Exit"), (21, 11, "F5=Refresh"), (21, 24, "F10=Display job record locks"),
+         (21, 55, "F11=Display thread data"), (22, 1, "F12=Cancel"), (22, 14, "F16=Job menu")])]
     if message:
         rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
     return Screen(rows)
 
 
-def openfiles_screen(job, system_name: str, message: str = "") -> Screen:
+def openfiles_screen(job, system_name: str, message: str = "", alt: bool = False) -> Screen:
     """Display Open Files. An interactive job has its display file open (device is the job's own
-    name), as captured. The data path count and the activation group number are the captured shape."""
+    name), as captured. The data path count and the activation group number are the captured shape,
+    and so are the I/O counts on the F11 view (13 and 9), which are not counted here."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     files = [("QDUI80", job.name), ("QDDSPOF", job.name)] if job.type == "INT" else []
     rows = [
@@ -657,15 +677,22 @@ def openfiles_screen(job, system_name: str, message: str = "") -> Screen:
         g(2, 56, "Number . . . :"), g(2, 73, job.number),
         g(3, 1, "Number of open data paths . . . . . . . . . . :"),
         g(3, 51, f"{len(files):>4}"),
-        Text(6, 1, "Member/".rjust(29), ds.ATTR_WHITE),
-        Text(7, 1, "File       Library    Device      Scope       Activation Group", ds.ATTR_WHITE),
+        *([Text(6, 1, "Member/".rjust(29) + "    Record     File    I/O  ----Open---  Relative", ds.ATTR_WHITE),
+           Text(7, 1, "File       Library    Device     Format     Type   Count Opt Shr-Nbr   Record", ds.ATTR_WHITE)] if alt else
+          [Text(6, 1, "Member/".rjust(29), ds.ATTR_WHITE),
+           Text(7, 1, "File       Library    Device      Scope       Activation Group", ds.ATTR_WHITE)]),
     ]
     for i, (name, dev) in enumerate(files):
         r = 8 + i
-        rows += [g(r, 1, name), g(r, 12, "QSYS"), g(r, 23, dev), g(r, 35, "*ACTGRPDFN"),
-                 g(r, 47, "*DFTACTGRP"), g(r, 58, "0000000000000002")]
+        rows += [g(r, 1, name), g(r, 12, "QSYS"), g(r, 23, dev)]
+        if alt:
+            fmt, count = (("USRRCD", 13), ("DETAIL2", 9))[i]
+            rows += [g(r, 34, fmt), g(r, 45, "DSP"), g(r, 49, f"{count:>8}"), g(r, 58, "IO"), g(r, 62, "NO")]
+        else:
+            rows += [g(r, 35, "*ACTGRPDFN"), g(r, 47, "*DFTACTGRP"), g(r, 58, "0000000000000002")]
     rows += [Text(19, 73, "Bottom", ds.ATTR_WHITE), Text(20, 1, "Press Enter to continue.", ds.ATTR_BLUE),
-             Text(22, 1, "F3=Exit   F5=Refresh   F12=Cancel   F16=Job menu", ds.ATTR_BLUE)]
+             Text(22, 1, "F3=Exit   F5=Refresh   F11=" + ("Display descriptions" if alt else "Display I/O details    ")
+                  + "   F12=Cancel   F16=Job menu", ds.ATTR_BLUE)]
     if message:
         rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
     return Screen(rows)

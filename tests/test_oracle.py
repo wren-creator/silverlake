@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-splopts"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-splopts"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -438,6 +438,18 @@ def test_the_second_dspjob_scenario_only_looks_and_backs_out():
     for prev, a in zip(steps, steps[1:]):
         if a.get("fill", {}).get("0", "x").isdigit() and prev.get("fill", {}).get("0") not in ("1", "2"):
             assert prev["proceed_if"] == ["Select one of the following"]    # an option follows a checked menu
+
+
+def test_the_leftover_job_scenarios_never_press_all_of_the_above_or_enter_on_a_prompt():
+    three = scenario.SCENARIOS["auth-dspjob3"][1:]
+    four = scenario.SCENARIOS["auth-dspjob4"][1:]
+    assert [a["fill"]["0"] for a in three if "fill" in a] == ["DSPJOB", "17", "18", "19", "20", "21", "22", "12", "SIGNOFF"]
+    assert [a["fill"]["0"] for a in four if "fill" in a] == ["WRKJOB", "40", "19", "20", "DSPJOB", "14", "11", "DSPJOBLOG", "SIGNOFF"]
+    for steps in (three, four):
+        fills = [a["fill"]["0"] for a in steps if "fill" in a]
+        assert "30" not in fills and "4" not in fills                  # never "all of the above", never a delete
+        assert all(a["key"] in ("ENTER", "F3", "F10", "F11", "F12", "F22", "ROLLUP", "ROLLDOWN") for a in steps)
+        assert [a["key"] for a in steps].count("ENTER") == len(fills)  # Enter only ever sends a fill
 
 
 def test_the_spool_option_scenario_only_opens_prompts_and_backs_out():

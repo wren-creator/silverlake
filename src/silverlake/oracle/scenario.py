@@ -191,6 +191,47 @@ AUTHENTICATED["auth-dspjob2"] = [
     {"key": "F12", "always": True}, {"key": "F3", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the job screens' leftovers, all on the profile's own job, in two runs because the first one showed
+# that F11 on the locks display only flips its view (the F12 after it went to the menu, not back to the list).
+# This one: DSPJOB options 17 to 22 (never 30, which is "all of the above" and may print to a spool file, a
+# write), then the locks display with F10 (record locks) and F11 (thread data). A check runs on the screen each
+# option produced, so a key is only pressed on the display it was meant for. Nothing is changed, held, ended,
+# printed or sent.
+_LOCKS = {"proceed_if": ["Display Job Locks"]}
+_STACK = {"proceed_if": ["Display Call Stack"]}
+_OPEN = {"proceed_if": ["Display Open Files"]}
+_WJ = {"proceed_if": ["Work with Job"]}
+AUTHENTICATED["auth-dspjob3"] = [
+    _SIGNON, {"fill": {"0": "DSPJOB"}, "key": "ENTER", **_MENU},
+    *[step for opt in ("17", "18", "19", "20", "21", "22") for step in (_optkey(opt), _BACK)],
+    _optkey("12", **_LOCKS),
+    {"key": "F10"}, {"key": "F12", "always": True, **_LOCKS},
+    {"key": "F11"}, {"key": "F12", "always": True, **_MENU},
+    {"key": "F12", "always": True}, {"key": "F3", "always": True},
+    {**_SIGNOFF, "always": True},
+]
+# Read only: the rest. WRKJOB's roll to a third menu page, option 40 (the Change Job prompt, opened and left with
+# F12, never Enter) and 19 and 20, whose titles differ from DSPJOB's, then DSPJOB's open files with F11, and its
+# call stack with F11 and F22, each in its own visit to the menu so one surprise only costs what comes after it.
+# The job log's F10 is its own step at the end.
+AUTHENTICATED["auth-dspjob4"] = [
+    _SIGNON, {"fill": {"0": "WRKJOB"}, "key": "ENTER", **_MENU},
+    {"key": "ROLLUP", **_MENU}, {"key": "ROLLUP", **_MENU}, {"key": "ROLLDOWN", **_MENU},
+    _optkey("40"), {"key": "F12", "always": True, **_MENU},
+    _optkey("19"), {"key": "F12", "always": True, **_MENU},
+    _optkey("20"), {"key": "F12", "always": True, **_MENU},
+    {"key": "F12", "always": True},
+    {"fill": {"0": "DSPJOB"}, "key": "ENTER", **_MENU},
+    _optkey("14", **_OPEN), {"key": "F11"}, {"key": "F12", "always": True, **_MENU},
+    _optkey("11", **_STACK), {"key": "F11"}, {"key": "F12", "always": True, **_STACK},
+    {"key": "F22"}, {"key": "F12", "always": True, **_STACK},
+    {"key": "F12", "always": True, **_MENU},
+    {"key": "F12", "always": True},
+    {"fill": {"0": "DSPJOBLOG"}, "key": "ENTER", "proceed_if": ["Display Job Log"]},
+    {"key": "F10"}, {"key": "F12", "always": True},
+    {"key": "F12", "always": True}, {"key": "F3", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 # Read only: the output queue display. A queue that does not exist (the refusal wording), then the default
 # printer queue, then the job log queue the profile's own spool files sit in. Looked at and left with F3.
 # Not the bare WRKOUTQ: that lists every output queue on the host, and on a shared system it did not answer

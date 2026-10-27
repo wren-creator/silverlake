@@ -196,13 +196,14 @@ def test_chgjob_runpty_and_limits_need_jobctl_even_on_your_own_job(store):
     assert "changed" in _run(store, "JOBMAN", f"CHGJOB {ref} CPUTIME(*NOMAX) PURGE(*NO)")[0]
 
 
-def test_chgjob_option_2_takes_its_attributes_from_the_command_line(store):
+def test_chgjob_option_2_opens_the_prompt_or_takes_attributes_from_the_command_line(store):
     c = _signed(store, "QSECOFR", "QPADEV0001")
     other, job = _victim(store, "STUDENT", "QPADEV0009")
     c.handle("ENTER", {"command": "wrkactjob"})
     idx = [j.qualified for j in c.view[1].rows].index(job.qualified)
     c.view[1].page = idx // 9
-    assert "Type the attributes" in _text(c.handle("ENTER", {f"opt{idx % 9}": "2"}))
+    assert "Change Job (CHGJOB)" in _text(c.handle("ENTER", {f"opt{idx % 9}": "2"}))     # no attributes typed: the prompt
+    c.handle("F12", {})
     assert "changed" in _text(c.handle("ENTER", {f"opt{idx % 9}": "2", "command": "JOBPTY(2)"}))
     assert job.attrs["JOBPTY"] == "2"
 
@@ -271,7 +272,7 @@ def test_wrkjob_layout_follows_the_capture_and_takes_a_selection_on_the_command_
     assert f[(0, 33)].text == "Work with Job" and f[(2, 8)].text == "QPADEV0015" and f[(2, 31)].text == "STUDENT"
     assert f[(6, 6)].text == "1. Display job status attributes" and f[(11, 5)].text.startswith("10. Display job log")
     assert [(i.row, i.col, i.length) for i in s.inputs()] == [(20, 6, 153)]
-    assert "Option 17 is not available" in _text(c.handle("ENTER", {"command": "17"}))
+    assert "Option 30 is not available" in _text(c.handle("ENTER", {"command": "30"}))
     assert "Option 99 is not valid" in _text(c.handle("ENTER", {"command": "99"}))
     s = c.handle("ENTER", {"command": "10"})
     assert {(x.row, x.col): x for x in s.fields}[(0, 31)].text == "Display Job Log"
@@ -331,7 +332,7 @@ def test_dspjob_menu_follows_the_capture_with_a_two_character_selection(store):
     assert f[(19, 1)].text == "Selection" and [(i.row, i.col, i.length) for i in s.inputs()] == [(20, 6, 2)]
     assert f[(22, 1)].text == "F3=Exit" and f[(22, 11)].text == "F12=Cancel" and (18, 67) in f
     assert "Option 99 is not valid" in _text(c.handle("ENTER", {"selection": "99"}))
-    assert "Option 17 is not available" in _text(c.handle("ENTER", {"selection": "17"}))
+    assert "Option 30 is not available" in _text(c.handle("ENTER", {"selection": "30"}))
     assert "17. Display communications status" in _text(c.handle("ROLLUP", {}))      # page two, built
     assert c.view[0] == "dspjobview"
 
