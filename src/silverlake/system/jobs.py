@@ -62,7 +62,10 @@ class JobTable:
         self._next += 1
         return f"{self._next:06d}"
 
-    def start_interactive(self, user: str, device: str) -> Job:
+    def start_interactive(self, user: str, device: str, floor: int = 0) -> Job:
+        """`floor` is the highest job number already used by a saved spool file, so a restart
+        never reuses a number a job log is filed under."""
+        self._next = max(self._next, floor)
         job = Job(device, user, self._number(), "INT", "QINTER", "DSPW", "MENU-MAIN")
         self.jobs.append(job)
         return job

@@ -8,7 +8,7 @@ are named in IGNORED so a copied command from a real system still runs."""
 import fnmatch
 from dataclasses import dataclass
 
-from ..system import admin, autls, messages, objects, objlist
+from ..system import admin, autls, messages, objects, objlist, spool
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -84,6 +84,15 @@ RVKOBJAUT_PARAMS = [
     Param("ASPDEV", "ignored", "*"), Param("AUTL", "name*", "*NONE"),
 ]
 
+WRKSPLF_PARAMS = [Param("SELECT", "splsel", "*CURRENT", 6), Param("JOB", "ignored", "*ALL"),
+                  Param("PERIOD", "ignored", "*AVAIL"), Param("ASPDEV", "ignored", "*"),
+                  Param("OUTPUT", "output", "*"), Param("DSPFMT", "ignored", "*INLENV"), Param("ASTLVL", "ignored", "*PRV")]
+DSPSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
+                  Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
+                  Param("CRTDATE", "ignored", "*ONLY"), Param("FOLD", "ignored", "*NO")]
+DLTSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
+                  Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
+                  Param("CRTDATE", "ignored", "*ONLY"), Param("SELECT", "ignored", "*"), Param("ASPDEV", "ignored", "*")]
 WRKACTJOB_PARAMS = [Param("SBS", "name*", "*ALL"), Param("CPUPCTLMT", "ignored", "*NONE"), Param("JOB", "ignored", "*ALL")]
 GO_PARAMS = [Param("MENU", "qname", "", required=True), Param("RTNPNT", "yesno", "*YES")]
 CALL_PARAMS = [Param("PGM", "qname", "", required=True)]
@@ -136,7 +145,8 @@ COMMANDS = {
     "CRTAUTL": CRTAUTL_PARAMS, "DLTAUTL": DLTAUTL_PARAMS, "ADDAUTLE": ADDAUTLE_PARAMS,
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
-    "WRKACTJOB": WRKACTJOB_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
+    "WRKACTJOB": WRKACTJOB_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
+    "DLTSPLF": DLTSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
     "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS,
 }
@@ -242,6 +252,26 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
             if v not in SPECIAL_VALUES and v not in _DETAILED and v != "*AUTLMGT":
                 raise BindError(f"Value {v} for parameter AUT not valid.")
         return list(values)
+    if k == "splsel":                       # SELECT(user device form userdata asp splfile): user and file only
+        user = values[0].upper()
+        if user.startswith("*") and user not in ("*CURRENT", "*ALL"):
+            raise BindError(f"Value {user} for parameter SELECT not valid.")
+        name = values[5].upper() if len(values) > 5 else "*ALL"
+        return (user, name)
+    if k == "jobq":                         # * , or number/user/name (number and user may be *)
+        if values == ["*"]:
+            return "*"
+        parts = [v.upper() for v in values[0].split("/")] if len(values) == 1 else [v.upper() for v in values]
+        if len(parts) == 1:
+            return (parts[0], "*", "*")
+        if len(parts) == 3:
+            return (parts[2], parts[1], parts[0])
+        raise BindError("Value for parameter JOB not valid. Use name or number/user/name.")
+    if k == "splnbr":
+        v = values[0].upper()
+        if v in ("*ONLY", "*LAST", "*ANY") or (v.isdigit() and 1 <= int(v) <= 999999):
+            return v
+        raise BindError("Value for parameter SPLNBR not valid. Use *ONLY, *LAST, *ANY or 1 to 999999.")
     if k == "detail":
         return _one(p.key, values, ("*BASIC", "*FULL"))
     if k == "dsptype":
@@ -441,6 +471,23 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         if not rows:
             return Outcome(messages.syntax("No user profiles found, or you are not authorized to any."))
         return Outcome(view=("wrkusrprf", rows))
+    if name == "WRKSPLF":
+        user, fname = b["SELECT"]
+        if user not in ("*CURRENT", "*ALL") and "*" not in user and user not in store.profiles:
+            return Outcome(messages.Message("CPF33D1", f"User {user} does not exist.", messages.DOCUMENTED))
+        rows = spool.select(store, actor, user, fname)
+        return Outcome(view=("wrksplf", rows, lambda: spool.select(store, actor, user, fname)))
+    if name in ("DSPSPLF", "DLTSPLF"):
+        job = b["JOB"]
+        if job == "*":
+            j = session.job
+            job = (j.name, j.user, j.number) if j else ("*", "*", "*")
+        f, err = spool.find(store, actor, b["FILE"].upper(), job, b["SPLNBR"])
+        if err:
+            return Outcome(err)
+        if name == "DLTSPLF":
+            return Outcome(spool.delete(store, actor, f).message)
+        return Outcome(view=("dspsplf", f))
     if name == "WRKACTJOB":
         sbs = b["SBS"].upper()
         if sbs != "*ALL" and not any(j.name == sbs for j in store.jobs.active() if j.type == "SBS"):

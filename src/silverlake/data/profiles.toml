@@ -363,3 +363,75 @@ cmd = "CALL QCMD"
 opt = "90"
 text = "Sign off"
 cmd = "SIGNOFF"
+
+# ---------------------------------------------------------------------------
+# Output queues and spool files. A queue's DSPDTA setting decides who may read
+# other people's files on it (see docs/jobs-spool-messages.md). QPRINT is the
+# classic mistake: DSPDTA(*YES) and public *USE, so anyone can read a report
+# somebody printed. QEZJOBLOG holds job logs and is the safer shape.
+# ---------------------------------------------------------------------------
+
+[[object]]
+library = "QUSRSYS"
+name = "QEZJOBLOG"
+type = "*OUTQ"
+owner = "QSYS"
+public = "*USE"
+text = "Job logs"
+[object.data]
+dspdta = "*OWNER"
+oprctl = "*YES"
+autchk = "*OWNER"
+
+[[object]]
+library = "QGPL"
+name = "QPRINT"
+type = "*OUTQ"
+owner = "QSYS"
+public = "*USE"
+text = "Default printer output"
+[object.data]
+dspdta = "*YES"
+oprctl = "*YES"
+autchk = "*OWNER"
+
+[[spool_file]]
+name = "PAYRPT"
+user = "DEVELOPER"
+job_name = "PAYRUN"
+job_number = 100231
+outq = "QPRINT"
+outq_lib = "QGPL"
+user_data = "PAYROLL"
+created = "2026-10-20T16:05:00"
+lines = """
+ SILVERLAKE TRAINING CO          PAYROLL REGISTER          PERIOD 10/16
+ EMP   NAME                 DEPT   GROSS PAY      SSN
+ 1001  A. Mercer            ACCT     4,210.00     ***-**-1042
+ 1002  R. Okafor            SHIP     3,875.50     ***-**-7731
+ 1003  D. Lindqvist         IT       6,120.00     ***-**-2208
+ 1004  J. Tran              HR       5,034.25     ***-**-9915
+ TOTAL                                19,239.75
+"""
+
+[[spool_file]]
+name = "QPJOBLOG"
+user = "QSECOFR"
+job_name = "QPADEV0001"
+job_number = 100188
+outq = "QEZJOBLOG"
+outq_lib = "QUSRSYS"
+user_data = "QPADEV0001"
+created = "2026-10-19T08:41:00"
+lines = """
+ SILVERLAKE  Job Log                       26-10-19  08:41:00
+   Job name . . . . . . . . . . :   QPADEV0001    User  . . . . . . :   QSECOFR
+   Job description  . . . . . . :   QSECOFR       Library . . . . . :   QGPL
+ MSGID      TYPE                    SEV  DATE      TIME             FROM PGM
+ *NONE      Command                      26-10-19  08:36:12,000000  QCMD
+                                      Message . . . . :   WRKACTJOB
+ *NONE      Command                      26-10-19  08:37:40,000000  QCMD
+                                      Message . . . . :   CHGUSRPRF USRPRF(OLDTEMP) PASSWORD(*****) STATUS(*ENABLED)
+ *NONE      Command                      26-10-19  08:40:55,000000  QCMD
+                                      Message . . . . :   GRTOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE) USER(OLDTEMP) AUT(*ALL)
+"""

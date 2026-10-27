@@ -24,6 +24,7 @@ class Session:
     return_points: list[tuple[int, str]] = field(default_factory=list)
     mode: str = "menu"                  # what the job is looking at: "menu" or "cmdentry"
     history: list[str] = field(default_factory=list)   # command entry, newest last
+    joblog: list = field(default_factory=list)   # (time, "command" or "message", text), for the job log
     job: object | None = None           # this session's row in the job table
 
     @classmethod

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .commandobjs import ensure_commands
 from .authority import AuthList, SecuredObject, SpecialAuthority, UserClass, name_auth, parse_auth
+from .spool import ensure_queues, from_row, to_row
 from .profiles import DEFAULT_SEED, Profile, ProfileStore, System, load
 
 DB_NAME = "silverlake.sqlite"
@@ -42,6 +43,7 @@ def to_dict(store: ProfileStore) -> dict:
         "autls": [{"name": a.name, "entries": {k: name_auth(v) for k, v in a.entries.items()},
                    "public": name_auth(a.public), "owner": a.owner, "text": a.text}
                  for a in sorted(store.autls.values(), key=lambda a: a.name)],
+        "spool": [to_row(f) for f in store.spool],
     }
 
 
@@ -65,7 +67,9 @@ def from_dict(data: dict) -> ProfileStore:
     autls = [AuthList(a["name"], {k: parse_auth(v) for k, v in a["entries"].items()}, parse_auth(a["public"]),
                       a.get("owner", "QSECOFR"), a.get("text", ""))
              for a in data["autls"]]
-    store = ProfileStore(System(**data["system"]), profiles, objects, autls)
+    store = ProfileStore(System(**data["system"]), profiles, objects, autls,
+                         [from_row(r) for r in data.get("spool", [])])
+    ensure_queues(store)
     ensure_commands(store)      # a state saved before a command existed gets its object now
     return store
 
@@ -83,6 +87,7 @@ CREATE TABLE IF NOT EXISTS object_auth (
     PRIMARY KEY (library, name, type, grantee));
 CREATE TABLE IF NOT EXISTS autls (name TEXT PRIMARY KEY, public TEXT NOT NULL,
     owner TEXT NOT NULL DEFAULT 'QSECOFR', text TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS spool (id INTEGER PRIMARY KEY, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS autl_entries (
     autl TEXT NOT NULL, grantee TEXT NOT NULL, auth TEXT NOT NULL, PRIMARY KEY (autl, grantee));
 """
@@ -122,6 +127,7 @@ class StateDB:
             entries.setdefault(autl, {})[who] = auth
         data["autls"] = [{"name": n, "entries": entries.get(n, {}), "public": pub, "owner": owner, "text": text}
                          for n, pub, owner, text in q("SELECT name, public, owner, text FROM autls ORDER BY name")]
+        data["spool"] = [json.loads(b) for (b,) in q("SELECT body FROM spool ORDER BY id")]
         return data
 
     def write(self, store: ProfileStore) -> None:
@@ -129,7 +135,7 @@ class StateDB:
         with self.db:      # one transaction, so a crash never leaves half a state
             self.db.execute("INSERT OR REPLACE INTO kv (key, value) VALUES ('state', ?)",
                             (json.dumps({"system": d["system"], "profiles": d["profiles"]}),))
-            for table in ("objects", "object_auth", "autls", "autl_entries"):
+            for table in ("objects", "object_auth", "autls", "autl_entries", "spool"):
                 self.db.execute(f"DELETE FROM {table}")
             for o in d["objects"]:
                 self.db.execute("INSERT INTO objects VALUES (?,?,?,?,?,?,?,?,?)",
@@ -137,6 +143,7 @@ class StateDB:
                                  o["public"], o["autl"], o["text"], json.dumps(o["data"])))
                 self.db.executemany("INSERT INTO object_auth VALUES (?,?,?,?,?)",
                                     [(o["library"], o["name"], o["type"], k, v) for k, v in o["private"].items()])
+            self.db.executemany("INSERT INTO spool (body) VALUES (?)", [(json.dumps(r),) for r in d["spool"]])
             for a in d["autls"]:
                 self.db.execute("INSERT INTO autls VALUES (?,?,?,?)", (a["name"], a["public"], a["owner"], a["text"]))
                 self.db.executemany("INSERT INTO autl_entries VALUES (?,?,?)",

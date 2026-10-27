@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "SIGNOFF") for c in _fills(name)), name
 
@@ -399,6 +399,14 @@ def test_the_second_option_scenario_only_presses_keys_after_its_own_two_options(
     assert all(a["key"] in ("F6", "F10", "F11", "F12", "F3", "ENTER") for a in actions[1:])
     assert all(a.get("always") for a in actions[4:-1] if a["key"] in ("F12", "F3"))
     assert actions[-1].get("always") and actions[-1]["fill"] == {"0": "SIGNOFF"}
+
+
+def test_the_spool_scenario_only_displays_and_backs_out():
+    actions = scenario.SCENARIOS["auth-spool"]
+    fills = [a["fill"]["0"] for a in actions[1:] if "fill" in a]
+    assert fills == ["WRKSPLF", "5", "8", "SIGNOFF"]                    # no 1, 2, 3, 4, 6, 9: nothing changes
+    assert all(a.get("always") for a in actions[2:-1] if a["key"] in ("F12", "F3"))
+    assert actions[1]["proceed_if"] == ["QPJOBLOG"] and actions[-1].get("always")
 
 
 def test_the_description_scenario_is_read_only():

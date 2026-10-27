@@ -27,7 +27,7 @@ class WorkList:
     first_row: int = field(init=False)
 
     def __post_init__(self) -> None:
-        self.per_page, self.first_row = {"objects": (11, 7), "owner": (8, 10), "autls": (10, 8), "jobs": (9, 9)}[self.kind]
+        self.per_page, self.first_row = {"objects": (11, 7), "owner": (8, 10), "autls": (10, 8), "jobs": (9, 9), "spool": (9, 9)}[self.kind]
 
     @property
     def pages(self) -> int:
@@ -42,7 +42,7 @@ class WorkList:
         self.page = max(0, min(self.page, self.pages - 1))
 
     def screen(self, message: str = "") -> Screen:
-        return {"objects": _objects, "owner": _owner, "autls": _autls, "jobs": _jobs}[self.kind](self, message)
+        return {"objects": _objects, "owner": _owner, "autls": _autls, "jobs": _jobs, "spool": _spool}[self.kind](self, message)
 
 
 def _tail(rows: list, wl: WorkList, prompt: str, keys1: list[tuple[int, str]], keys2: list[tuple[int, str]],
@@ -163,6 +163,88 @@ def _jobs(wl: WorkList, message: str) -> Screen:
                  [(1, "F3=Exit"), (11, "F5=Refresh"), (28, "F7=Find"), (41, "F10=Restart statistics")],
                  [(1, "F11=Display elapsed data"), (28, "F12=Cancel"), (41, "F23=More options"),
                   (60, "F24=More keys")], message)
+
+
+def _spool(wl: WorkList, message: str) -> Screen:
+    """Work with All Spooled Files, laid out like the real display (captured)."""
+    rows: list = [
+        Text(0, 26, "Work with All Spooled Files", ds.ATTR_WHITE),
+        Text(2, 1, "Type options, press Enter.", ds.ATTR_BLUE),
+        Text(3, 3, "1=Send", ds.ATTR_BLUE), Text(3, 12, "2=Change", ds.ATTR_BLUE), Text(3, 23, "3=Hold", ds.ATTR_BLUE),
+        Text(3, 32, "4=Delete", ds.ATTR_BLUE), Text(3, 43, "5=Display", ds.ATTR_BLUE),
+        Text(3, 55, "6=Release", ds.ATTR_BLUE), Text(3, 67, "7=Messages", ds.ATTR_BLUE),
+        Text(4, 3, "8=Attributes", ds.ATTR_BLUE), Text(4, 23, "9=Work with printing status", ds.ATTR_BLUE),
+        Text(7, 30, "Device or", ds.ATTR_WHITE), Text(7, 60, "Total", ds.ATTR_WHITE), Text(7, 70, "Cur", ds.ATTR_WHITE),
+        Text(8, 1, "Opt", ds.ATTR_WHITE), Text(8, 6, "File", ds.ATTR_WHITE), Text(8, 18, "User", ds.ATTR_WHITE),
+        Text(8, 30, "Queue", ds.ATTR_WHITE), Text(8, 42, "User Data", ds.ATTR_WHITE), Text(8, 54, "Sts", ds.ATTR_WHITE),
+        Text(8, 60, "Pages", ds.ATTR_WHITE), Text(8, 69, "Page", ds.ATTR_WHITE), Text(8, 75, "Copy", ds.ATTR_WHITE),
+    ]
+    for i, f in enumerate(wl.shown()):
+        r = wl.first_row + i
+        rows.append(Input(r, 2, 1, f"opt{i}", monocase=True))
+        rows += [Text(r, 6, f.name, ds.ATTR_TURQUOISE), Text(r, 18, f.user, ds.ATTR_TURQUOISE),
+                 Text(r, 30, f.outq, ds.ATTR_TURQUOISE), Text(r, 42, f.user_data[:10], ds.ATTR_TURQUOISE),
+                 Text(r, 54, f.status, ds.ATTR_TURQUOISE), Text(r, 60, f"{f.pages:>5}", ds.ATTR_TURQUOISE),
+                 Text(r, 78, str(f.copies), ds.ATTR_TURQUOISE)]
+    return _tail(rows, wl, "Parameters for options 1, 2, 3 or command",
+                 [(1, "F3=Exit"), (11, "F10=View 4"), (24, "F11=View 2"), (37, "F12=Cancel"), (50, "F22=Printers"),
+                  (65, "F24=More keys")], [], message)
+
+
+def dspsplf_screen(f, top: int = 0, message: str = "") -> Screen:
+    """Display Spooled File, laid out like the real one (captured): a header, a ruler, and sixteen
+    lines of the file from row 5. Roll keys move by a screenful. Find and column shifting are not built."""
+    shown = f.lines[top:top + 16]
+    ruler = "*...+....1....+....2....+....3....+....4....+....5....+....6....+....7....+...."
+    rows: list = [
+        Text(0, 30, "Display Spooled File", ds.ATTR_WHITE),
+        Text(1, 1, "File  . . . . . :", ds.ATTR_GREEN), Text(1, 21, f.name, ds.ATTR_WHITE),
+        Text(1, 54, "Page/Line", ds.ATTR_GREEN), Text(1, 66, f"{top // 55 + 1}/{top % 55 + 1}", ds.ATTR_WHITE),
+        Text(2, 1, "Control . . . . .", ds.ATTR_GREEN), Input(2, 21, 8, "control"),
+        Text(2, 54, "Columns", ds.ATTR_GREEN), Text(2, 66, "1 - 78", ds.ATTR_WHITE),
+        Text(3, 1, "Find  . . . . . .", ds.ATTR_GREEN), Input(3, 21, 30, "find"),
+        Text(4, 1, ruler, ds.ATTR_BLUE),
+    ]
+    rows += [Text(5 + i, 0, line[:78], ds.ATTR_WHITE) for i, line in enumerate(shown)]
+    more = top + 16 < len(f.lines)
+    rows.append(Text(21, 72 if more else 73, "More..." if more else "Bottom", ds.ATTR_BLUE))
+    rows.append(Text(22, 1, "F3=Exit   F12=Cancel   F19=Left   F20=Right   F24=More keys", ds.ATTR_BLUE))
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows, cursor="control")
+
+
+def spoolattr_screen(f, system_name: str) -> Screen:
+    """Work with Spooled File Attributes, first page, laid out like the real one (captured). The
+    second page and F13 (change) are not built."""
+    when = f.stamp()
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    v = lambda r, c, t: Text(r, c, str(t), ds.ATTR_WHITE)
+    return Screen([
+        Text(0, 23, "Work with Spooled File Attributes", ds.ATTR_WHITE),
+        g(2, 1, "Job  . . . . . . . . :"), v(2, 26, f.job_name), g(2, 42, "File . . . . . . . . :"), v(2, 67, f.name),
+        g(3, 3, "User . . . . . . . :"), v(3, 28, f.user), g(3, 44, "Number . . . . . . :"), v(3, 69, f"{f.file_no:06d}"),
+        g(4, 3, "Number . . . . . . :"), v(4, 28, f.job_number), g(4, 42, "Creation date  . . . :"),
+        v(4, 67, when.strftime("%y-%m-%d")),
+        g(5, 1, "Job system name  . . :"), v(5, 26, system_name), g(5, 42, "Creation time  . . . :"),
+        v(5, 67, when.strftime("%H:%M:%S")),
+        g(7, 1, "Status . . . . . . . . . . . . . . . . :"), v(7, 44, "HELD" if f.status == "HLD" else "READY"),
+        g(8, 1, "Output queue . . . . . . . . . . . . . :"), v(8, 44, f.outq),
+        g(9, 3, "Library  . . . . . . . . . . . . . . :"), v(9, 46, f.outq_lib),
+        g(10, 1, "ASP file resides on  . . . . . . . . . :"), v(10, 44, "1"),
+        g(11, 1, "Form type  . . . . . . . . . . . . . . :"), v(11, 44, f.form_type),
+        g(12, 1, "Output priority  . . . . . . . . . . . :"), v(12, 44, f.priority),
+        g(13, 1, "Copies left to produce . . . . . . . . :"), v(13, 44, f.copies),
+        g(14, 1, "Total copies . . . . . . . . . . . . . :"), v(14, 44, f.copies),
+        g(15, 1, "Maximum records  . . . . . . . . . . . :"), v(15, 44, "*NOMAX"),
+        g(16, 1, "Number of separators . . . . . . . . . :"), v(16, 44, "0"),
+        g(17, 1, "File becomes available . . . . . . . . :"), v(17, 44, "*FILEEND"),
+        g(18, 1, "Hold file before written . . . . . . . :"), v(18, 44, "*NO"),
+        Text(19, 72, "More...", ds.ATTR_BLUE),
+        Text(20, 1, "Press Enter to continue.", ds.ATTR_BLUE),
+        Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F5=Refresh", ds.ATTR_BLUE),
+        Text(22, 24, "F12=Cancel", ds.ATTR_BLUE), Text(22, 37, "F13=Change", ds.ATTR_BLUE),
+    ])
 
 
 def _autls(wl: WorkList, message: str) -> Screen:

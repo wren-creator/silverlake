@@ -118,6 +118,15 @@ The read-only `auth-jobs` scenario (2026-10-27) ran `WRKACTJOB`, `WRKSPLF` and `
 - **`DSPMSG` opened a queue named after the display device**, with a message from `QPGMR`, delivery `*NOTIFY`, and the keys F11, F13, F16. Noted for step 3.
 - The capture holds other people's job names and stays local, as every capture does.
 
+## What the spool capture taught us
+
+The read-only `auth-spool` scenario (2026-10-27) opened the profile's first spool file with option 5 and option 8, and backed out.
+
+- **Display Spooled File** has a four line header (File, Page/Line, Control, Columns, Find), a ruler at row 4, sixteen lines of the file from row 5, and `F3=Exit F12=Cancel F19=Left F20=Right F24=More keys`. Silverlake's screen matches its field positions.
+- **A real job log lists the commands the session ran**, each as a `*NONE Command` line with a timestamp and the program, then a `Message` line carrying the command text, and the messages they raised with ID, type and severity. This is why Silverlake files a log at sign-off and why a trainee reading someone else's is the point of the exercise.
+- **Work with Spooled File Attributes** has job, user, number, creation date and time, status, output queue and library, form type, priority, copies, and a second page. Silverlake follows the first page.
+- The capture holds the test profile's own job names and stays local.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

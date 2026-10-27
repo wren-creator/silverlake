@@ -123,6 +123,16 @@ AUTHENTICATED["auth-objdesc"] = [
 AUTHENTICATED["auth-jobs"] = [
     _SIGNON, *_cmd("WRKACTJOB"), *_cmd("WRKSPLF"), *_cmd("DSPMSG"), _SIGNOFF,
 ]
+# Read only: opens the first of the profile's own spool files with option 5 (display) and 8 (attributes)
+# and backs out. Nothing is changed, held, deleted or sent. Skipped unless the list has a file.
+AUTHENTICATED["auth-spool"] = [
+    _SIGNON,
+    {"fill": {"0": "WRKSPLF"}, "key": "ENTER", "proceed_if": ["QPJOBLOG"]},
+    _optkey("5", proceed_if=["QPJOBLOG"]), {"key": "F12", "always": True},
+    _optkey("8", proceed_if=["QPJOBLOG"]), {"key": "F12", "always": True},
+    *[{"key": "F12", "always": True}] * 2, *[{"key": "F3", "always": True}] * 2,
+    {**_SIGNOFF, "always": True},
+]
 # Looks at the keys and option the edit screen and the work list offer beyond what is built, on the
 # same kind of throwaway job-local data area as auth-objopts. It only presses function keys after
 # the option numbers, never Enter on a screen it did not expect, and every back out runs whatever

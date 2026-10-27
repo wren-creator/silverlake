@@ -16,10 +16,11 @@ column, the right hand block, and the copyright column are exact.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from ..cl import commands
 from ..proto import datastream as ds
-from ..system import admin, autls, menus, messages, objects, profiles
+from ..system import admin, autls, menus, messages, objects, profiles, spool
 from ..system.authority import ALL, CHANGE, EXCLUDE
 from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
@@ -27,7 +28,7 @@ from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
-                        dspobjd_screen, objects_in_list_screen)
+                        dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -125,6 +126,7 @@ class SignonController:
     def _sign_off(self) -> None:
         if self.profile is not None:
             self.store.sign_off(self.profile)
+            spool.write_joblog(self.store, self.session.job, self.session.joblog)
             self.store.jobs.end(self.session.job)
         self.profile = None
         self.view = None
@@ -170,7 +172,8 @@ class SignonController:
         self.profile = profile
         self.session = Session.for_profile(library)
         self.store.sign_on(profile)
-        self.session.job = self.store.jobs.start_interactive(profile.name, self.display)
+        self.session.job = self.store.jobs.start_interactive(
+            profile.name, self.display, max((int(f.job_number) for f in self.store.spool), default=0))
         if program != "*NONE":
             self.session.mode = "cmdentry"
             return self._base()
@@ -226,8 +229,17 @@ class SignonController:
                 return self._base(messages.command_line_not_allowed().line())
         return self._run(line)
 
+    def _log(self, line: str, outcome: "commands.Outcome") -> None:
+        """What the job log will say: the command, and the message it raised."""
+        now = datetime.now()
+        self.session.joblog.append((now, "command", line))
+        if outcome.message and outcome.message.text:
+            self.session.joblog.append((now, "message", outcome.message.text))
+
     def _run(self, line: str) -> Screen:
-        return self._apply(commands.execute(self.store, self.profile, line, self.session), line)
+        outcome = commands.execute(self.store, self.profile, line, self.session)
+        self._log(line, outcome)
+        return self._apply(outcome, line)
 
     def _apply(self, outcome: commands.Outcome, line: str) -> Screen:
         sess = self.session
@@ -273,6 +285,10 @@ class SignonController:
             return ("work", WorkList("autls", spec[1], spec[2]))
         if kind == "wrkobj":
             return ("work", WorkList(spec[2], spec[1], spec[4], owner=spec[3] or ""))
+        if kind == "wrksplf":
+            return ("work", WorkList("spool", spec[1], spec[2]))
+        if kind == "dspsplf":
+            return ("spoolview", spec[1], 0)
         if kind == "wrkactjob":
             sbs = spec[1]
             own = self.session.job.qualified if self.session.job else ""
@@ -302,6 +318,10 @@ class SignonController:
             if detail == "*BASIC":
                 return dspobjd_basic_screen(obj, message)
             return dspobjd_screen(obj, detail, SYSTEM_NAME, page)
+        if self.view[0] == "spoolview":
+            return dspsplf_screen(self.view[1], self.view[2], message)
+        if self.view[0] == "spoolattr":
+            return spoolattr_screen(self.view[1], SYSTEM_NAME)
         if self.view[0] == "add":
             return add_users_screen(self.view[1].obj, self.view[2], message)
         return wrkusrprf_screen(self.view[1], self.view[2], message)
@@ -325,6 +345,14 @@ class SignonController:
             return self._in_dobjd(aid, values)
         if kind == "add":
             return self._in_add(aid, values)
+        if kind == "spoolview":
+            return self._in_spoolview(aid)
+        if kind == "spoolattr":
+            if aid == "F3":
+                self.view = None
+                self.parents.clear()
+                return self._base()
+            return self._close_view()
         if aid == "F3" or (kind == "wrk" and aid == "F12"):
             self.view = None
             return self._base()
@@ -403,6 +431,16 @@ class SignonController:
     def _work_option(self, wl: WorkList, row, opt: str, param: str) -> tuple[str | None, str]:
         """The command a work list option runs. The options the command line parameters feed
         are the ones the real display names ("Parameters for options 5, 7 and 13")."""
+        if wl.kind == "spool":
+            if opt in ("5", "8"):
+                from ..system import spool
+                f = row
+                if not spool.can_display(self.store, self.profile, f):
+                    return None, "Not authorized to spooled file."
+                return f"@SPOOL{opt} {self.store.spool.index(f)}", ""
+            if opt in ("1", "2", "3", "4", "6", "7", "9"):
+                return None, f"Option {opt} is not available in Silverlake yet."
+            return None, f"Option {opt} is not valid."
         if wl.kind == "jobs":
             if opt in ("2", "3", "4", "5", "6", "7", "8", "13"):
                 return None, f"Option {opt} is not available in Silverlake yet."
@@ -437,6 +475,11 @@ class SignonController:
         return None, f"Option {opt} is not valid."
 
     def _work_exec(self, wl: WorkList, line: str) -> Screen:
+        if line.startswith("@SPOOL"):                           # options 5 and 8 on Work with Spooled Files
+            f = self.store.spool[int(line.split()[1])]
+            self.parents.append(self.view)
+            self.view = ("spoolview", f, 0) if line.startswith("@SPOOL5") else ("spoolattr", f)
+            return self._draw_view()
         if line.startswith("@AUTLTEXT "):                       # option 13: change the list's text
             _, name, text = (line.split(None, 2) + [""])[:3]
             wl.retained = {}
@@ -453,6 +496,7 @@ class SignonController:
             self.view = self._open_view(("autlobjs", name, objlist.objects_secured_by(self.store, self.profile, name)))
             return self._draw_view()
         outcome = commands.execute(self.store, self.profile, line, self.session)
+        self._log(line, outcome)
         if outcome.view:
             self.parents.append(self.view)
             self.view = self._open_view(outcome.view)
@@ -489,6 +533,20 @@ class SignonController:
         wl.refresh()
         message = last if len(picks) == 1 else (f"{done} objects deleted." + (f" {last}" if done < len(picks) else ""))
         return self._draw_view(message)
+
+    def _in_spoolview(self, aid: str) -> Screen:
+        _, f, top = self.view
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            top = max(0, min(top + (16 if aid == "ROLLUP" else -16), max(0, len(f.lines) - 1) // 16 * 16))
+            self.view = ("spoolview", f, top)
+            return self._draw_view()
+        if aid in ("F19", "F20", "F24"):
+            return self._draw_view(f"{aid} is not available in Silverlake yet.")
+        return self._close_view()
 
     def _in_dobjd(self, aid: str, values: dict[str, str]) -> Screen:
         """Display Object Description. The Basic list takes 5 (the full display) and 8 (service

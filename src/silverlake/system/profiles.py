@@ -60,12 +60,13 @@ class System:
 class ProfileStore:
     def __init__(self, system: System, profiles: list[Profile],
                  objects: list[SecuredObject] | None = None,
-                 autls: list[AuthList] | None = None) -> None:
+                 autls: list[AuthList] | None = None, spool: list | None = None) -> None:
         self.system = system
         self.profiles = {p.name: p for p in profiles}
         self.objects = {o.key: o for o in (objects or [])}
         self.autls = {a.name: a for a in (autls or [])}
         self.active: dict[str, int] = {}          # profile name -> sessions signed on
+        self.spool: list = list(spool or [])      # SpoolFile rows, kept in the state file
         self.jobs = JobTable()                    # live jobs, in memory only
         self.on_change = lambda: None             # persistence hook, set by the state layer
 
@@ -294,9 +295,29 @@ def load(path: Path | str | None = None) -> ProfileStore:
                 menus.parse(o.data, f"menu {o.library}/{o.name}")
             except menus.MenuError as exc:
                 raise SeedError(str(exc)) from exc
-    store = ProfileStore(system, profiles, objects, autls)
+    from .spool import from_row
+    spool = [from_row({**{"lines": []}, **{k: v for k, v in s.items()}}) for s in _spool_seed(data.get("spool_file", []))]
+    for f in spool:
+        if f.user not in names:
+            raise SeedError(f"spool file {f.name}: owner {f.user} does not exist")
+        if (f.outq_lib, f.outq, "*OUTQ") not in seen:
+            raise SeedError(f"spool file {f.name}: output queue {f.outq_lib}/{f.outq} does not exist")
+    store = ProfileStore(system, profiles, objects, autls, spool)
     ensure_commands(store)
     return store
+
+
+def _spool_seed(rows: list[dict]) -> list[dict]:
+    out = []
+    for r in rows:
+        r = dict(r)
+        r["lines"] = str(r.get("lines", "")).rstrip("\n").split("\n") if r.get("lines") else []
+        for k in ("user", "outq", "outq_lib", "job_name"):
+            if k in r:
+                r[k] = str(r[k]).upper()
+        r["job_number"] = str(r["job_number"]).zfill(6)
+        out.append(r)
+    return out
 
 
 def _enum_status(value: str, who: str) -> str:

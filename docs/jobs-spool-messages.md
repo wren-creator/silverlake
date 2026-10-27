@@ -20,9 +20,26 @@ What the capture settled, and what is the point of the range: **a basic profile 
 
 Options 2, 3, 4, 5, 6, 7, 8 and 13 are laid out as on the real display and say "not available yet". F7, F10, F11, F23 and F24 are on the screen and do nothing yet. The elapsed time, CPU % and per job CPU are always zero.
 
-## Step 2: spool files (next)
+## Step 2: spool files (built)
 
-WRKSPLF, DSPSPLF, option 8 from WRKACTJOB. Every job gets a `QPJOBLOG` spool file (the real capture shows one per past session, in `QEZJOBLOG`). The real `WRKSPLF` for a basic user listed only that user's own files. The rules to model, each flagged read or inferred in access-model.md when built: own files visible, other users' files need `*SPLCTL` (all) or `*JOBCTL` (job logs and files of controllable jobs) plus the output queue rules, and `*SPLCTL` and `*JOBCTL` stay separate.
+`WRKSPLF`, `DSPSPLF` and `DLTSPLF`, with the Work with All Spooled Files, Display Spooled File and Work with Spooled File Attributes displays laid out like the ones captured from PUB400. Options 5 (display) and 8 (attributes) work from the list. 1, 2, 3, 4, 6, 7 and 9 are drawn and say "not available yet". F19, F20, Find and Control on the display are not built. `WRKOUTQ` and the page-two attributes are not built, and their screens were not captured.
+
+**The model.** A spool file belongs to a job (number, user, name), has a file number within it, and sits on an output queue. Queues are `*OUTQ` objects in the object table, so `GRTOBJAUT`, `RVKOBJAUT` and `DSPOBJAUT` work on them. Spool files persist in the state file (a `spool` table), and job numbers do not restart under a saved job log. Two queues are seeded: `QUSRSYS/QEZJOBLOG` for job logs and `QGPL/QPRINT`.
+
+**Job logs.** Every session files a `QPJOBLOG` on `QEZJOBLOG` when it ends, a dropped connection included, holding each command typed and the message it raised, in the layout of the captured log. A real log contained the commands the test session ran, which is why a job log is worth reading. A `PASSWORD` parameter is logged as asterisks, our choice.
+
+**Who sees what.** Each queue has `DSPDTA`, `OPRCTL` and `AUTCHK` settings (from CRTOUTQ's page, parts of which only came through as a summary).
+
+| Queue setting | Effect |
+|---|---|
+| `DSPDTA(*NO)`, the command default | with authority to the queue you display only your own files unless you hold a special authority |
+| `DSPDTA(*YES)` | anyone who may read the queue may display any file on it |
+| `DSPDTA(*OWNER)` | the file's owner, `*SPLCTL`, and (the page's example) the queue's owner |
+| `OPRCTL(*YES)`, the default | `*JOBCTL` controls the queue's files |
+
+`*SPLCTL` always controls and displays. Inferred, because no page said it: listing other users' entries needs `*READ` to the queue, deleting follows the same control rule as holding, and a file's owner can always display, hold and delete it. A refusal is `CPF3492`, "Not authorized to spooled file."
+
+**What the range seeds.** `QPRINT` is `DSPDTA(*YES)` with public `*USE`, and holds a payroll register: the classic mistake, readable by a profile with no special authority. `QEZJOBLOG` is `DSPDTA(*OWNER)`, and holds an old `QSECOFR` job log with admin commands in it, readable by `*SPLCTL` and `*JOBCTL` profiles (SPOOLMAN, JOBMAN) and nobody else. Both are our picks.
 
 ## Step 3: messages
 
