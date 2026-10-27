@@ -30,7 +30,8 @@
 - [ ] Job leftovers: WRKJOB options 1, 2, 3, 11, 12, 14, 15, 16 and page two, DSPJOB, DSPJOBLOG F10, WRKACTJOB options 7, 13 and keys F7, F10, F11, the real confirm for option 4 and prompt for option 2 (need captures, the oracle will not end or change jobs)
 - [ ] Spool leftovers: WRKOUTQ and its capture, WRKSPLF options 1, 2, 4 (confirm), 7, 9, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF, CRTOUTQ
 - [x] Phase 3c-3c step 3: message queues (DSPMSG, SNDMSG, CLRMSGQ, QSYSOPR, per-user queues in QUSRSYS), from the PUB400 captures
-- [ ] Message leftovers: the real SNDMSG prompt (needs a longer wait), inquiry messages and replies, F11 remove one, WRKMSGQ, CRTMSGQ/CHGMSGQ/DLTMSGQ, RMVMSG, break delivery to a live session, work station queues
+- [x] CRTMSGQ, CHGMSGQ (DLVRY, SEV, TEXT) and DLTMSGQ from IBM's command pages, rules and inferences in docs/jobs-spool-messages.md
+- [ ] Message leftovers: the real SNDMSG prompt (needs a longer wait), inquiry messages and replies, F11 remove one, WRKMSGQ, CHGMSGQ break program and *DFT delivery, RMVMSG, break delivery to a live session, work station queues
 - [x] DSPOBJD basic list, full page two, and Add New Users (F6), from the PUB400 captures
 - [ ] Work list options still to build: 3 (copy, CRTDUPOBJ), WRKAUTL 2 (needs a capture from a profile that may edit a list); edit screen F10 and F11 (the real host did not answer F10, retry with a longer wait); DSPOBJD page three and option 8, creation dates for non-library objects; F4 prompting, F11, F16 and F17 positioning, F17 and F18 top and bottom on WRKOBJOWN; capture the real WRKAUTL delete confirm and the F6 Add new users screen
 - [ ] More object types (*DTAARA and *USRSPC next), *AUTL in the object table, generic names on RNMOBJ and CHGOBJD

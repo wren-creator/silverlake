@@ -136,3 +136,48 @@ def test_a_profiles_queue_goes_when_the_profile_does(store):
 def test_new_commands_are_objects_and_msgq_is_a_known_object_type(store):
     assert all(("QSYS", n, "*CMD") in store.objects for n in ("DSPMSG", "SNDMSG", "CLRMSGQ"))
     assert commands.execute(store, store.get("QSECOFR"), "DSPOBJAUT OBJ(QSYS/QSYSOPR) OBJTYPE(*MSGQ)").view
+
+
+def test_crtmsgq_makes_a_hold_queue_the_owner_can_use_and_a_second_try_is_refused(store):
+    assert _run(store, "QSECOFR", "CRTMSGQ MSGQ(QGPL/ALERTS) TEXT('Night shift')") == "Message queue ALERTS created in library QGPL."
+    q = store.objects[("QGPL", "ALERTS", "*MSGQ")]
+    assert (q.owner, q.text, q.data["dlvry"], q.data["sev"]) == ("QSECOFR", "Night shift", "*HOLD", "00")
+    assert _run(store, "QSECOFR", "CRTMSGQ MSGQ(QGPL/ALERTS)") == "Object ALERTS in QGPL type *MSGQ already exists."
+    assert _run(store, "QSECOFR", "CRTMSGQ MSGQ(NOLIB/X)") == "Library NOLIB not found."
+    assert "sent" in _run(store, "STUDENT", "SNDMSG MSG('hi') TOMSGQ(QGPL/ALERTS)")      # QGPL is public *CHANGE
+
+
+def test_crtmsgq_aut_sets_the_public_authority_and_a_library_without_add_refuses(store):
+    _run(store, "QSECOFR", "CRTMSGQ MSGQ(QGPL/QUIET) AUT(*EXCLUDE)")
+    assert _run(store, "STUDENT", "DSPMSG MSGQ(QGPL/QUIET)") == "Not authorized to message queue QUIET."
+    _run(store, "QSECOFR", "CRTLIB LIB(LOCKED) AUT(*USE)")
+    assert _run(store, "STUDENT", "CRTMSGQ MSGQ(LOCKED/X)") == "Not authorized to library LOCKED."
+
+
+def test_chgmsgq_changes_delivery_severity_and_text_and_needs_use_and_dlt(store):
+    _run(store, "QSECOFR", "CRTMSGQ MSGQ(QGPL/ALERTS)")
+    assert _run(store, "QSECOFR", "CHGMSGQ MSGQ(QGPL/ALERTS) DLVRY(*BREAK) SEV(40) TEXT('Pager')") == "Message queue ALERTS in QGPL changed."
+    q = store.objects[("QGPL", "ALERTS", "*MSGQ")]
+    assert (q.data["dlvry"], q.data["sev"], q.text) == ("*BREAK", "40", "Pager")
+    assert _run(store, "QSECOFR", "CHGMSGQ MSGQ(QGPL/ALERTS)") == "Give at least one attribute to change."
+    assert "not valid" in _run(store, "QSECOFR", "CHGMSGQ MSGQ(QGPL/ALERTS) SEV(100)")
+    _run(store, "QSECOFR", "GRTOBJAUT OBJ(QGPL/ALERTS) OBJTYPE(*MSGQ) USER(*PUBLIC) AUT(*USE)")
+    _run(store, "QSECOFR", "RVKOBJAUT OBJ(QGPL/ALERTS) OBJTYPE(*MSGQ) USER(*PUBLIC) AUT(*ALL)")
+    _run(store, "QSECOFR", "GRTOBJAUT OBJ(QGPL/ALERTS) OBJTYPE(*MSGQ) USER(*PUBLIC) AUT(*USE)")
+    assert _run(store, "STUDENT", "CHGMSGQ MSGQ(QGPL/ALERTS) DLVRY(*HOLD)") == "Not authorized to message queue ALERTS."
+
+
+def test_chgmsgq_usrprf_changes_your_own_queue(store):
+    _run(store, "STUDENT", "CHGMSGQ MSGQ(*USRPRF) DLVRY(*NOTIFY)")
+    assert store.objects[("QUSRSYS", "STUDENT", "*MSGQ")].data["dlvry"] == "*NOTIFY"
+
+
+def test_dltmsgq_needs_objexist_and_dlt_and_qsysopr_stays(store):
+    _run(store, "QSECOFR", "CRTMSGQ MSGQ(QGPL/ALERTS)")
+    assert "Not authorized" in _run(store, "STUDENT", "DLTMSGQ MSGQ(QGPL/ALERTS)")        # *CHANGE has no *OBJEXIST
+    assert ("QGPL", "ALERTS", "*MSGQ") in store.objects
+    assert "deleted" in _run(store, "QSECOFR", "DLTMSGQ MSGQ(QGPL/ALERTS)")
+    assert ("QGPL", "ALERTS", "*MSGQ") not in store.objects
+    assert ("QSYS", "QSYSOPR", "*MSGQ") in store.objects
+    _run(store, "QSECOFR", "DLTMSGQ MSGQ(QSYS/QSYSOPR)")
+    assert ("QSYS", "QSYSOPR", "*MSGQ") in store.objects

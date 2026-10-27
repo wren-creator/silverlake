@@ -88,6 +88,14 @@ DSPMSG_PARAMS = [Param("MSGQ", "msgqname", "*WRKUSR"), Param("OUTPUT", "output",
                  Param("START", "ignored", "*LAST"), Param("SEV", "ignored", "0"), Param("ASTLVL", "ignored", "*PRV")]
 SNDMSG_PARAMS = [Param("MSG", "msgtext", "", required=True), Param("TOMSGQ", "msgqs", "", 50), Param("TOUSR", "touser", ""),
                  Param("MSGTYPE", "msgtype", "*INFO"), Param("RPYMSGQ", "ignored", "*WRKSTN"), Param("CCSID", "ignored", "*JOB")]
+CRTMSGQ_PARAMS = [Param("MSGQ", "qname", "", required=True), Param("TEXT", "text", "*BLANK"),
+                  Param("FORCE", "ignored", "*NO"), Param("SIZE", "ignored", "3", 3), Param("AUT", "libaut", "*LIBCRTAUT"),
+                  Param("ALWALR", "ignored", "*NO"), Param("CCSID", "ignored", "*HEX"), Param("MSGQFULL", "ignored", "*SNDMSG")]
+CHGMSGQ_PARAMS = [Param("MSGQ", "msgqname", "", required=True), Param("DLVRY", "dlvry", SAME), Param("PGM", "ignored", SAME, 2),
+                  Param("SEV", "sevcode", SAME), Param("TEXT", "text", SAME), Param("RESET", "ignored", "*NO"),
+                  Param("FORCE", "ignored", SAME), Param("ALWALR", "ignored", SAME), Param("CCSID", "ignored", SAME),
+                  Param("MSGQFULL", "ignored", SAME)]
+DLTMSGQ_PARAMS = [Param("MSGQ", "qname", "", required=True)]
 CLRMSGQ_PARAMS = [Param("MSGQ", "msgqname", "", required=True), Param("CLEAR", "clearopt", "*ALL")]
 WRKSPLF_PARAMS = [Param("SELECT", "splsel", "*CURRENT", 6), Param("JOB", "jobq", "*ALL", 3),
                   Param("PERIOD", "ignored", "*AVAIL"), Param("ASPDEV", "ignored", "*"),
@@ -156,7 +164,7 @@ DSPOBJD_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "ob
                   Param("DETAIL", "detail", "*BASIC"), Param("ASPDEV", "ignored", "*"),
                   Param("OUTPUT", "output", "*")]
 DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU": ("MENU", "*MENU"),
-                   "DLTPGM": ("PGM", "*PGM")}
+                   "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ")}
 
 COMMANDS = {
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
@@ -168,7 +176,8 @@ COMMANDS = {
     "CRTAUTL": CRTAUTL_PARAMS, "DLTAUTL": DLTAUTL_PARAMS, "ADDAUTLE": ADDAUTLE_PARAMS,
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
-    "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
+    "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "CRTMSGQ": CRTMSGQ_PARAMS, "CHGMSGQ": CHGMSGQ_PARAMS,
+    "DLTMSGQ": DLTMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
     "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
@@ -296,6 +305,14 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
         return values[0][:512]
     if k == "msgtype":
         return _one(p.key, values, ("*INFO", "*INQ"))
+    if k == "dlvry":
+        return _one(p.key, values, (SAME, "*HOLD", "*BREAK", "*NOTIFY", "*DFT"))
+    if k == "sevcode":
+        if values == [SAME]:
+            return SAME
+        if len(values) != 1 or not values[0].isdigit() or int(values[0]) > 99:
+            raise BindError(f"Value for parameter {p.key} not valid. Use {SAME} or 0 to 99.")
+        return f"{int(values[0]):02d}"
     if k == "clearopt":
         return _one(p.key, values, ("*ALL", "*KEEPUNANS"))
     if k == "splsel":                       # SELECT(user device form userdata asp splfile): user and file only
@@ -538,6 +555,13 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         return Outcome(msgq.send(store, actor, session, b["MSG"], targets).message)
     if name == "CLRMSGQ":
         return Outcome(msgq.clear(store, actor, session, b["MSGQ"]).message)
+    if name == "CRTMSGQ":
+        return Outcome(msgq.create(store, actor, session, b["MSGQ"], b["TEXT"], b["AUT"]).message)
+    if name == "CHGMSGQ":
+        changes = {k: b[k] for k in ("DLVRY", "SEV", "TEXT") if b[k] != SAME}
+        if not changes:
+            return Outcome(messages.syntax("Give at least one attribute to change."))
+        return Outcome(msgq.change(store, actor, session, b["MSGQ"], changes).message)
     if name == "DSPJOBLOG":
         job, err = jobctl.display_log(store, actor, b["JOB"], session.job)
         return Outcome(err) if err else Outcome(view=("dspjoblog", job))

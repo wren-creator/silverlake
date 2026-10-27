@@ -1,4 +1,4 @@
-"""Message queues: DSPMSG, SNDMSG, CLRMSGQ.
+"""Message queues: DSPMSG, SNDMSG, CLRMSGQ, CRTMSGQ, CHGMSGQ, DLTMSGQ.
 
 A queue is a `*MSGQ` object, so its authority is the ordinary object authority and GRTOBJAUT,
 RVKOBJAUT and DSPOBJAUT work on it. Its messages live in the object's `data`. `QSYS/QSYSOPR` is
@@ -13,7 +13,13 @@ session, and inquiry messages and replies are not modeled.
 Rules, from IBM's 7.5 command pages:
   SNDMSG    *OBJOPR and *ADD to the queue, *USE to the queue and its library.
   CLRMSGQ   *CHANGE to the queue, *USE to the library. RMVMSG says the same for removing a message.
-  CRTMSGQ   a queue gets AUT(*LIBCRTAUT): the library's create authority.
+  CRTMSGQ   a queue gets AUT(*LIBCRTAUT): the library's create authority. The page has no
+            restrictions section; it only says users of the queue need *USE to its library.
+            *ADD to the library for the creator is inferred (IBM's general rule for adding an object).
+            A new queue is delivery *HOLD, severity 00, as the page says.
+  CHGMSGQ   *USE and *DLT to the queue. No library rule on the page. DLVRY, SEV, TEXT are modeled.
+  DLTMSGQ   *USE, *OBJEXIST and *DLT to the queue, *EXECUTE to the library. QSYSOPR cannot be
+            deleted. The delete itself is objlist.delete_object, shared with DLTF and the others.
 The DSPMSG page has no authority section at all and lists CPF2408, "Not authorized to message
 queue". Reading needing *USE is inferred, and fits the capture. That a user's own queue is created
 with the library's create authority, so that on a stock QUSRSYS (public *CHANGE here) anyone can
@@ -22,13 +28,14 @@ read and write anyone's queue, is also inferred."""
 from datetime import datetime
 
 from . import messages
-from .authority import Auth, SecuredObject, USE
-from .objects import Done, _no, _ok, locate
+from .authority import Auth, SecuredObject, SpecialAuthority as SA, USE
+from .objects import NAME, Done, _no, _ok, authority_to_library, locate
 from .profiles import Profile, ProfileStore
 
 USER_LIB = "QUSRSYS"
 SYSOPR = ("QSYS", "QSYSOPR", "*MSGQ")
 SEND_NEEDS = Auth.OBJOPR | Auth.ADD | USE
+CHGMSGQ_NEEDS = USE | Auth.DLT
 CHANGE_NEEDS = Auth.OBJOPR | Auth.READ | Auth.ADD | Auth.UPD | Auth.DLT | Auth.EXECUTE
 
 
@@ -40,6 +47,13 @@ def not_authorized(q: SecuredObject) -> messages.Message:
     return _doc("CPF2408", f"Not authorized to message queue {q.name}.")
 
 
+def _create_authority(store: ProfileStore, lib_name: str) -> Auth:
+    """What AUT(*LIBCRTAUT) gives a new queue. The library's own public authority stands in for its
+    create authority (inferred)."""
+    lib = store.find_library(lib_name)
+    return lib.public if lib is not None and lib.public is not None else Auth.NONE
+
+
 def user_queue(store: ProfileStore, name: str) -> SecuredObject | None:
     """A profile's own queue, made on first use. None if there is no such profile."""
     name = name.upper()
@@ -48,7 +62,7 @@ def user_queue(store: ProfileStore, name: str) -> SecuredObject | None:
     key = (USER_LIB, name, "*MSGQ")
     if key not in store.objects:
         lib = store.find_library(USER_LIB)
-        public = lib.public if lib is not None and lib.public is not None else Auth.NONE
+        public = _create_authority(store, USER_LIB)
         store.objects[key] = SecuredObject(
             name, name, public=public, library=USER_LIB, type="*MSGQ", text="User message queue",
             data={"dlvry": "*BREAK", "sev": "00", "userq": True, "messages": []})
@@ -118,3 +132,51 @@ def clear(store: ProfileStore, actor: Profile, session, spec: str) -> Done:
     messages_of(q).clear()
     store.on_change()
     return _ok(f"Message queue {q.name} in {q.library} cleared.")
+
+
+def create(store: ProfileStore, actor: Profile, session, spec: str, text: str, aut: Auth | None) -> Done:
+    lib_name, _, name = spec.upper().rpartition("/")
+    if lib_name in ("", "*CURLIB"):
+        lib_name = session.current_library or "QGPL"
+    if lib_name == "*LIBL":
+        return _no(messages.syntax("*LIBL is not valid for a new object, name the library."))
+    if not NAME.match(name):
+        return _no(messages.syntax(f"Object name {name} is not valid."))
+    lib = store.find_library(lib_name)
+    if lib is None:
+        return _no(_doc("CPF2402", f"Library {lib_name} not found."))
+    if SA.ALLOBJ not in store.special_authorities(actor) and Auth.ADD not in authority_to_library(store, actor, lib):
+        return _no(messages.not_authorized_to_library(lib_name))
+    if (lib_name, name, "*MSGQ") in store.objects:
+        return _no(_doc("CPF2112", f"Object {name} in {lib_name} type *MSGQ already exists."))
+    q = SecuredObject(
+        name, actor.name, public=_create_authority(store, lib_name) if aut is None else aut,
+        library=lib_name, type="*MSGQ", text=text,
+        data={"dlvry": "*HOLD", "sev": "00", "messages": [],
+              "created": datetime.now().isoformat(timespec="seconds")})
+    store.objects[q.key] = q
+    store.on_change()
+    return _ok(f"Message queue {name} created in library {lib_name}.")
+
+
+def change(store: ProfileStore, actor: Profile, session, spec: str, changes: dict) -> Done:
+    """CHGMSGQ: DLVRY, SEV and TEXT. `changes` holds only what was given."""
+    if spec.upper() in ("*SYSOPR", "*WRKUSR"):
+        return _no(messages.syntax(f"Value {spec} for parameter MSGQ not valid."))
+    q, err = resolve(store, actor, session, spec)
+    if err:
+        return _no(err)
+    if q is None:
+        return _no(messages.object_not_found("QSYSOPR", "QSYS", "*MSGQ"))
+    if CHGMSGQ_NEEDS & ~store.authority_to_object(actor, q):
+        return _no(not_authorized(q))
+    if changes.get("DLVRY") == "*DFT":
+        return _no(messages.syntax("DLVRY(*DFT) is not modeled."))
+    if "DLVRY" in changes:
+        q.data["dlvry"] = changes["DLVRY"]
+    if "SEV" in changes:
+        q.data["sev"] = changes["SEV"]
+    if "TEXT" in changes:
+        q.text = changes["TEXT"]
+    store.on_change()
+    return _ok(f"Message queue {q.name} in {q.library} changed.")
