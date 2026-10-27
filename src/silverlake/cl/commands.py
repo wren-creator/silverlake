@@ -112,6 +112,19 @@ RNMOBJ_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "obj
 CHGOBJD_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
                   Param("TEXT", "text", SAME), Param("USECOUNT", "ignored", "*NORESET")]
 
+DLTF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SYSTEM", "ignored", "*LCL"),
+               Param("RMVCST", "ignored", "*RESTRICT")]
+DLTCMD_PARAMS = [Param("CMD", "qname", "", required=True)]
+DLTMNU_PARAMS = [Param("MENU", "qname", "", required=True), Param("DLTREFOBJ", "ignored", "*NONE", 3)]
+DLTPGM_PARAMS = [Param("PGM", "qname", "", required=True)]
+EDTOBJAUT_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
+                    Param("ASPDEV", "ignored", "*")]
+DSPOBJD_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
+                  Param("DETAIL", "detail", "*BASIC"), Param("ASPDEV", "ignored", "*"),
+                  Param("OUTPUT", "output", "*")]
+DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU": ("MENU", "*MENU"),
+                   "DLTPGM": ("PGM", "*PGM")}
+
 COMMANDS = {
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
     "DLTUSRPRF": DLT_PARAMS, "WRKUSRPRF": WRK_PARAMS, "SIGNOFF": [],
@@ -123,6 +136,8 @@ COMMANDS = {
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
+    "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
+    "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS,
 }
 
 
@@ -226,6 +241,8 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
             if v not in SPECIAL_VALUES and v not in _DETAILED and v != "*AUTLMGT":
                 raise BindError(f"Value {v} for parameter AUT not valid.")
         return list(values)
+    if k == "detail":
+        return _one(p.key, values, ("*BASIC", "*FULL"))
     if k == "dsptype":
         return _one(p.key, values, ("*BASIC",))
     if k == "output":
@@ -475,6 +492,15 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
             return objlist.work_with_objects_by_owner(store, actor, b["USRPRF"], b["OBJTYPE"])[0]
         rows, err = objlist.work_with_objects_by_owner(store, actor, b["USRPRF"], b["OBJTYPE"])
         return _object_view(rows, err, ("owner", owner, again))
+    if name in DELETE_COMMANDS:
+        key, typ = DELETE_COMMANDS[name]
+        return Outcome(objlist.delete_object(store, actor, b[key], typ, session.search_order()).message)
+    if name == "EDTOBJAUT":
+        obj, err = objlist.edit_authority(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
+        return Outcome(err) if err else Outcome(view=("edtobjaut", obj))
+    if name == "DSPOBJD":
+        obj, err = objlist.describe_object(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
+        return Outcome(err) if err else Outcome(view=("dspobjd", obj, b["DETAIL"]))
     if name == "RNMOBJ":
         return Outcome(objlist.rename_object(store, actor, b["OBJ"], b["OBJTYPE"], b["NEWOBJ"],
                                              session.search_order()).message)

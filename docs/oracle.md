@@ -90,6 +90,16 @@ The same test profile ran the read-only `auth-objects` scenario (2026-10-27): `W
 - **Real displays have options Silverlake does not.** `WRKOBJ`: 2=Edit authority, 3=Copy, 4=Delete, 5=Display authority, 7=Rename, 8=Display description, 13=Change description, with an Opt column, columns Object, Type, Library, Attribute, Text, a 73 long command line at row 20, column 6, and keys F4, F5, F9, F11, F12, F16, F17. `WRKOBJOWN` adds 9=Change owner and shows Object, Library, Type, Attribute and Device. `WRKAUTL`: 1=Create, 2=Edit, 4=Delete, 5=Display, 8=Display objects in list, 9=Display documents/folders in list, 13=Change description, with a position-to row. The work lists now follow these layouts and the options that are cheap and safe to build (see docs/access-model.md for which); a `compare` against this capture matches the `WRKOBJ` fields exactly. The option field is monocase everywhere, one character at column 2 on `WRKOBJOWN`, and the command line is not monocase.
 - **Real `WRKOBJOWN` sorts and shows the profile at the top** (`User profile . . . :`), and the entries carry an `ASP` device column of `*SYSBAS`.
 
+## What the object option captures taught us
+
+One more write, approved on its own: the `auth-objopts` scenario (2026-10-27) made a throwaway data area in the job's own QTEMP, pressed 2, 8 and 4 on a list holding only that object, and deleted it. Nothing outside the job existed afterwards. `auth-edtautl` ran `EDTAUTL` on a list the profile does not own.
+
+- **Edit Object Authority is real and has a fixed layout.** Object, Owner, Library, Primary group, Object type and ASP device in the top block, the authorization list field at row 8, then User, Group and Authority columns from row 12 with `*PUBLIC` first and the owner next. A new QTEMP object got `*PUBLIC *EXCLUDE` and the owner `*ALL`. Keys F5, F6 (add new users), F10, F11, F12, F17 and F18. Silverlake's screen now matches field for field, except that F6, F10 and F11 are not built.
+- **Display Object Description - Full** has the Library n of n counter, the creation block, Created by user, System created on, and Object domain, and a second page ("More..."). Silverlake does not keep a creation date or time, so those stay blank.
+- **Confirm Delete of Objects** shows the rows marked 4 and two instruction lines. After F12 the 4 stays typed in the option field. After Enter the list reports "(Cannot find object to match specified name.)" and the message line says the object was deleted.
+- **EDTAUTL as a basic user** is refused with "Not authorized to change authorities." on the message line, with no screen.
+- "Bottom" and "More..." sit right aligned at column 73 and 72, which we had a few columns off.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

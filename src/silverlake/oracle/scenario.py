@@ -80,6 +80,41 @@ AUTHENTICATED["auth-crtlib"] = [
     {"fill": {"0": f"DLTLIB LIB({_TESTLIB})"}, "key": "ENTER"},
     {**_SIGNOFF, "always": True},
 ]
+# Captures the Edit Authority (2), Display Description (8) and Delete (4) screens of Work with
+# Objects. It makes one throwaway data area in QTEMP, which belongs to this job alone and is gone
+# at sign-off, with a fresh random name the environment cannot choose, so every option is pressed
+# on a list that holds only that object. Nothing here touches a library or an object that was
+# there before. Every step after the create is skipped unless the host said it was created, the
+# delete is only confirmed on a screen that shows the name and "confirm", and every exit key runs
+# whatever happened. Order matters: cancel the first delete, then do it for real.
+_QT = f"QTEMP/{_TESTLIB}"
+_MADE = [_TESTLIB, "created"]
+_LIST = {"proceed_if": [_TESTLIB]}
+
+
+def _optkey(opt: str, **extra) -> dict:
+    return {"fill": {"0": opt}, "key": "ENTER", **extra}
+
+
+AUTHENTICATED["auth-objopts"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTDTAARA DTAARA({_QT}) TYPE(*CHAR) LEN(10) TEXT('Silverlake oracle test, job-local')"},
+     "key": "ENTER", "proceed_if": _MADE},
+    {"fill": {"0": f"WRKOBJ OBJ({_QT}) OBJTYPE(*DTAARA)"}, "key": "ENTER", **_LIST},
+    _optkey("2", **_LIST), {"key": "F12", "always": True},        # Edit Object Authority, then back
+    _optkey("8", **_LIST), {"key": "F12", "always": True},        # Display Object Description
+    _optkey("4", proceed_if=[_TESTLIB, "confirm"]), {"key": "F12", "always": True},   # cancel the delete
+    _optkey("4", proceed_if=[_TESTLIB, "confirm"]),                # now confirm it, on our own object
+    {"key": "ENTER"},
+    *[{"key": "F12", "always": True}] * 2,
+    *[{"key": "F3", "always": True}] * 3,                          # harmless on the menu
+    {**_SIGNOFF, "always": True},
+]
+# An authorization list nobody here owns, looked at through the edit screen and left with F12.
+AUTHENTICATED["auth-edtautl"] = [
+    _SIGNON, {"fill": {"0": "EDTAUTL AUTL(QPWFSERVER)"}, "key": "ENTER"},
+    *[{"key": "F12", "always": True}] * 2, *[{"key": "F3", "always": True}] * 2, _SIGNOFF,
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

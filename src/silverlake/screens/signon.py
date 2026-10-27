@@ -18,12 +18,13 @@ column, the right hand block, and the copyright column are exact.
 from ..cl import commands
 from ..proto import datastream as ds
 from ..system import admin, menus, messages, objects, profiles
+from ..system.authority import ALL, CHANGE, EXCLUDE
 from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrklib_screen
-from .worklists import WorkList, objects_in_list_screen
+from .worklists import EditAuth, WorkList, confirm_delete_screen, dspobjd_screen, objects_in_list_screen
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -251,6 +252,11 @@ class SignonController:
             return ("work", WorkList("autls", spec[1], spec[2]))
         if kind == "wrkobj":
             return ("work", WorkList(spec[2], spec[1], spec[4], owner=spec[3] or ""))
+        if kind == "edtobjaut":
+            return ("edit", EditAuth(spec[1]))
+        if kind == "dspobjd":
+            obj, detail = spec[1], spec[2]
+            return ("plist", [obj], 0, lambda rows, page: dspobjd_screen(obj, detail, SYSTEM_NAME))
         if kind == "autlobjs":
             name = spec[1]
             return ("plist", spec[2], 0, lambda rows, page: objects_in_list_screen(name, rows, page))
@@ -263,6 +269,10 @@ class SignonController:
             return self.view[3](self.view[1], self.view[2])
         if self.view[0] == "work":
             return self.view[1].screen(message)
+        if self.view[0] == "edit":
+            return self.view[1].screen(message)
+        if self.view[0] == "confirm":
+            return confirm_delete_screen(self.view[2])
         return wrkusrprf_screen(self.view[1], self.view[2], message)
 
     def _in_view(self, aid: str, values: dict[str, str]) -> Screen:
@@ -276,6 +286,10 @@ class SignonController:
             return self._close_view()            # Enter, F3 and F12 all go back
         if kind == "work":
             return self._in_work(aid, values)
+        if kind == "edit":
+            return self._in_edit(aid, values)
+        if kind == "confirm":
+            return self._in_confirm(aid)
         if aid == "F3" or (kind == "wrk" and aid == "F12"):
             self.view = None
             return self._base()
@@ -335,6 +349,12 @@ class SignonController:
                 return self._draw_view("Option 1 needs a name for the new list." if new_opt == "1" or new_name
                                        else f"Option {new_opt} is not valid.")
             return self._work_exec(wl, f"CRTAUTL AUTL({new_name})")
+        deletes = [wl.rows[i] for i, opt in picks if opt == "4"]
+        if deletes and wl.kind in ("objects", "owner"):
+            wl.retained = {i: opt for i, opt in picks}
+            self.parents.append(self.view)
+            self.view = ("confirm", wl, deletes)
+            return self._draw_view()
         if picks:
             index, opt = picks[0]
             line, problem = self._work_option(wl, wl.rows[index], opt, param)
@@ -357,6 +377,10 @@ class SignonController:
             ref = f"OBJ({row.library}/{row.name}) OBJTYPE({row.type})"
             if opt == "5":
                 return f"DSPOBJAUT {ref}", ""
+            if opt == "2":
+                return f"EDTOBJAUT {ref}", ""
+            if opt == "8":
+                return f"DSPOBJD {ref} DETAIL(*FULL)", ""
             if opt == "7":
                 return (f"RNMOBJ {ref} NEWOBJ({param.split()[0]})", "") if param else \
                     (None, "Type the new name on the command line for option 7.")
@@ -390,3 +414,85 @@ class SignonController:
             return self._apply(outcome, line)
         wl.refresh()
         return self._draw_view(outcome.message.text if outcome.message else "")
+
+    # -- Confirm Delete of Objects and Edit Object Authority ------------------------------------------
+
+    DELETE_LINE = {"*LIB": "DLTLIB LIB({name})", "*FILE": "DLTF FILE({lib}/{name})",
+                   "*CMD": "DLTCMD CMD({lib}/{name})", "*MENU": "DLTMNU MENU({lib}/{name})",
+                   "*PGM": "DLTPGM PGM({lib}/{name})"}
+
+    def _in_confirm(self, aid: str) -> Screen:
+        """F12 returns to the list with the options still typed. Enter deletes."""
+        wl: WorkList = self.view[1]
+        picks = self.view[2]
+        self.view = self.parents.pop()
+        if aid != "ENTER":
+            return self._draw_view()
+        wl.retained = {}
+        done, last = 0, ""
+        for obj in picks:
+            line = self.DELETE_LINE[obj.type].format(name=obj.name, lib=obj.library)
+            outcome = commands.execute(self.store, self.profile, line, self.session)
+            text = outcome.message.text if outcome.message else ""
+            if text.endswith("deleted."):
+                done += 1
+            last = text
+        wl.refresh()
+        message = last if len(picks) == 1 else (f"{done} objects deleted." + (f" {last}" if done < len(picks) else ""))
+        return self._draw_view(message)
+
+    def _in_edit(self, aid: str, values: dict[str, str]) -> Screen:
+        ea: EditAuth = self.view[1]
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid == "F12":
+            return self._close_view()
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            ea.page += 1 if aid == "ROLLUP" else -1
+            return self._draw_view()
+        if aid in ("F6", "F10", "F11"):
+            return self._draw_view(f"{aid} is not available in Silverlake yet.")
+        if aid == "F5":
+            return self._draw_view()
+        return self._draw_view(self._apply_edits(ea, values))
+
+    def _apply_edits(self, ea: EditAuth, values: dict[str, str]) -> str:
+        """Apply what was typed over the authorities, one change at a time through the same
+        rules GRTOBJAUT and RVKOBJAUT use. Blank removes a user, which is our reading: the
+        command page says nothing about it. The first refusal stops the rest."""
+        obj, store, who = ea.obj, self.store, self.profile
+        ref = f"{obj.library}/{obj.name}"
+        changed = False
+        for i, (user, current) in enumerate(ea.shown()):
+            if f"auth{i}" not in values:
+                continue
+            typed = values[f"auth{i}"].strip().upper()
+            if typed == current:
+                continue
+            if not typed:
+                if user in ("*PUBLIC", obj.owner):
+                    continue
+                done = objects.revoke(store, who, ref, obj.type, self.session, [user], ALL, "*NONE")
+            else:
+                try:
+                    aut = commands.resolve_aut([typed])
+                except ValueError:
+                    return f"Authority {typed} is not valid."
+                if isinstance(aut, messages.Message):
+                    return aut.text
+                done = objects.grant(store, who, ref, obj.type, self.session, [user], aut, "*NONE", True)
+            if not done.ok:
+                return done.message.text
+            changed = True
+        typed = values.get("autl", "").strip().upper()
+        if typed and typed != (obj.autl or "*NONE"):
+            if typed == "*NONE":
+                done = objects.revoke(store, who, ref, obj.type, self.session, [], EXCLUDE, obj.autl or "*NONE")
+            else:
+                done = objects.grant(store, who, ref, obj.type, self.session, [], CHANGE, typed, False)
+            if not done.ok:
+                return done.message.text
+            changed = True
+        return "Authorities changed." if changed else ""

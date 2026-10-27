@@ -7,7 +7,7 @@ from silverlake.screens.model import Text
 from silverlake.screens.render import render
 from silverlake.screens.signon import SignonController
 from silverlake.system import profiles
-from silverlake.system.authority import Auth
+from silverlake.system.authority import CHANGE, Auth
 
 
 @pytest.fixture
@@ -224,7 +224,7 @@ def test_wrkobjown_option_9_changes_the_owner(store):
 def test_unbuilt_options_say_so_and_bad_ones_are_invalid(store):
     c = _signed(store)
     c.handle("ENTER", {"command": "wrkobj applib/*all *file"})
-    assert "Option 4 is not available" in " | ".join(f.text for f in c.handle("ENTER", {"opt0": "4"}).fields if isinstance(f, Text))
+    assert "Option 3 is not available" in " | ".join(f.text for f in c.handle("ENTER", {"opt0": "3"}).fields if isinstance(f, Text))
     assert "Option 6 is not valid" in " | ".join(f.text for f in c.handle("ENTER", {"opt0": "6"}).fields if isinstance(f, Text))
 
 
@@ -263,3 +263,160 @@ def test_paging_and_f3_on_a_work_list(store):
     c.handle("ROLLDOWN", {})
     assert c.view[1].page == 0
     assert "Main Menu" in " | ".join(f.text for f in c.handle("F3", {}).fields if isinstance(f, Text))
+
+
+# -- delete, edit authority and description, shaped by the PUB400 capture -----------------------------------
+
+def _text(screen):
+    return " | ".join(f.text for f in screen.fields if isinstance(f, Text))
+
+
+def _make(store, user="QSECOFR"):
+    run(store, user, "CRTLIB LIB(SCRATCH2)")
+    store.objects[("SCRATCH2", "OLDFILE", "*FILE")] = type(store.objects[("APPLIB", "PAYROLL", "*FILE")])(
+        "OLDFILE", user, library="SCRATCH2", type="*FILE", text="Scratch file")
+
+
+def test_option_4_asks_first_and_f12_keeps_the_options_typed(store):
+    _make(store)
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj scratch2/*all *file"})
+    s = c.handle("ENTER", {"opt0": "4"})
+    f = _field_map(s)
+    assert f[(0, 27)].text == "Confirm Delete of Objects" and f[(2, 1)].text == "Press Enter to confirm your choices for 4=Delete."
+    assert (f[(6, 1)].text, f[(6, 6)].text, f[(6, 18)].text, f[(6, 28)].text) == ("4", "OLDFILE", "*FILE", "SCRATCH2")
+    assert f[(21, 31)].text == "F12=Cancel" and f[(20, 73)].text == "Bottom"
+    s = c.handle("F12", {})
+    assert ("SCRATCH2", "OLDFILE", "*FILE") in store.objects                      # nothing deleted
+    assert next(i for i in s.inputs() if i.name == "opt0").value == "4"           # the 4 is still typed
+
+
+def test_enter_on_the_confirm_deletes_and_the_empty_list_says_so(store):
+    _make(store)
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj scratch2/*all *file"})
+    c.handle("ENTER", {"opt0": "4"})
+    s = c.handle("ENTER", {})
+    f = _field_map(s)
+    assert ("SCRATCH2", "OLDFILE", "*FILE") not in store.objects
+    assert f[(8, 3)].text == "(Cannot find object to match specified name.)"
+    assert "Object OLDFILE in SCRATCH2 type *FILE deleted." in _text(s)
+    assert {(i.row, i.col) for i in s.inputs()} == {(20, 6)}                       # only the command line is left
+
+
+def test_delete_follows_the_page_rules(store):
+    _make(store)
+    assert "CPF2189" in run(store, "STUDENT", "DLTF SCRATCH2/OLDFILE")
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(SCRATCH2/OLDFILE) OBJTYPE(*FILE) USER(STUDENT) AUT(*OBJEXIST)")
+    assert "CPF2189" in run(store, "STUDENT", "DLTF SCRATCH2/OLDFILE")             # *OBJOPR is needed as well
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(SCRATCH2/OLDFILE) OBJTYPE(*FILE) USER(STUDENT) AUT(*OBJOPR)")
+    run(store, "QSECOFR", "RVKOBJAUT OBJ(SCRATCH2) OBJTYPE(*LIB) USER(*PUBLIC) AUT(*EXECUTE)")
+    assert "CPF2216" in run(store, "STUDENT", "DLTF SCRATCH2/OLDFILE")             # cannot reach it without the library
+    assert "deleted" in run(store, "QSECOFR", "DLTF SCRATCH2/OLDFILE")
+    assert "CPF2208" in run(store, "QSECOFR", "DLTF SCRATCH2/OLDFILE")
+    assert "CPF9876" in run(store, "QSECOFR", "DLTCMD QSYS/CRTLIB")                # system library contents
+    assert "CPF2189" in run(store, "STUDENT", "DLTMNU APPLIB/APPMENU")
+    assert "deleted" in run(store, "QSECOFR", "DLTMNU APPLIB/APPMENU")
+    assert "CPF2208" in run(store, "QSECOFR", "DLTPGM QSYS2/NOPE")
+
+
+def test_deleting_a_library_from_the_list_uses_dltlib(store):
+    run(store, "QSECOFR", "CRTLIB LIB(GONE)")
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj qsys/gone *lib"})
+    c.handle("ENTER", {"opt0": "4"})
+    s = c.handle("ENTER", {})
+    assert store.find_library("GONE") is None and "Library GONE deleted." in _text(s)
+
+
+def test_several_options_confirm_together_and_a_refusal_is_reported(store):
+    _make(store)
+    store.objects[("SCRATCH2", "KEEP", "*FILE")] = type(store.objects[("APPLIB", "PAYROLL", "*FILE")])(
+        "KEEP", "QSECOFR", library="SCRATCH2", type="*FILE")
+    c = _signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "wrkobj scratch2/*all *file"})
+    s = c.handle("ENTER", {"opt0": "4", "opt1": "4"})
+    assert _field_map(s)[(7, 6)].text in ("KEEP", "OLDFILE") and (6, 6) in _field_map(s)
+    s = c.handle("ENTER", {})
+    assert "2 objects deleted." in _text(s)
+
+
+def test_option_2_opens_edit_authority_in_the_captured_layout(store):
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj applib/payroll *file"})
+    s = c.handle("ENTER", {"opt0": "2"})
+    f = _field_map(s)
+    assert f[(0, 29)].text == "Edit Object Authority" and f[(2, 26)].text == "PAYROLL" and f[(4, 26)].text == "*FILE"
+    assert f[(8, 3)].text.startswith("Object secured by authorization list")
+    ins = {(i.row, i.col): i for i in s.inputs()}
+    assert ins[(8, 67)].value == "PAYAUTL" and ins[(8, 67)].length == 10
+    assert ins[(12, 25)].length == 8 and f[(12, 1)].text == "*PUBLIC" and ins[(12, 25)].value == "*AUTL"
+    assert f[(13, 1)].text == "QSECOFR" and ins[(13, 25)].value == "*ALL"
+    assert f[(21, 24)].text == "F6=Add new users" and f[(22, 43)].text == "F12=Cancel"
+    s = c.handle("F12", {})
+    assert "Work with Objects" in _text(s)
+
+
+def test_edit_authority_applies_what_is_typed_and_blank_removes_a_user(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*USE)")
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj applib/customers *file"})
+    s = c.handle("ENTER", {"opt0": "2"})
+    rows = [r for r, _ in c.view[1].rows()]
+    i = rows.index("STUDENT")
+    s = c.handle("ENTER", {f"auth{i}": "*change"})
+    assert store.objects[("APPLIB", "CUSTOMERS", "*FILE")].private["STUDENT"] == CHANGE
+    assert "Authorities changed." in _text(s)
+    c.handle("ENTER", {f"auth{i}": ""})
+    assert "STUDENT" not in store.objects[("APPLIB", "CUSTOMERS", "*FILE")].private
+    s = c.handle("ENTER", {"auth0": "*bogus"})
+    assert "not valid" in _text(s)
+    s = c.handle("ENTER", {"autl": "payautl"})
+    assert store.objects[("APPLIB", "CUSTOMERS", "*FILE")].autl == "PAYAUTL"
+    c.handle("ENTER", {"autl": "*none"})
+    assert store.objects[("APPLIB", "CUSTOMERS", "*FILE")].autl is None
+
+
+def test_edit_authority_is_refused_without_object_management_in_the_captured_words(store):
+    assert run(store, "STUDENT", "EDTOBJAUT APPLIB/CUSTOMERS *FILE") == "CPF22B8 - Not authorized to change authorities."
+    c = _signed(store, "STUDENT")
+    s = c.handle("ENTER", {"command": "edtobjaut applib/customers *file"})
+    assert "Not authorized to change authorities." in _text(s) and "CPF" not in _text(s)
+
+
+def test_a_user_with_objmgt_can_edit_but_cannot_hand_out_objmgt(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*OBJMGT *OBJOPR)")
+    obj = store.objects[("APPLIB", "CUSTOMERS", "*FILE")]
+    before = obj.public
+    c = _signed(store, "STUDENT")
+    c.handle("ENTER", {"command": "edtobjaut applib/customers *file"})
+    assert c.view[0] == "edit"
+    s = c.handle("ENTER", {"auth0": "*all"})                      # *ALL includes *OBJMGT, owner and *ALLOBJ only
+    assert "Not authorized to give authority" in _text(s) and obj.public == before
+    s = c.handle("ENTER", {"auth0": "*exclude"})                  # taking authority away is fine
+    assert "Authorities changed." in _text(s) and obj.public == Auth.NONE
+
+
+def test_option_8_shows_the_description_in_the_captured_layout(store):
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj applib/payroll *file"})
+    s = c.handle("ENTER", {"opt0": "8"})
+    f = _field_map(s)
+    assert f[(0, 23)].text == "Display Object Description - Full" and f[(2, 26)].text == "PAYROLL"
+    assert f[(3, 28)].text == "APPLIB" and f[(3, 67)].text == "QSECOFR" and f[(5, 26)].text == "*FILE"
+    assert f[(13, 44)].text == "QSECOFR" and f[(14, 44)].text == "SILVERLK" and f[(15, 44)].text == "*SYSTEM"
+    assert f[(20, 1)].text == "Press Enter to continue."
+    assert "Work with Objects" in _text(c.handle("ENTER", {}))
+
+
+def test_dspobjd_command_and_its_rules(store):
+    out = execute(store, store.get("QSECOFR"), "DSPOBJD OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE) DETAIL(*FULL)")
+    assert out.view[0] == "dspobjd" and out.view[2] == "*FULL"
+    assert "CPF2189" in run(store, "STUDENT", "DSPOBJD APPLIB/PAYROLL *FILE")
+    assert "CPF2208" in run(store, "QSECOFR", "DSPOBJD APPLIB/NOPE *FILE")
+    assert execute(store, store.get("STUDENT"), "DSPOBJD APPLIB/CUSTOMERS *FILE").view[2] == "*BASIC"
+
+
+def test_the_new_commands_are_objects_a_site_can_lock(store):
+    for name in ("DLTF", "DLTCMD", "DLTMNU", "DLTPGM", "EDTOBJAUT", "DSPOBJD"):
+        assert ("QSYS", name, "*CMD") in store.objects

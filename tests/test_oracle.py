@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name == "auth-crtlib":
+        if name in ("auth-crtlib", "auth-objopts", "auth-edtautl"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "SIGNOFF") for c in _fills(name)), name
 
@@ -372,6 +372,41 @@ def test_the_one_scenario_that_changes_the_host_touches_only_its_own_library():
     create = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("CRTLIB"))
     delete = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("DLTLIB"))
     assert actions[create]["proceed_if"] and create < delete                  # delete is gated on the create
+
+
+def test_the_option_scenario_only_ever_touches_its_own_job_local_data_area():
+    actions = scenario.SCENARIOS["auth-objopts"]
+    commands = [a["fill"]["0"] for a in actions[1:] if "fill" in a and a["fill"]["0"] not in ("2", "4", "8")]
+    assert [c.split()[0] for c in commands] == ["CRTDTAARA", "WRKOBJ", "SIGNOFF"]
+    assert all("QTEMP/${SILVERLAKE_ORACLE_TESTLIB}" in c for c in commands[:2])      # QTEMP, random name
+    assert {a["fill"]["0"] for a in actions if a.get("fill", {}).get("0") in ("2", "4", "8")} == {"2", "4", "8"}
+    assert actions[1]["proceed_if"] == ["${SILVERLAKE_ORACLE_TESTLIB}", "created"]   # the create is gated
+    assert actions[-1].get("always") and actions[-1]["fill"] == {"0": "SIGNOFF"}
+    assert all(a.get("always") for a in actions[2:-1] if a["key"] in ("F12", "F3"))
+    assert not any(a["key"] == "ENTER" and not a.get("fill") and a.get("always") for a in actions)
+    deletes = [a for a in actions if a.get("fill", {}).get("0") == "4"]
+    assert len(deletes) == 2 and all("confirm" in a["proceed_if"] for a in deletes)   # only on a confirm screen
+
+
+def test_edtautl_scenario_only_looks_and_backs_out():
+    keys = [(a["key"], a.get("fill", {}).get("0")) for a in scenario.SCENARIOS["auth-edtautl"][1:]]
+    assert keys[0] == ("ENTER", "EDTAUTL AUTL(QPWFSERVER)")
+    assert all(k in ("F12", "F3") or fill == "SIGNOFF" for k, fill in keys[1:])      # never Enter, never a change
+
+
+def test_if_the_data_area_cannot_be_created_nothing_else_is_pressed(monkeypatch):
+    from silverlake.system import profiles
+    store = profiles.load()
+    sent = []
+    real = scenario.Client.send_aid
+    monkeypatch.setattr(scenario.Client, "send_aid",
+                        lambda self, key, fill=None: (sent.append((key, dict(fill or {}))), real(self, key, fill))[1])
+    cap = _run_shared("auth-objopts", monkeypatch, store)      # local Silverlake has no CRTDTAARA
+    fills = [f.get(0, "") for _, f in sent]
+    assert fills[1].startswith("CRTDTAARA")
+    assert not any(f in ("2", "4", "8") or f.startswith("WRKOBJ") for f in fills)
+    assert fills[-1] == "SIGNOFF" and cap["skipped_actions"]
+    assert "Sign On" in " ".join(r["text"] for r in cap["snapshots"][-1]["runs"])
 
 
 def _run_shared(name, monkeypatch, store, extra_env=None):

@@ -267,6 +267,10 @@ def system_library_name(name: str) -> Message:
     return _doc("CPF2166", f"Library name {name} not valid.")
 
 
+def not_authorized_to_change_authorities() -> Message:
+    return _doc("CPF22B8", "Not authorized to change authorities.")
+
+
 def autl_not_found(name: str) -> Message:
     return _doc("CPF2283", f"Authorization list {name} does not exist.")
 
