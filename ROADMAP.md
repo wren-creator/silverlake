@@ -65,7 +65,7 @@
 
 ## Needs verification on a real system
 
-- [ ] RPG runner: that a function key a display file never named is refused with a message (Silverlake says "Function key not allowed."), whether adopted authority passes special authorities (read IBM's page, then test with a program owned by a profile that holds the authority), how a program sees a failed QCMDEXC (Silverlake ends it with the command's message), what a compile error listing looks like, and whether CALL needs *USE or *EXECUTE, and the wording of a refusal to open a file (Silverlake reuses the not-authorized-to-object text; a real job says something else) (writes, human decision)
+- [ ] RPG runner: that a function key a display file never named is refused with a message (Silverlake says "Function key not allowed."), whether adopted authority passes special authorities (read IBM's page, then test with a program owned by a profile that holds the authority), how a program sees a failed QCMDEXC (Silverlake ends it with the command's message), what a compile error listing looks like, and whether CALL needs *USE or *EXECUTE, whether adding to an output queue needs *READ to it (inferred), and the wording of a refusal to open a file (Silverlake reuses the not-authorized-to-object text; a real job says something else) (writes, human decision)
 
 Things Silverlake does from IBM's pages, memory or inference and has not seen on a real IBM i. Tick one when it has been checked, and fix the docs if the real system disagrees. "Write" means it changes something on a shared system, so it needs a human decision and fresh approval first (PUB400 rules: read only, human paced).
 
