@@ -15,9 +15,11 @@ Label columns are read off a photo and good to about one column. The field
 column, the right hand block, and the copyright column are exact.
 """
 
+from dataclasses import dataclass
+
 from ..cl import commands
 from ..proto import datastream as ds
-from ..system import admin, menus, messages, objects, profiles
+from ..system import admin, autls, menus, messages, objects, profiles
 from ..system.authority import ALL, CHANGE, EXCLUDE
 from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
@@ -78,6 +80,22 @@ def signon_screen(display: str, message: str = "", user: str = "") -> Screen:
     else:
         rows.append(Text(23, 39, "SILVERLAKE SIMULATION. NOT IBM.", ds.ATTR_WHITE))
     return Screen(rows, cursor="user")
+
+
+@dataclass
+class _AutlRow:
+    """An authorization list, shaped like an object row so the confirm screen can show it."""
+    autl: object
+    type: str = "*AUTL"
+    library: str = "QSYS"
+
+    @property
+    def name(self) -> str:
+        return self.autl.name
+
+    @property
+    def text(self) -> str:
+        return self.autl.text
 
 
 class SignonController:
@@ -349,8 +367,8 @@ class SignonController:
                 return self._draw_view("Option 1 needs a name for the new list." if new_opt == "1" or new_name
                                        else f"Option {new_opt} is not valid.")
             return self._work_exec(wl, f"CRTAUTL AUTL({new_name})")
-        deletes = [wl.rows[i] for i, opt in picks if opt == "4"]
-        if deletes and wl.kind in ("objects", "owner"):
+        deletes = [wl.rows[i] if wl.kind != "autls" else _AutlRow(wl.rows[i]) for i, opt in picks if opt == "4"]
+        if deletes and wl.kind in ("objects", "owner", "autls"):
             wl.retained = {i: opt for i, opt in picks}
             self.parents.append(self.view)
             self.view = ("confirm", wl, deletes)
@@ -373,6 +391,10 @@ class SignonController:
                 return f"DSPAUTL AUTL({row.name})", ""
             if opt == "8":
                 return f"@AUTLOBJS {row.name}", ""
+            if opt == "13":
+                return f"@AUTLTEXT {row.name} {param}", ""
+            if opt == "9":
+                return None, "No documents or folders are secured by the list."
         else:
             ref = f"OBJ({row.library}/{row.name}) OBJTYPE({row.type})"
             if opt == "5":
@@ -394,6 +416,12 @@ class SignonController:
         return None, f"Option {opt} is not valid."
 
     def _work_exec(self, wl: WorkList, line: str) -> Screen:
+        if line.startswith("@AUTLTEXT "):                       # option 13: change the list's text
+            _, name, text = (line.split(None, 2) + [""])[:3]
+            wl.retained = {}
+            done = autls.change_text(self.store, self.profile, name, text)
+            wl.refresh()
+            return self._draw_view(done.message.text)
         if line.startswith("@AUTLOBJS "):                       # option 8: objects the list secures
             name = line.split()[1]
             cmd = self.store.objects.get(("QSYS", "DSPAUTL", "*CMD"))
@@ -419,7 +447,7 @@ class SignonController:
 
     DELETE_LINE = {"*LIB": "DLTLIB LIB({name})", "*FILE": "DLTF FILE({lib}/{name})",
                    "*CMD": "DLTCMD CMD({lib}/{name})", "*MENU": "DLTMNU MENU({lib}/{name})",
-                   "*PGM": "DLTPGM PGM({lib}/{name})"}
+                   "*PGM": "DLTPGM PGM({lib}/{name})", "*AUTL": "DLTAUTL AUTL({name})"}
 
     def _in_confirm(self, aid: str) -> Screen:
         """F12 returns to the list with the options still typed. Enter deletes."""

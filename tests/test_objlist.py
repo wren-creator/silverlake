@@ -420,3 +420,60 @@ def test_dspobjd_command_and_its_rules(store):
 def test_the_new_commands_are_objects_a_site_can_lock(store):
     for name in ("DLTF", "DLTCMD", "DLTMNU", "DLTPGM", "EDTOBJAUT", "DSPOBJD"):
         assert ("QSYS", name, "*CMD") in store.objects
+
+
+# -- WRKAUTL 4, 13, 9 and creation dates -----------------------------------------------------------------------
+
+def _text(s):
+    return " | ".join(f.text for f in s.fields if isinstance(f, Text))
+
+
+def test_wrkautl_option_4_confirms_then_deletes(store):
+    run(store, "QSECOFR", "CRTAUTL GONER TEXT('about to go')")
+    c = _signed(store)
+    s = c.handle("ENTER", {"command": "wrkautl goner"})
+    s = c.handle("ENTER", {"opt0": "4"})
+    f = _field_map(s)
+    assert f[(0, 27)].text == "Confirm Delete of Objects" and (f[(6, 6)].text, f[(6, 18)].text) == ("GONER", "*AUTL")
+    s = c.handle("F12", {})
+    assert "GONER" in store.autls and next(i for i in s.inputs() if i.name == "opt0").value == "4"
+    c.handle("ENTER", {"opt0": "4"})
+    s = c.handle("ENTER", {})
+    assert "GONER" not in store.autls and "deleted" in _text(s)
+
+
+def test_wrkautl_option_4_refused_when_the_list_secures_an_object(store):
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkautl payautl"})
+    c.handle("ENTER", {"opt0": "4"})
+    s = c.handle("ENTER", {})
+    assert "PAYAUTL" in store.autls and "cannot be deleted" in _text(s)
+
+
+def test_wrkautl_option_13_changes_text_for_the_owner_only(store):
+    run(store, "QSECOFR", "CRTAUTL MINE TEXT('old')")
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkautl mine"})
+    s = c.handle("ENTER", {"opt0": "13", "command": "new words"})
+    assert store.autls["MINE"].text == "new words" and "changed" in _text(s)
+    other = _signed(store, "DEVADMIN") if "DEVADMIN" in store.profiles else None
+    if other:
+        other.handle("ENTER", {"command": "wrkautl mine"})
+        other.handle("ENTER", {"opt0": "13", "command": "hijack"})
+        assert store.autls["MINE"].text == "new words"
+
+
+def test_wrkautl_option_9_says_there_are_no_documents(store):
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkautl"})
+    assert "No documents or folders" in _text(c.handle("ENTER", {"opt0": "9"}))
+
+
+def test_a_library_made_here_remembers_when_and_the_description_shows_it(store):
+    run(store, "QSECOFR", "CRTLIB NEWLIB")
+    lib = store.objects[("QSYS", "NEWLIB", "*LIB")]
+    assert lib.data["created"]
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj qsys/newlib *lib"})
+    f = _field_map(c.handle("ENTER", {"opt0": "8"}))
+    assert (12, 44) in f and f[(12, 44)].text[2] == "-"

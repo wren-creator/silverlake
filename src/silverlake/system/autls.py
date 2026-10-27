@@ -97,6 +97,18 @@ def delete(store: ProfileStore, actor: Profile, name: str) -> Done:
     return _ok(f"Authorization list {autl.name} deleted.")
 
 
+def change_text(store: ProfileStore, actor: Profile, name: str, text: str) -> Done:
+    """Option 13 on WRKAUTL. The page for it was not read, so the owner or *ALLOBJ is our reading."""
+    autl = store.autls.get(name.upper())
+    if autl is None:
+        return _no(messages.autl_object_not_found(name.upper()))
+    if not _full(store, actor, autl):
+        return _no(messages.not_authorized_to_autl_object(autl.name))
+    autl.text = text
+    store.on_change()
+    return _ok(f"Text of authorization list {autl.name} changed.")
+
+
 def _entry_command(store: ProfileStore, actor: Profile, name: str, users: list[str], aut: Auth | None,
                    mode: str) -> Done:
     """ADDAUTLE (mode "adding"), CHGAUTLE ("changing") and RMVAUTLE ("removing") share their checks."""

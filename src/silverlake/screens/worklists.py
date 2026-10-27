@@ -6,6 +6,7 @@ do is ours; their numbers and labels, and every position, are from the capture.
 Each list is a WorkList. The controller owns paging and option handling."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Callable
 
 from ..proto import datastream as ds
@@ -248,7 +249,7 @@ class EditAuth:
 
 def dspobjd_screen(obj, detail: str, system_name: str) -> Screen:
     """Display Object Description, laid out like the real *FULL display (captured). The creation
-    date and time are not kept, so they stay blank. The real display has a second page (More...)
+    date and time are kept for libraries made here (CRTLIB), and blank for the seed. The real display has a second page (More...)
     that was not captured, and the *BASIC display was not captured at all."""
     word = "Full" if detail == "*FULL" else "Basic"
     title = f"Display Object Description - {word}"
@@ -277,4 +278,7 @@ def dspobjd_screen(obj, detail: str, system_name: str) -> Screen:
     ]
     if obj.text:
         rows.append(Text(9, 44, obj.text[:36], ds.ATTR_WHITE))
+    made = (obj.data or {}).get("created")
+    if made:
+        rows.append(Text(12, 44, datetime.fromisoformat(made).strftime("%y-%m-%d  %H:%M:%S"), ds.ATTR_WHITE))
     return Screen(rows)

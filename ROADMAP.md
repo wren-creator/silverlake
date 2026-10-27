@@ -21,7 +21,8 @@
 - [x] Phase 3c-3b: WRKOBJ, WRKOBJOWN, CHGOBJOWN
 - [x] Work list options and layouts from the PUB400 capture: WRKOBJ 5, 7, 13, WRKOBJOWN 5, 7, 9, WRKAUTL 1, 5, 8, plus RNMOBJ and CHGOBJD
 - [x] Work list options 2 (EDTOBJAUT edit screen), 4 (delete with confirm: DLTF, DLTCMD, DLTMNU, DLTPGM, DLTLIB) and 8 (DSPOBJD) on WRKOBJ and WRKOBJOWN, from the PUB400 captures
-- [ ] Work list options still to build: 3 (copy), WRKAUTL 2, 4, 9, 13; edit screen F6, F10 and F11; DSPOBJD *BASIC layout, page two and creation date tracking; F4 prompting, F11, F16 and F17 positioning, F17 and F18 top and bottom on WRKOBJOWN; capture the real WRKAUTL delete confirm and the F6 Add new users screen
+- [x] WRKAUTL 4 (confirm, DLTAUTL), 9 and 13, and creation dates on libraries made with CRTLIB
+- [ ] Work list options still to build: 3 (copy, CRTDUPOBJ), WRKAUTL 2 (needs a capture from a profile that may edit a list); edit screen F6, F10 and F11 (need captures); DSPOBJD *BASIC layout and page two (need captures), creation dates for non-library objects; F4 prompting, F11, F16 and F17 positioning, F17 and F18 top and bottom on WRKOBJOWN; capture the real WRKAUTL delete confirm and the F6 Add new users screen
 - [ ] More object types, *AUTL in the object table, DSPOBJD, generic names on RNMOBJ and CHGOBJD
 - [ ] Phase 3c-3c: jobs, spool and messages (WRKACTJOB, WRKSPLF, DSPMSG)
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)

@@ -19,6 +19,7 @@ enter looks like "not authorized" and one that is not there looks like "not
 found" (a real enumeration leak, kept on purpose), and what revoking from an
 authorization list does to *PUBLIC."""
 
+from datetime import datetime
 import re
 from dataclasses import dataclass
 
@@ -112,7 +113,8 @@ def create_library(store: ProfileStore, actor: Profile, name: str, text: str, au
     if store.find_library(name):
         return _no(messages.library_exists(name))
     lib = SecuredObject(name, actor.name, public=LIBCRTAUT if aut is None else aut,
-                        library="QSYS", type="*LIB", text=text)
+                        library="QSYS", type="*LIB", text=text,
+                        data={"created": datetime.now().isoformat(timespec="seconds")})
     store.objects[lib.key] = lib
     store.on_change()
     return _ok(f"Library {name} created.")
