@@ -477,3 +477,61 @@ def test_a_library_made_here_remembers_when_and_the_description_shows_it(store):
     c.handle("ENTER", {"command": "wrkobj qsys/newlib *lib"})
     f = _field_map(c.handle("ENTER", {"opt0": "8"}))
     assert (12, 44) in f and f[(12, 44)].text[2] == "-"
+
+
+# -- DSPOBJD basic and page two, and Add New Users (F6) -------------------------------------------------------
+
+def _inputs(s):
+    return {i.name: i for i in s.inputs()}
+
+
+def test_dspobjd_basic_is_a_list_with_options_5_and_8(store):
+    run(store, "QSECOFR", "CRTLIB SHOWME TEXT('look at me')")
+    c = _signed(store)
+    c.handle("ENTER", {"command": "dspobjd obj(qsys/showme) objtype(*lib) detail(*basic)"})
+    s = c._draw_view()
+    f = _field_map(s)
+    assert f[(0, 23)].text == "Display Object Description - Basic" and f[(9, 6)].text == "SHOWME"
+    assert (_inputs(s)["opt0"].row, _inputs(s)["opt0"].col, _inputs(s)["opt0"].length) == (9, 2, 1)
+    assert "not available" in _text(c.handle("ENTER", {"opt0": "8"}))
+    s = c.handle("ENTER", {"opt0": "5"})
+    assert _field_map(s)[(0, 23)].text == "Display Object Description - Full"
+    c.handle("F12", {})
+    assert _field_map(c._draw_view())[(0, 23)].text == "Display Object Description - Basic"
+
+
+def test_dspobjd_full_has_a_second_page_that_roll_reaches(store):
+    c = _signed(store)
+    c.handle("ENTER", {"command": "dspobjd obj(qsys/qgpl) objtype(*lib) detail(*full)"})
+    p1 = _text(c._draw_view())
+    assert "Creation information" in p1
+    p2 = _text(c.handle("ROLLUP", {}))
+    assert "Change/Usage information" in p2 and "Auditing/Integrity information" in p2
+    assert "Creation information" in _text(c.handle("ROLLDOWN", {}))
+
+
+def test_f6_opens_add_new_users_and_f12_comes_back(store):
+    _make(store)
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj scratch2/*all *file"})
+    c.handle("ENTER", {"opt0": "2"})
+    s = c.handle("F6", {})
+    f = _field_map(s)
+    assert f[(0, 33)].text == "Add New Users" and len(s.inputs()) == 20
+    assert _field_map(c.handle("F12", {}))[(0, 29)].text == "Edit Object Authority"
+
+
+def test_add_new_users_grants_through_the_normal_rules(store):
+    _make(store)
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj scratch2/*all *file"})
+    c.handle("ENTER", {"opt0": "2"})
+    c.handle("F6", {})
+    s = c.handle("ENTER", {"user0": "clerk", "auth0": "*use"})
+    assert "Authorities changed." in _text(s) and _field_map(s)[(0, 29)].text == "Edit Object Authority"
+    assert "CLERK" in store.objects[("SCRATCH2", "OLDFILE", "*FILE")].private
+    c.handle("F6", {})
+    s = c.handle("ENTER", {"user0": "clerk", "auth0": "*bogus"})
+    assert "not valid" in _text(s) and _field_map(s)[(0, 33)].text == "Add New Users"
+    s = c.handle("ENTER", {"user0": "nosuchuser", "auth0": "*use"})
+    assert _field_map(s)[(0, 33)].text == "Add New Users"

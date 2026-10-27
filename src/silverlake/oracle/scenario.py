@@ -110,6 +110,34 @@ AUTHENTICATED["auth-objopts"] = [
     *[{"key": "F3", "always": True}] * 3,                          # harmless on the menu
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the basic and full descriptions of a system library, and the second page of the full one.
+AUTHENTICATED["auth-objdesc"] = [
+    _SIGNON,
+    *_cmd("DSPOBJD OBJ(QSYS/QGPL) OBJTYPE(*LIB) DETAIL(*BASIC)"),
+    {"fill": {"0": "DSPOBJD OBJ(QSYS/QGPL) OBJTYPE(*LIB) DETAIL(*FULL)"}, "key": "ENTER"},
+    {"key": "ROLLUP"}, {"key": "F12", "always": True}, {"key": "F3", "always": True},
+    _SIGNOFF,
+]
+# Looks at the keys and option the edit screen and the work list offer beyond what is built, on the
+# same kind of throwaway job-local data area as auth-objopts. It only presses function keys after
+# the option numbers, never Enter on a screen it did not expect, and every back out runs whatever
+# happened. F6, F10 and F11 are opened and left with F12, nothing on them is filled in. Option 3
+# (copy) is pressed once and left with F12, and anything it makes is in QTEMP, gone at sign-off.
+AUTHENTICATED["auth-objopts2"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTDTAARA DTAARA({_QT}) TYPE(*CHAR) LEN(10) TEXT('Silverlake oracle test, job-local')"},
+     "key": "ENTER", "proceed_if": _MADE},
+    {"fill": {"0": f"WRKOBJ OBJ({_QT}) OBJTYPE(*DTAARA)"}, "key": "ENTER", **_LIST},
+    _optkey("2", **_LIST),
+    {"key": "F6", "proceed_if": [_TESTLIB]}, {"key": "F12", "always": True},
+    {"key": "F10", "proceed_if": [_TESTLIB]}, {"key": "F12", "always": True},
+    {"key": "F11", "proceed_if": [_TESTLIB]}, {"key": "F12", "always": True},
+    {"key": "F12", "always": True},
+    _optkey("3", **_LIST), {"key": "F12", "always": True},
+    *[{"key": "F12", "always": True}] * 2,
+    *[{"key": "F3", "always": True}] * 3,
+    {**_SIGNOFF, "always": True},
+]
 # An authorization list nobody here owns, looked at through the edit screen and left with F12.
 AUTHENTICATED["auth-edtautl"] = [
     _SIGNON, {"fill": {"0": "EDTAUTL AUTL(QPWFSERVER)"}, "key": "ENTER"},
@@ -180,6 +208,7 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
     await client.connect()
     captures: list[Capture] = []
     skipped: list[int] = []
+    stopped: dict | None = None
     try:
         captures.append(await client.wait_screen(timeout))
         skipping = False
@@ -188,7 +217,15 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
                 skipped.append(i)
                 continue
             client.send_aid(key, fill)
-            captures.append(await client.wait_screen(timeout))
+            try:
+                captures.append(await client.wait_screen(timeout))
+            except CaptureError as exc:
+                if not str(exc).startswith("no screen within"):
+                    raise
+                # The host answered nothing. Keep what was gathered, say where it stopped, and
+                # send nothing more: a key into a screen we cannot see is not worth guessing.
+                stopped = {"action": i, "key": key, "reason": str(exc)}
+                break
             if proceed_if:
                 seen = " ".join(r["text"] for r in captures[-1].snapshot["runs"]).lower()
                 if not all(t in seen for t in proceed_if):
@@ -207,6 +244,7 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
         "captured_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "testlib": os.environ.get(TESTLIB_ENV) if "TESTLIB" in repr(SCENARIOS[name]) else None,
         "skipped_actions": skipped,
+        "stopped": stopped,
         "snapshots": [c.snapshot for c in captures],
         "error_lines": [c.error_line for c in captures],
         # Raw host records, hex. Local only: this is the real system's wording.

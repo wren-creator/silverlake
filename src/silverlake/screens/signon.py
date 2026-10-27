@@ -26,7 +26,8 @@ from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrklib_screen
-from .worklists import EditAuth, WorkList, confirm_delete_screen, dspobjd_screen, objects_in_list_screen
+from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
+                        dspobjd_screen, objects_in_list_screen)
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -273,8 +274,7 @@ class SignonController:
         if kind == "edtobjaut":
             return ("edit", EditAuth(spec[1]))
         if kind == "dspobjd":
-            obj, detail = spec[1], spec[2]
-            return ("plist", [obj], 0, lambda rows, page: dspobjd_screen(obj, detail, SYSTEM_NAME))
+            return ("dobjd", spec[1], spec[2], 0)
         if kind == "autlobjs":
             name = spec[1]
             return ("plist", spec[2], 0, lambda rows, page: objects_in_list_screen(name, rows, page))
@@ -291,6 +291,13 @@ class SignonController:
             return self.view[1].screen(message)
         if self.view[0] == "confirm":
             return confirm_delete_screen(self.view[2])
+        if self.view[0] == "dobjd":
+            _, obj, detail, page = self.view
+            if detail == "*BASIC":
+                return dspobjd_basic_screen(obj, message)
+            return dspobjd_screen(obj, detail, SYSTEM_NAME, page)
+        if self.view[0] == "add":
+            return add_users_screen(self.view[1].obj, self.view[2], message)
         return wrkusrprf_screen(self.view[1], self.view[2], message)
 
     def _in_view(self, aid: str, values: dict[str, str]) -> Screen:
@@ -308,6 +315,10 @@ class SignonController:
             return self._in_edit(aid, values)
         if kind == "confirm":
             return self._in_confirm(aid)
+        if kind == "dobjd":
+            return self._in_dobjd(aid, values)
+        if kind == "add":
+            return self._in_add(aid, values)
         if aid == "F3" or (kind == "wrk" and aid == "F12"):
             self.view = None
             return self._base()
@@ -469,6 +480,62 @@ class SignonController:
         message = last if len(picks) == 1 else (f"{done} objects deleted." + (f" {last}" if done < len(picks) else ""))
         return self._draw_view(message)
 
+    def _in_dobjd(self, aid: str, values: dict[str, str]) -> Screen:
+        """Display Object Description. The Basic list takes 5 (the full display) and 8 (service
+        attributes, not modeled). On the Full display Roll Up and Roll Down switch pages (Enter was not
+        captured, so it goes back, like F12), and F3 leaves everything."""
+        _, obj, detail, page = self.view
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if detail == "*BASIC":
+            opt = values.get("opt0", "").strip()
+            if aid == "ENTER" and opt:
+                if opt == "5":
+                    self.parents.append(self.view)
+                    self.view = ("dobjd", obj, "*FULL", 0)
+                    return self._draw_view()
+                return self._draw_view("Option 8 is not available in Silverlake yet." if opt == "8"
+                                       else f"Option {opt} is not valid.")
+            return self._close_view()
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            self.view = ("dobjd", obj, detail, 1 if aid == "ROLLUP" else 0)
+            return self._draw_view()
+        return self._close_view()
+
+    def _in_add(self, aid: str, values: dict[str, str]) -> Screen:
+        """Add New Users. Enter grants each typed row through GRTOBJAUT's own rules and returns to
+        the edit display. The first refusal keeps you here with what you typed."""
+        ea = self.view[1]
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid == "F12":
+            return self._close_view()
+        if aid != "ENTER":
+            return self._draw_view(f"{aid} is not available in Silverlake yet.")
+        typed = {i: (values.get(f"user{i}", "").strip().upper(), values.get(f"auth{i}", "").strip().upper())
+                 for i in range(10)}
+        typed = {i: v for i, v in typed.items() if v[0] or v[1]}
+        self.view = ("add", ea, typed)
+        obj, ref = ea.obj, f"{ea.obj.library}/{ea.obj.name}"
+        for user, text in typed.values():
+            if not user or not text:
+                return self._draw_view("Type both a user and an authority on each row.")
+            try:
+                aut = commands.resolve_aut([text])
+            except ValueError:
+                return self._draw_view(f"Authority {text} is not valid.")
+            if isinstance(aut, messages.Message):
+                return self._draw_view(aut.text)
+            done = objects.grant(self.store, self.profile, ref, obj.type, self.session, [user], aut, "*NONE", True)
+            if not done.ok:
+                return self._draw_view(done.message.text)
+        self.view = self.parents.pop()
+        return self._draw_view("Authorities changed." if typed else "")
+
     def _in_edit(self, aid: str, values: dict[str, str]) -> Screen:
         ea: EditAuth = self.view[1]
         if aid == "F3":
@@ -480,7 +547,11 @@ class SignonController:
         if aid in ("ROLLUP", "ROLLDOWN"):
             ea.page += 1 if aid == "ROLLUP" else -1
             return self._draw_view()
-        if aid in ("F6", "F10", "F11"):
+        if aid == "F6":
+            self.parents.append(self.view)
+            self.view = ("add", ea, {})
+            return self._draw_view()
+        if aid in ("F10", "F11"):
             return self._draw_view(f"{aid} is not available in Silverlake yet.")
         if aid == "F5":
             return self._draw_view()

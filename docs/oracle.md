@@ -100,6 +100,15 @@ One more write, approved on its own: the `auth-objopts` scenario (2026-10-27) ma
 - **EDTAUTL as a basic user** is refused with "Not authorized to change authorities." on the message line, with no screen.
 - "Bottom" and "More..." sit right aligned at column 73 and 72, which we had a few columns off.
 
+## What the second option capture taught us
+
+Two more runs on 2026-10-27: `auth-objdesc` (read-only, `DSPOBJD` on QGPL, basic and full, then Roll Up) and `auth-objopts2` (the second approved QTEMP write: a throwaway data area, F6, F10, F11 and option 3 pressed and backed out of, nothing filled in).
+
+- **`DSPOBJD DETAIL(*BASIC)` is a list**, not a short version of the full display: one row per object with an option field (5=Display full attributes, 8=Display service attributes) and Attribute, Size and Text columns. Silverlake has no attributes or sizes, so those stay blank.
+- **The full description has more than two pages.** Page two (Change/Usage and Auditing/Integrity information) says "More..." too, so a third page exists. Silverlake models two. The object auditing value on a system library was `*NOTAVL`, Silverlake shows `*NONE`, our guess for a user object.
+- **F6 on Edit Object Authority opens Add New Users:** ten rows of user (10) and authority (8) fields, F11 and F17 and F18 on it. It is modeled and grants through the normal rules.
+- **F10 got no answer from the host.** The harness waited 15 seconds, saw nothing, and stopped with nothing more sent, so F11 and option 3 were never pressed and `CRTDUPOBJ`'s screen is still unseen. The scenario's job was left to time out on the host. The harness now keeps what it gathered and says which action stopped it.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

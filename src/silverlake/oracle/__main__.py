@@ -85,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps(result, indent=2))
             print(f"saved {len(result['snapshots'])} screen(s) to {args.out}")
+            if result.get("stopped"):
+                print(f"STOPPED EARLY: {result['stopped']}, nothing more was sent")
             return 0
         if args.cmd == "diff":
             a, b = (reanalyze(json.loads(f.read_text())) for f in (args.a, args.b))

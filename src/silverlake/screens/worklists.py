@@ -247,12 +247,65 @@ class EditAuth:
         return Screen(rows, cursor="autl")
 
 
-def dspobjd_screen(obj, detail: str, system_name: str) -> Screen:
+def dspobjd_basic_screen(obj, message: str = "") -> Screen:
+    """Display Object Description - Basic, laid out like the real one (captured from QGPL): a list
+    of the one object with options 5 and 8. Attribute and Size are blank, because Silverlake
+    objects have neither."""
+    return Screen([
+        Text(0, 23, "Display Object Description - Basic", ds.ATTR_WHITE),
+        Text(1, 65, "Library 1 of 1", ds.ATTR_BLUE),
+        Text(2, 1, "Library . . . . . . . :", ds.ATTR_GREEN), Text(2, 27, obj.library, ds.ATTR_WHITE),
+        Text(2, 42, "Library ASP device  . :", ds.ATTR_GREEN), Text(2, 68, "*SYSBAS", ds.ATTR_WHITE),
+        Text(3, 42, "Library ASP group . . :", ds.ATTR_GREEN), Text(3, 68, "*SYSBAS", ds.ATTR_WHITE),
+        Text(5, 1, "Type options, press Enter.", ds.ATTR_BLUE),
+        Text(6, 3, "5=Display full attributes", ds.ATTR_BLUE), Text(6, 31, "8=Display service attributes", ds.ATTR_BLUE),
+        Text(8, 1, "Opt", ds.ATTR_WHITE), Text(8, 6, "Object", ds.ATTR_WHITE), Text(8, 18, "Type", ds.ATTR_WHITE),
+        Text(8, 28, "Attribute", ds.ATTR_WHITE), Text(8, 52, "Size", ds.ATTR_WHITE), Text(8, 58, "Text", ds.ATTR_WHITE),
+        Input(9, 2, 1, "opt0", monocase=True),
+        Text(9, 6, obj.name, ds.ATTR_TURQUOISE), Text(9, 18, obj.type, ds.ATTR_TURQUOISE),
+        Text(9, 58, obj.text[:21], ds.ATTR_TURQUOISE),
+        Text(21, 73, "Bottom", ds.ATTR_BLUE),
+        Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F12=Cancel", ds.ATTR_BLUE),
+        Text(22, 24, "F17=Top", ds.ATTR_BLUE), Text(22, 34, "F18=Bottom", ds.ATTR_BLUE),
+        Text(23, 1, message[:77] if message else "SILVERLAKE SIMULATION. NOT IBM.", ds.ATTR_WHITE),
+    ], cursor="opt0")
+
+
+def add_users_screen(obj, entries: dict[str, tuple[str, str]] | None = None, message: str = "") -> Screen:
+    """Add New Users, opened by F6 on Edit Object Authority. Ten rows of user and authority, laid
+    out like the real display (captured, nothing typed on it)."""
+    entries = entries or {}
+    rows: list = [
+        Text(0, 33, "Add New Users", ds.ATTR_WHITE),
+        Text(2, 1, "Object . . . . . . . :", ds.ATTR_GREEN), Text(2, 26, obj.name, ds.ATTR_WHITE),
+        Text(2, 42, "Owner  . . . . . . . :", ds.ATTR_GREEN), Text(2, 67, obj.owner, ds.ATTR_WHITE),
+        Text(3, 3, "Library  . . . . . :", ds.ATTR_GREEN), Text(3, 28, obj.library, ds.ATTR_WHITE),
+        Text(3, 42, "Primary group  . . . :", ds.ATTR_GREEN), Text(3, 67, "*NONE", ds.ATTR_WHITE),
+        Text(4, 1, "Object type  . . . . :", ds.ATTR_GREEN), Text(4, 26, obj.type, ds.ATTR_WHITE),
+        Text(4, 42, "ASP device . . . . . :", ds.ATTR_GREEN), Text(4, 67, "*SYSBAS", ds.ATTR_WHITE),
+        Text(6, 1, "Type new users, press Enter.", ds.ATTR_BLUE),
+        Text(8, 14, "Object", ds.ATTR_WHITE),
+        Text(9, 1, "User", ds.ATTR_WHITE), Text(9, 13, "Authority", ds.ATTR_WHITE),
+    ]
+    for i in range(10):
+        user, auth = entries.get(i, ("", ""))
+        rows += [Input(10 + i, 1, 10, f"user{i}", monocase=True, value=user),
+                 Input(10 + i, 13, 8, f"auth{i}", monocase=True, value=auth)]
+    rows += [Text(20, 72, "More...", ds.ATTR_BLUE),
+             Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F11=Display detail object authorities", ds.ATTR_BLUE),
+             Text(21, 51, "F12=Cancel", ds.ATTR_BLUE), Text(21, 64, "F17=Top", ds.ATTR_BLUE),
+             Text(22, 1, "F18=Bottom", ds.ATTR_BLUE),
+             Text(23, 1, message[:77] if message else "SILVERLAKE SIMULATION. NOT IBM.", ds.ATTR_WHITE)]
+    return Screen(rows, cursor="user0")
+
+
+def dspobjd_screen(obj, detail: str, system_name: str, page: int = 0) -> Screen:
     """Display Object Description, laid out like the real *FULL display (captured). The creation
     date and time are kept for libraries made here (CRTLIB), and blank for the seed. The real display has a second page (More...)
     that was not captured, and the *BASIC display was not captured at all."""
-    word = "Full" if detail == "*FULL" else "Basic"
-    title = f"Display Object Description - {word}"
+    title = "Display Object Description - Full"
+    if page == 1:
+        return _dspobjd_page_two(obj, title)
     rows: list = [
         Text(0, 23, title, ds.ATTR_WHITE),
         Text(1, 66, "Library 1 of 1", ds.ATTR_BLUE),
@@ -282,3 +335,38 @@ def dspobjd_screen(obj, detail: str, system_name: str) -> Screen:
     if made:
         rows.append(Text(12, 44, datetime.fromisoformat(made).strftime("%y-%m-%d  %H:%M:%S"), ds.ATTR_WHITE))
     return Screen(rows)
+
+
+def _dspobjd_page_two(obj, title: str) -> Screen:
+    """The second page of the full description (captured from QGPL): change and usage information,
+    then auditing and integrity. We keep no usage data, so the values are the quiet ones, and
+    the object auditing value is our guess (the captured system object said *NOTAVL)."""
+    made = (obj.data or {}).get("created")
+    changed = datetime.fromisoformat(made).strftime("%y-%m-%d  %H:%M:%S") if made else ""
+    label = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    value = lambda r, t: Text(r, 44, t, ds.ATTR_WHITE)
+    return Screen([
+        Text(0, 23, title, ds.ATTR_WHITE), Text(1, 66, "Library 1 of 1", ds.ATTR_BLUE),
+        label(2, 1, "Object . . . . . . . :"), Text(2, 26, obj.name, ds.ATTR_WHITE),
+        label(2, 42, "Attribute  . . . . . :"),
+        label(3, 3, "Library  . . . . . :"), Text(3, 28, obj.library, ds.ATTR_WHITE),
+        label(3, 42, "Owner  . . . . . . . :"), Text(3, 67, obj.owner, ds.ATTR_WHITE),
+        label(4, 1, "Library ASP device . :"), Text(4, 26, "*SYSBAS", ds.ATTR_WHITE),
+        label(4, 42, "Library ASP group  . :"), Text(4, 67, "*SYSBAS", ds.ATTR_WHITE),
+        label(5, 1, "Type . . . . . . . . :"), Text(5, 26, obj.type, ds.ATTR_WHITE),
+        label(5, 42, "Primary group  . . . :"), Text(5, 67, "*NONE", ds.ATTR_WHITE),
+        label(7, 1, "Change/Usage information:"),
+        label(8, 3, "Change date/time . . . . . . . . . . :"), value(8, changed),
+        label(9, 3, "Usage data collected . . . . . . . . :"), value(9, "NO"),
+        label(10, 3, "Last used date . . . . . . . . . . . :"),
+        label(11, 3, "Days used count  . . . . . . . . . . :"), value(11, "0"),
+        label(12, 5, "Reset date . . . . . . . . . . . . :"),
+        label(13, 3, "Allow change by program  . . . . . . :"), value(13, "NO"),
+        label(14, 1, "Auditing/Integrity information:"),
+        label(15, 3, "Object auditing value  . . . . . . . :"), value(15, "*NONE"),
+        label(16, 3, "Digitally signed . . . . . . . . . . :"), value(16, "NO"),
+        label(17, 3, "Authority collection value . . . . . :"), value(17, "*NONE"),
+        Text(20, 1, "Press Enter to continue.", ds.ATTR_BLUE),
+        Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F12=Cancel", ds.ATTR_BLUE),
+        Text(19, 72, "More...", ds.ATTR_BLUE),      # the real one has a third page, not modeled
+    ])

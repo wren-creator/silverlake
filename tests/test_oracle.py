@@ -357,9 +357,9 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-edtautl"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl"):
             continue
-        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "SIGNOFF") for c in _fills(name)), name
+        assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "SIGNOFF") for c in _fills(name)), name
 
 
 def test_the_one_scenario_that_changes_the_host_touches_only_its_own_library():
@@ -386,6 +386,24 @@ def test_the_option_scenario_only_ever_touches_its_own_job_local_data_area():
     assert not any(a["key"] == "ENTER" and not a.get("fill") and a.get("always") for a in actions)
     deletes = [a for a in actions if a.get("fill", {}).get("0") == "4"]
     assert len(deletes) == 2 and all("confirm" in a["proceed_if"] for a in deletes)   # only on a confirm screen
+
+
+def test_the_second_option_scenario_only_presses_keys_after_its_own_two_options():
+    actions = scenario.SCENARIOS["auth-objopts2"]
+    fills = [a["fill"]["0"] for a in actions[1:] if "fill" in a]
+    assert [f.split()[0] for f in fills if f not in ("2", "3")] == ["CRTDTAARA", "WRKOBJ", "SIGNOFF"]
+    assert [f for f in fills if f in ("2", "3")] == ["2", "3"]                       # no 4, no 9, nothing destructive
+    assert all("QTEMP/${SILVERLAKE_ORACLE_TESTLIB}" in f for f in fills[:2])
+    assert actions[1]["proceed_if"] == ["${SILVERLAKE_ORACLE_TESTLIB}", "created"]
+    assert [a for a in actions[4:-1] if a["key"] == "ENTER"] == [a for a in actions[4:-1] if a.get("fill") == {"0": "3"}]
+    assert all(a["key"] in ("F6", "F10", "F11", "F12", "F3", "ENTER") for a in actions[1:])
+    assert all(a.get("always") for a in actions[4:-1] if a["key"] in ("F12", "F3"))
+    assert actions[-1].get("always") and actions[-1]["fill"] == {"0": "SIGNOFF"}
+
+
+def test_the_description_scenario_is_read_only():
+    cmds = _fills("auth-objdesc")
+    assert all(c.split()[0] in ("DSPOBJD", "SIGNOFF") for c in cmds)
 
 
 def test_edtautl_scenario_only_looks_and_backs_out():
