@@ -224,6 +224,98 @@ def _outq(wl: WorkList, message: str) -> Screen:
     return Screen(rows, cursor="opt0" if wl.shown() else "command")
 
 
+def _file_block(rows: list, f, first: int, with_keywords: bool = True) -> None:
+    """The prompt lines both spooled file prompts start with: the file, then its job, the number,
+    the system name and the creation stamp, each marked with the '>' the prompt shows for a value
+    the option filled in (captured). `first` is the row of the file line."""
+    g = lambda r, c, t, a=ds.ATTR_GREEN: Text(r, c, t, a)
+    when = f.stamp()
+    lines = [
+        ("Spooled file . . . . . . . . . .", "FILE", f.name, 49),
+        ("Job name . . . . . . . . . . . .", "JOB", f.job_name, 49),
+        ("  User . . . . . . . . . . . . .", None, f.user, 51),
+        ("  Number . . . . . . . . . . . .", None, f.job_number, 51),
+        ("Spooled file number  . . . . . .", "SPLNBR", str(f.file_no), 49),
+        ("Job system name  . . . . . . . .", "JOBSYSNAME", "SILVERLK", 49),
+        ("Spooled file created:", "CRTDATE", None, 49),
+        ("  Creation date  . . . . . . . .", None, f"{when:%Y%m%d}", 49),
+        ("  Creation time  . . . . . . . .", None, f"{when:%H%M%S}", 49),
+    ]
+    for i, (label, keyword, value, vcol) in enumerate(lines):
+        r = first + i
+        rows.append(g(r, 1, label))
+        if keyword:
+            rows.append(g(r, 34, keyword))
+        if value is not None:
+            rows += [g(r, 45, "  >"), g(r, vcol, value, ds.ATTR_WHITE)]
+
+
+def chgsplfa_screen(f, message: str = "", values: dict | None = None) -> Screen:
+    """Change Spooled File Attributes, the first page of the prompt option 2 opens (captured). The
+    second page, F4, F10 and F13 were not seen or are not built, so those keys are not drawn."""
+    v = {"dev": "*OUTQ", "prtseq": "*SAME", "formtype": f.form_type, "copies": str(f.copies),
+         "restart": "*STRPAGE", **(values or {})}
+    rows: list = [Text(0, 19, " Change Spooled File Attributes (CHGSPLFA)", ds.ATTR_WHITE),
+                  Text(2, 1, "Type choices, press Enter.", ds.ATTR_BLUE)]
+    _file_block(rows, f, 4)
+    for r, label, kw, name, width in ((13, "Printer  . . . . . . . . . . . .", "DEV", "dev", 10),
+                                      (14, "Print sequence . . . . . . . . .", "PRTSEQ", "prtseq", 5),
+                                      (15, "Form type  . . . . . . . . . . .", "FORMTYPE", "formtype", 10),
+                                      (16, "Copies . . . . . . . . . . . . .", "COPIES", "copies", 6),
+                                      (17, "Restart printing . . . . . . . .", "RESTART", "restart", 11)):
+        rows += [Text(r, 1, label, ds.ATTR_GREEN), Text(r, 34, kw, ds.ATTR_GREEN),
+                 Input(r, 49, width, name, value=v[name])]
+    rows.append(Text(20, 66, "More...".rjust(13), ds.ATTR_WHITE))
+    rows += [Text(21, 1, "F3=Exit   F5=Refresh   F12=Cancel", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows, cursor="formtype")
+
+
+def sndnetsplf_screen(f, message: str = "") -> Screen:
+    """Send Network Spooled File, the prompt option 1 opens (captured). Nothing can be sent
+    anywhere, so Enter says so. The plus signs for more user IDs, F4, F10 and F13 are not drawn."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    rows: list = [Text(0, 19, "  Send Network Spooled File (SNDNETSPLF)", ds.ATTR_WHITE),
+                  Text(2, 1, "Type choices, press Enter.", ds.ATTR_BLUE)]
+    _file_block(rows, f, 4)
+    # the real display slips the user ID block in after the file line, so rows below it move down
+    shifted = [r for r in rows if getattr(r, "row", 0) >= 5]
+    rows = [r for r in rows if getattr(r, "row", 0) < 5]
+    rows += [g(5, 1, "User ID:"), g(5, 34, "TOUSRID"), g(6, 1, "  User ID  . . . . . . . . . . ."),
+             Input(6, 49, 8, "tousrid", monocase=True), g(7, 1, "  Address  . . . . . . . . . . ."),
+             Input(7, 49, 8, "address", monocase=True), g(8, 17, "          + for more values")]
+    rows += [type(r)(r.row + 4, *[getattr(r, a) for a in ("col", "text", "attr")]) for r in shifted]
+    rows += [g(17, 1, "Data format  . . . . . . . . . ."), g(17, 34, "DTAFMT"), Input(17, 49, 8, "dtafmt", value="*RCDDATA"),
+             Text(20, 66, "Bottom".rjust(13), ds.ATTR_WHITE), Text(21, 1, "F3=Exit   F5=Refresh   F12=Cancel", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows, cursor="tousrid")
+
+
+def printstatus_screen(f, system_name: str, message: str = "") -> Screen:
+    """Work with Printing Status, behind option 9 (captured). No printer or writer is modeled, so a
+    file is never associated with a started printer. The real display takes options 2 and 5 and a
+    command line; neither is built, so they are not drawn."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    when = f.stamp()
+    rows: list = [
+        Text(0, 27, "Work with Printing Status", ds.ATTR_WHITE),
+        g(2, 1, "Job  . . . . . . . . :"), g(2, 26, f.job_name), g(2, 42, "File . . . . . . . . :"), g(2, 67, f.name),
+        g(3, 3, "User . . . . . . . :"), g(3, 28, f.user), g(3, 44, "Number . . . . . . :"), g(3, 69, str(f.file_no)),
+        g(4, 3, "Number . . . . . . :"), g(4, 28, f.job_number), g(4, 42, "User data  . . . . . :"), g(4, 67, f.user_data[:10]),
+        g(5, 1, "Job system name  . . :"), g(5, 26, system_name), g(5, 42, "Creation date  . . . :"), g(5, 67, f"{when:%Y%m%d}"),
+        g(6, 42, "Creation time  . . . :"), g(6, 67, f"{when:%H%M%S}"),
+        Text(11, 9, "Status Description", ds.ATTR_WHITE),
+        g(12, 9, "This file is not associated with a started printer."),
+        Text(19, 66, "Bottom".rjust(13), ds.ATTR_WHITE),
+        Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F5=Refresh", ds.ATTR_BLUE), Text(22, 23, "F12=Cancel", ds.ATTR_BLUE),
+    ]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
+
+
 def dspsplf_screen(f, top: int = 0, message: str = "") -> Screen:
     """Display Spooled File, laid out like the real one (captured): a header, a ruler, and sixteen
     lines of the file from row 5. Roll keys move by a screenful. Find and column shifting are not built."""

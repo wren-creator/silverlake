@@ -158,6 +158,18 @@ AUTHENTICATED["auth-dspjob"] = [
     {"key": "F12", "always": True}, {"key": "F3", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the prompts behind options 1, 2, 7 and 9 of Work with All Spooled Files (send, change, messages,
+# printing status), each opened on the profile's own first file and left with F12. Never 4, never Enter on a
+# prompt: nothing is sent, changed, deleted or answered. Each way back carries the check that the list is
+# really there, so a screen that did not appear cannot lead to an option pressed on the wrong one.
+_SPLLIST = {"proceed_if": ["Work with All Spooled Files"]}
+AUTHENTICATED["auth-splopts"] = [
+    _SIGNON, {"fill": {"0": "WRKSPLF"}, "key": "ENTER", "proceed_if": ["QPJOBLOG"]},
+    *[step for opt in ("1", "2", "9", "7")      # 7 last: it answers on the list itself, and F12 then leaves it
+      for step in (_optkey(opt), {"key": "F12", "always": True, **_SPLLIST})],
+    {"key": "F12", "always": True}, {"key": "F3", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 # Read only: what the job screens have behind them that is not built yet. The profile's own job through
 # DSPJOB and WRKJOB: page two of each menu, options 11, 12, 14, 15 and 16 (call stack, locks, open files,
 # overrides, commitment control), and page two of the status and definition pages. Every screen is looked

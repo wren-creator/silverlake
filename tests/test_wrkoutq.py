@@ -86,8 +86,8 @@ def test_hold_and_release_from_the_queue_list(store):
     assert at(s)[(9, 42)] == "HLD"
     s = c.handle("ENTER", {"opt0": "6"})
     assert at(s)[(9, 42)] == "RDY"
-    assert "Option 4 is not available" in text(c.handle("ENTER", {"opt0": "4"}))
     assert "Option 11 is not valid" in text(c.handle("ENTER", {"opt0": "11"}))
+    assert "deleted" in text(c.handle("ENTER", {"opt0": "4"}))
 
 
 def test_option_5_displays_a_file_and_f12_comes_back_to_the_queue(store):

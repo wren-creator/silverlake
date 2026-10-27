@@ -271,6 +271,48 @@ def hold(store: ProfileStore, actor: Profile, f: SpoolFile, hold: bool) -> Done:
     return _ok(f"File {f.name} number {f.file_no} {'held' if hold else 'released'}.")
 
 
+def change_attributes(store: ProfileStore, actor: Profile, session, f: SpoolFile, changes: dict) -> Done:
+    """CHGSPLFA: FORMTYPE, COPIES, USRDTA, OUTPTY and OUTQ (moving the file). The prompt the real
+    option 2 opens was captured (DEV, PRTSEQ, FORMTYPE, COPIES, RESTART on its first page) and
+    those last three are modeled; DEV, PRTSEQ and RESTART are accepted and ignored, and the second
+    page (where a real host keeps OUTQ) was not seen. Who may change a file is the same control
+    rule as hold and delete (inferred). Moving a file to another queue needs *USE to that queue
+    and *EXECUTE to its library: CRTOUTQ's page says *USE lets a user "place spooled files on the
+    queue" (inferred for the library)."""
+    if not can_control(store, actor, f):
+        return _no(_msg("CPF3492", "Not authorized to spooled file."))
+    target = None
+    if "OUTQ" in changes:
+        target, err = locate(store, actor, changes["OUTQ"], "*OUTQ", session.search_order())
+        if err:
+            return _no(err)
+        if Auth.READ not in store.authority_to_object(actor, target) and \
+                SpecialAuthority.ALLOBJ not in store.special_authorities(actor):
+            return _no(messages.not_authorized_to_object_2189(target.name, target.library, "*OUTQ"))
+    if "COPIES" in changes and not 1 <= changes["COPIES"] <= 255:
+        return _no(messages.syntax("COPIES must be from 1 to 255."))
+    if "OUTPTY" in changes and not 1 <= changes["OUTPTY"] <= 9:
+        return _no(messages.syntax("OUTPTY must be from 1 to 9."))
+    if "FORMTYPE" in changes:
+        f.form_type = changes["FORMTYPE"].upper()[:10]
+    if "COPIES" in changes:
+        f.copies = changes["COPIES"]
+    if "USRDTA" in changes:
+        f.user_data = changes["USRDTA"][:10]
+    if "OUTPTY" in changes:
+        f.priority = changes["OUTPTY"]
+    if target is not None:
+        f.outq, f.outq_lib = target.name, target.library
+    store.on_change()
+    return _ok(f"Attributes of file {f.name} number {f.file_no} changed.")
+
+
+def no_messages(f: SpoolFile) -> str:
+    """Option 7. A spooled file has messages only when a writer asked a question about it, and no
+    writer is modeled, so the answer is always the captured one."""
+    return f"No messages for file {f.name} number {f.file_no}."
+
+
 # -- job logs --------------------------------------------------------------------------------------
 
 _PASSWORD = re.compile(r"(PASSWORD|PWD)\(([^)]*)\)", re.IGNORECASE)

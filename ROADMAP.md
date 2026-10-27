@@ -33,8 +33,9 @@
 - [x] Colors: every captured screen now draws what the real host draws (labels, values, list rows and options green, titles, column headings and More... and Bottom white, prompts and keys blue), with a test holding the rules. Screens with no capture follow the same rules by analogy
 - [x] WRKOUTQ OUTQ(lib/name), from the PUB400 captures: the list, options 3, 5, 6, 8, the not found wording, and a profile that may read the queue sees every file in it (user and job name) whatever DSPDTA says
 - [x] CRTOUTQ and DLTOUTQ, from IBM's pages (AUT defaults to *USE, only the owner can delete by default, a queue with entries cannot be deleted)
-- [ ] WRKOUTQ leftovers: options 1, 2, 4, 7, 9, F11 view 2, F20, F22, F24, status HLD for a held queue, and the bare form (Work with All Output Queues, needs a quieter capture)
-- [ ] Spool leftovers: WRKSPLF options 1, 2, 4 (confirm), 7, 9, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF
+- [x] Spool options 1, 2, 4, 7, 9 on WRKSPLF and WRKOUTQ, from the auth-splopts capture (SNDNETSPLF and CHGSPLFA prompts first pages, no messages, printing status), plus CHGSPLFA
+- [ ] WRKOUTQ leftovers: F11 view 2, F20, F22, F24, status HLD for a held queue, and the bare form (Work with All Output Queues, needs a quieter capture)
+- [ ] Spool leftovers: option 4 confirm (real one never captured, ours deletes at once), SNDNETSPLF and CHGSPLFA page two plus F4/F10/F13, inner options on Work with Printing Status, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF
 - [x] Phase 3c-3c step 3: message queues (DSPMSG, SNDMSG, CLRMSGQ, QSYSOPR, per-user queues in QUSRSYS), from the PUB400 captures
 - [x] CRTMSGQ, CHGMSGQ (DLVRY, SEV, TEXT) and DLTMSGQ from IBM's command pages, rules and inferences in docs/jobs-spool-messages.md
 - [ ] Message leftovers: the real SNDMSG prompt (needs a longer wait), inquiry messages and replies, F11 remove one, WRKMSGQ, CHGMSGQ break program and *DFT delivery, RMVMSG, break delivery to a live session, work station queues
@@ -62,6 +63,7 @@ Things Silverlake does from IBM's pages, memory or inference and has not seen on
 - [ ] DSPJOBLOG and WRKJOB: CPF2441 and CPF1071 wording, CPF2443 for an ended job (inferred), CPF2523 for a system job, and the QIBM_ACCESS_ALLOBJ_JOBLOG function usage that can also grant reading an *ALLOBJ job's log (not modeled)
 - [ ] CHGJOB: that RUNPTY, TIMESLICE, PURGE, DFTWAIT, CPUTIME and MAXTMPSTG need *JOBCTL even on your own job, and CPF1337 as the refusal (inferred). Write
 - [ ] CRTOUTQ and DLTOUTQ: that *ADD to the library is what creating takes, which message a queue with entries raises (CPF3360 stands in), that QPRINT and QEZJOBLOG are undeletable (CPF3469, inferred), and that *OBJEXIST is what deleting takes. Write, so a human decides
+- [ ] CHGSPLFA: moving a file with OUTQ() needing *READ to the target queue, and the control rule matching hold and delete, are inferred; option 4 on a spooled file may ask for confirmation on the real host
 - [ ] WRKOUTQ: the IDs CPF3357 (queue not found) and CPF3330 (not authorized) are from memory of IBM's lists, not seen; that *READ to the queue and *EXECUTE to its library are what listing takes; what a held queue shows in Status; that options 3 and 6 follow the same rule as on WRKSPLF
 - [ ] Spool rules: the parts of CRTOUTQ's page that only came through as a summary, and the inferred OPRCTL, DSPDTA and AUTCHK behavior for other people's files
 - [ ] Job log filing: that passwords are masked is Silverlake's choice, not something seen. Check what a real QPJOBLOG holds for a typed password

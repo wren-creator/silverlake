@@ -28,7 +28,7 @@ from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
-                        WRKJOB_OPTIONS, WRKJOB_PAGE2, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
+                        WRKJOB_OPTIONS, WRKJOB_PAGE2, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -148,6 +148,7 @@ class SignonController:
         # (profile, sign-on values) while the Change Password display is up
         self.pending_password: tuple[Profile, dict[str, str]] | None = None
         self.job_top = 0       # first lock shown on the job locks display
+        self.prompt_values: dict[str, str] = {}      # what is typed on the Change Spooled File Attributes prompt
 
     def first(self) -> Screen:
         return signon_screen(self.display)
@@ -407,6 +408,11 @@ class SignonController:
             return dspmsg_screen(self.view[1], SYSTEM_NAME, self.view[2], message)
         if self.view[0] == "spoolattr":
             return spoolattr_screen(self.view[1], SYSTEM_NAME)
+        if self.view[0] == "splprompt":
+            _, which, f = self.view
+            if which == "chg":
+                return chgsplfa_screen(f, message, self.prompt_values)
+            return sndnetsplf_screen(f, message) if which == "send" else printstatus_screen(f, SYSTEM_NAME, message)
         if self.view[0] == "add":
             return add_users_screen(self.view[1].obj, self.view[2], message)
         return wrkusrprf_screen(self.view[1], self.view[2], message)
@@ -437,6 +443,8 @@ class SignonController:
             return self._in_add(aid, values)
         if kind == "spoolview":
             return self._in_spoolview(aid)
+        if kind == "splprompt":
+            return self._in_splprompt(aid, values)
         if kind == "msgview":
             return self._in_msgview(aid)
         if kind == "joblogview":
@@ -541,11 +549,20 @@ class SignonController:
                 if not spool.can_display(self.store, self.profile, f):
                     return None, "Not authorized to spooled file."
                 return f"@SPOOL{opt} {self.store.spool.index(f)}", ""
+            ref = f"FILE({row.name}) JOB({row.job}) SPLNBR({row.file_no})"
             if opt in ("3", "6"):
-                verb = "HLDSPLF" if opt == "3" else "RLSSPLF"
-                return f"{verb} FILE({row.name}) JOB({row.job}) SPLNBR({row.file_no})", ""
-            if opt in ("1", "2", "4", "7", "9"):
-                return None, f"Option {opt} is not available in Silverlake yet."
+                return f"{'HLDSPLF' if opt == '3' else 'RLSSPLF'} {ref}", ""
+            if opt == "4":
+                return f"DLTSPLF {ref}", ""
+            if opt == "7":
+                from ..system import spool
+                return None, spool.no_messages(row)
+            if opt in ("1", "2", "9"):
+                from ..system import spool
+                allowed = spool.can_control if opt == "2" else spool.can_display
+                if not allowed(self.store, self.profile, row):
+                    return None, "Not authorized to spooled file."
+                return f"@SPOOL{opt} {self.store.spool.index(row)}", ""
             return None, f"Option {opt} is not valid."
         if wl.kind == "jobs":
             if row.type != "SBS":
@@ -599,7 +616,8 @@ class SignonController:
         if line.startswith("@SPOOL"):                           # options 5 and 8 on Work with Spooled Files
             f = self.store.spool[int(line.split()[1])]
             self.parents.append(self.view)
-            self.view = ("spoolview", f, 0) if line.startswith("@SPOOL5") else ("spoolattr", f)
+            self.view = {"@SPOOL5": ("spoolview", f, 0), "@SPOOL8": ("spoolattr", f), "@SPOOL1": ("splprompt", "send", f),
+                         "@SPOOL2": ("splprompt", "chg", f), "@SPOOL9": ("splprompt", "status", f)}[line.split()[0]]
             return self._draw_view()
         if line.startswith("@AUTLTEXT "):                       # option 13: change the list's text
             _, name, text = (line.split(None, 2) + [""])[:3]
@@ -782,6 +800,54 @@ class SignonController:
         if aid in ("F11", "F24"):
             return self._draw_view(f"{aid} is not available in Silverlake yet.")
         return self._close_view()
+
+    def _in_splprompt(self, aid: str, values: dict[str, str]) -> Screen:
+        """The three displays behind options 1, 2 and 9 of a spooled file list. F12 goes back to the
+        list, F3 leaves, F5 redraws. Enter on the change prompt applies COPIES and FORM TYPE through
+        CHGSPLFA (the printer, sequence and restart values are not modeled), Enter on the send
+        prompt says nothing can be sent, and Enter on the status display goes back."""
+        _, which, f = self.view
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            self.prompt_values = {}
+            return self._base()
+        if aid == "F12" or (which == "status" and aid == "ENTER"):
+            self.prompt_values = {}
+            return self._close_view()
+        if aid == "F5":
+            self.prompt_values = {}
+            return self._draw_view()
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            return self._draw_view("Page two is not available in Silverlake yet." if which == "chg" else "")
+        if aid != "ENTER":
+            return self._draw_view()
+        if which == "send":
+            return self._draw_view("Network spooling is not modeled. Nothing was sent.")
+        typed = {k: values.get(k, "").strip() for k in ("dev", "prtseq", "formtype", "copies", "restart")}
+        self.prompt_values = typed
+        if (typed["dev"].upper() not in ("*OUTQ", "") or typed["prtseq"].upper() not in ("*SAME", "")
+                or typed["restart"].upper() not in ("*STRPAGE", "")):
+            return self._draw_view("Printer, print sequence and restart are not modeled.")
+        line = f"CHGSPLFA FILE({f.name}) JOB({f.job}) SPLNBR({f.file_no})"
+        if typed["formtype"] and typed["formtype"].upper() != f.form_type:
+            line += f" FORMTYPE({typed['formtype']})"
+        if typed["copies"] and typed["copies"] != str(f.copies):
+            line += f" COPIES({typed['copies']})"
+        if line.endswith(f"SPLNBR({f.file_no})"):
+            return self._draw_view("No changes made.")
+        outcome = commands.execute(self.store, self.profile, line, self.session)
+        self._log(line, outcome)
+        text = outcome.message.text if outcome.message else ""
+        if outcome.message and outcome.message.id and not text.startswith("Attributes of"):
+            return self._draw_view(text)
+        if outcome.message and text.startswith(("COPIES", "Value", "Not auth")):
+            return self._draw_view(text)
+        self.prompt_values = {}
+        self.view = self.parents.pop()
+        wl = self.view[1]
+        wl.refresh()
+        return self._draw_view(text)
 
     def _in_spoolview(self, aid: str) -> Screen:
         _, f, top = self.view

@@ -108,7 +108,7 @@ def test_attributes_screen_follows_the_capture(store):
 def test_options_not_built_say_so_and_a_refused_display_is_refused(store):
     c = _signed(store, "STUDENT")
     c.handle("ENTER", {"command": "wrksplf select(*all)"})
-    assert "Option 4 is not available" in _text(c.handle("ENTER", {"opt0": "4"}))
+    assert "Not authorized to spooled file." in _text(c.handle("ENTER", {"opt0": "4"}))
     assert "Option 11 is not valid" in _text(c.handle("ENTER", {"opt0": "11"}))
     c.handle("ENTER", {"opt0": ""})
     rows = [f.name for f in c.view[1].rows]
@@ -187,7 +187,8 @@ def test_options_3_and_6_hold_and_release_from_the_list(store):
     assert next(f for f in store.spool if f.name == "PAYRPT").status == "HLD"
     assert "HLD" in _text(c._draw_view())
     assert "released" in _text(c.handle("ENTER", {"opt0": "6"}))
-    assert "Option 4 is not available" in _text(c.handle("ENTER", {"opt0": "4"}))
+    assert "deleted" in _text(c.handle("ENTER", {"opt0": "4"}))
+    assert not any(f.name == "PAYRPT" for f in store.spool)
 
 
 def test_wrksplf_job_filter_needs_select_all_and_narrows(store):

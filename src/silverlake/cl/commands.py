@@ -111,6 +111,11 @@ WRKOUTQ_PARAMS = [Param("OUTQ", "outqname", "*ALL"), Param("OUTPUT", "output", "
 DSPSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
                   Param("CRTDATE", "ignored", "*ONLY"), Param("FOLD", "ignored", "*NO")]
+CHGSPLFA_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
+                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
+                   Param("CRTDATE", "ignored", "*ONLY"), Param("DEV", "ignored", SAME), Param("PRTSEQ", "ignored", SAME),
+                   Param("FORMTYPE", "text", SAME), Param("COPIES", "copies", SAME), Param("RESTART", "ignored", SAME),
+                   Param("OUTQ", "outqsame", SAME), Param("USRDTA", "text", SAME), Param("OUTPTY", "pty", SAME)]
 HLDJOB_PARAMS = [Param("JOB", "jobq", "", 3, required=True), Param("SPLFILE", "ignored", "*NO"),
                  Param("DUPJOBOPT", "ignored", "*SELECT")]
 RLSJOB_PARAMS = [Param("JOB", "jobq", "", 3, required=True), Param("DUPJOBOPT", "ignored", "*SELECT")]
@@ -187,7 +192,7 @@ COMMANDS = {
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "CRTMSGQ": CRTMSGQ_PARAMS, "CHGMSGQ": CHGMSGQ_PARAMS,
-    "DLTMSGQ": DLTMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "WRKOUTQ": WRKOUTQ_PARAMS, "CRTOUTQ": CRTOUTQ_PARAMS, "DLTOUTQ": DLTOUTQ_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
+    "DLTMSGQ": DLTMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "WRKOUTQ": WRKOUTQ_PARAMS, "CHGSPLFA": CHGSPLFA_PARAMS, "CRTOUTQ": CRTOUTQ_PARAMS, "DLTOUTQ": DLTOUTQ_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
     "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "DSPJOB": DSPJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
@@ -303,6 +308,12 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
             if v not in ("*WRKUSR", "*SYSOPR", "*USRPRF", "*WRKSTN"):
                 raise BindError(f"Value {v} for parameter {p.key} not valid.")
             return v
+        return _qualified(p.key, values)
+    if k in ("copies", "pty"):
+        if len(values) != 1 or not values[0].isdigit():
+            raise BindError(f"Value for parameter {p.key} not valid. Use a number.")
+        return int(values[0])
+    if k == "outqsame":
         return _qualified(p.key, values)
     if k in ("dspdta", "oprctl", "autchk"):
         allowed = {"dspdta": ("*NO", "*YES", "*OWNER"), "oprctl": ("*YES", "*NO"), "autchk": ("*OWNER", "*DTAAUT")}[k]
@@ -626,7 +637,7 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         if err:
             return Outcome(err)
         return Outcome(view=("wrkoutq", q, spool.in_queue(store, q), lambda: spool.in_queue(store, q)))
-    if name in ("DSPSPLF", "DLTSPLF", "HLDSPLF", "RLSSPLF"):
+    if name in ("DSPSPLF", "DLTSPLF", "HLDSPLF", "RLSSPLF", "CHGSPLFA"):
         job = b["JOB"]
         if job == "*":
             j = session.job
@@ -636,6 +647,11 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
             return Outcome(err)
         if name == "DLTSPLF":
             return Outcome(spool.delete(store, actor, f).message)
+        if name == "CHGSPLFA":
+            changes = {k: b[k] for k in ("FORMTYPE", "COPIES", "OUTQ", "USRDTA", "OUTPTY") if b[k] != SAME}
+            if not changes:
+                return Outcome(messages.syntax("Give at least one attribute to change."))
+            return Outcome(spool.change_attributes(store, actor, session, f, changes).message)
         if name in ("HLDSPLF", "RLSSPLF"):
             return Outcome(spool.hold(store, actor, f, name == "HLDSPLF").message)
         return Outcome(view=("dspsplf", f))

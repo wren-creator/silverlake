@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-splopts"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -438,6 +438,14 @@ def test_the_second_dspjob_scenario_only_looks_and_backs_out():
     for prev, a in zip(steps, steps[1:]):
         if a.get("fill", {}).get("0", "x").isdigit() and prev.get("fill", {}).get("0") not in ("1", "2"):
             assert prev["proceed_if"] == ["Select one of the following"]    # an option follows a checked menu
+
+
+def test_the_spool_option_scenario_only_opens_prompts_and_backs_out():
+    steps = scenario.SCENARIOS["auth-splopts"][1:]
+    fills = [a["fill"]["0"] for a in steps if "fill" in a]
+    assert fills == ["WRKSPLF", "1", "2", "9", "7", "SIGNOFF"]            # never 4, 3, 6 or 8
+    assert all(a["key"] in ("ENTER", "F3", "F12") for a in steps)
+    assert [a["key"] for a in steps].count("ENTER") == 6                    # six: the command, four options, sign-off
 
 
 def test_the_outq_scenario_only_lists_queues():
