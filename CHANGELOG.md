@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Instructor kit, in the shape of Cross Creek's. `instructor/` holds a two day agenda, an answer key with the teaching notes and a one line mechanism and fix for every lesson, a capstone rubric, a setup runbook (including why flags differ per machine and how to score on the student's own), and five session decks: orientation, one each for the three lesson groups, and fix and re-run. A test keeps the answer key and the registry in step.
+
 - An exploit test for every lesson. `tests/test_exploits.py` plays each lesson's steps from docs/scenarios.md through the 5250 screens and commands, and checks the flag: it has to win against the vulnerable range and fail once the lesson is set to secure. The vulnerable half also proves the exploit itself still works, so a broken exploit cannot make the fixed half pass for nothing. A test fails if a lesson has no exploit there.
 
 - Scenario docs, generated. Each lesson file now carries its own prose (where, real-world parallel, vulnerability, MITRE ATT&CK, exploit steps, consequence, fix, reference) in a `[doc]` block next to the changes it describes, and `python -m silverlake.scenario_docs` writes `docs/scenarios.md` (instructor, with fixes) and `docs/scenarios-trainee.md` (the same without them) from the registry. A test fails if either file is out of date or a lesson is missing a field. The exploit steps use the commands the tests run; the real-world parallels are general patterns, not named incidents.

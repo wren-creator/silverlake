@@ -69,7 +69,7 @@
 - [x] Phase 5b: flags. A per instance secret made by `setup.sh` (never in the repo), flags derived from it per scenario (HMAC), planted in the protected object an exploit reaches (a PAYROLL record, a data area, a spool file) and checked from state where the win is a change (authority granted, profile created). `./check-flags.sh submission.txt`, instructor `--show`
 - [x] Phase 5c: scenario docs generated from the registry so they cannot drift: instructor `docs/scenarios.md` (Where, Real-world parallel, Vulnerability, MITRE ATT&CK, Exploit, Consequence, Fix) and `docs/scenarios-trainee.md` with Fix stripped
 - [x] Phase 5d: a test per scenario that runs the exploit against the vulnerable state and asserts it fails against the secure one, so a code change cannot quietly break a lesson
-- [ ] Phase 5e: instructor kit (agenda, answer key, rubric, setup runbook, session slides) in the format of Cross Creek
+- [x] Phase 5e: instructor kit (agenda, answer key, rubric, setup runbook, session slides) in the format of Cross Creek
 - [ ] Phase 5a later: a live toggle, a QSECOFR-only command in the simulator that flips a scenario without a restart, so an instructor can apply a fix mid-class
 - [ ] Phase 5f: exposed services (HTTP Admin, FTP, host servers) on loopback only, after the native scenarios are solid. Deferred
 - [ ] Silverlake 101 EPUB, same format as the Mainframe 10x series
