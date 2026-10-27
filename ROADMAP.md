@@ -46,6 +46,8 @@
 - [ ] Lockout and expiry follow-ups: device lockout (QMAXSGNACN 1), the warnings before the last attempt, QSECOFR exempt at the console, CHGPWD, password rules (QPWDMINLEN, QPWDRQDDIF), per-profile PWDEXPITV, an expiry warning before the day
 - [x] Phase 3c-3c complete: jobs, spool files and message queues, merged to main 2026-10-27
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
+- [ ] Phase 4b: PASE, a simulated one. No real processes, ever: a Python shell over a virtual IFS, so it cannot touch the host and `reset.sh` stays exact. Stages: (1) an IFS (`/QOpenSys`, `/home`, `/tmp`, `/QSYS.LIB` mapped onto the existing library and object store) with rwx permissions tied to profiles and *ALLOBJ; (2) the shell behind `CALL QP2TERM`, `QSH` and a loopback SSH listener, with a whitelist (ls, cat, cd, pwd, id, whoami, ps, env, echo, export); (3) `system` to run CL from the shell and `db2util` or a small SQL runner for `QSYS2.QCMDEXC`; (4) seeded weaknesses: world writable `.ssh/authorized_keys`, a writable directory early in `$PATH`, writable `/etc/profile` and `~/.profile`, and CL reachable from a PASE shell by a limited-capability profile
+- [ ] PASE facts to check on a real system before teaching them: whether adopted authority carries into PASE (believed not to, unconfirmed), what `id` and `ps` really print, default IFS authorities on `/QOpenSys` and `/home`, and how a LMTCPB(*YES) profile fares with QP2TERM (read-only checks on PUB400, human decides)
 - [ ] Phase 5: vulnerable and secure modes, seeded weak configs, exposed services, scenarios, flag checker, instructor and trainee docs
 - [ ] Silverlake 101 EPUB, same format as the Mainframe 10x series
 
