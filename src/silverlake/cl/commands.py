@@ -8,7 +8,7 @@ are named in IGNORED so a copied command from a real system still runs."""
 import fnmatch
 from dataclasses import dataclass
 
-from ..system import admin, autls, jobctl, messages, msgq, objects, objlist, overrides, rpg, source, spool
+from ..system import admin, autls, dbfiles, jobctl, messages, msgq, objects, objlist, overrides, rpg, source, spool
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -200,6 +200,16 @@ OVRDBF_PARAMS = [Param("FILE", "name", "", required=True), Param("TOFILE", "qnam
                  Param("MBR", "name*", "*FILE"), Param("OVRSCOPE", "name*", "*ACTGRPDFN"), Param("SECURE", "yesno", "*NO")]
 DLTOVR_PARAMS = [Param("FILE", "name*", "", required=True), Param("LVL", "ignored", "*")]
 
+CPYF_PARAMS = [Param("FROMFILE", "qname", "", required=True), Param("TOFILE", "qname", "", required=True),
+               Param("FROMMBR", "name*", "*FIRST"), Param("TOMBR", "name*", "*FIRST"),
+               Param("MBROPT", "name*", "*NONE"), Param("CRTFILE", "yesno", "*NO"),
+               Param("PRINT", "ignored", "*NONE"), Param("OUTFMT", "ignored", "*CHAR"),
+               Param("FROMRCD", "name*", "*START"), Param("TORCD", "ignored", "*END"),
+               Param("NBRRCDS", "name*", "*END"), Param("INCCHAR", "ignored", "*NONE"),
+               Param("INCREL", "ignored", "*NONE"), Param("FMTOPT", "fmtopt", "*NONE", 3)]
+DSPPFM_PARAMS = [Param("FILE", "qname", "", required=True), Param("MBR", "name*", "*FIRST"),
+                 Param("FROMRCD", "ignored", "*NONE")]
+
 STRPDM_PARAMS: list[Param] = []
 WRKMBRPDM_PARAMS = [Param("FILE", "qname", "QRPGLESRC"), Param("MBR", "wrkname", "*ALL")]
 WRKOBJPDM_PARAMS = [Param("LIB", "name*", "*CURLIB"), Param("OBJ", "wrkname", "*ALL")]
@@ -212,7 +222,7 @@ DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU
                    "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ")}
 
 COMMANDS = {
-    "OVRDBF": OVRDBF_PARAMS, "DLTOVR": DLTOVR_PARAMS,
+    "CPYF": CPYF_PARAMS, "DSPPFM": DSPPFM_PARAMS, "OVRDBF": OVRDBF_PARAMS, "DLTOVR": DLTOVR_PARAMS,
     "STRPDM": STRPDM_PARAMS, "WRKMBRPDM": WRKMBRPDM_PARAMS, "WRKOBJPDM": WRKOBJPDM_PARAMS, "STRSEU": STRSEU_PARAMS,
     "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTPF": CRTPF_PARAMS,
     "CRTDSPF": CRTDSPF_PARAMS, "CRTPRTF": CRTPRTF_PARAMS,
@@ -291,6 +301,11 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
         return SAME
     if k == "text":
         return "" if values == ["*BLANK"] else values[0][:50]
+    if k == "fmtopt":
+        words = [v.upper() for v in values]
+        if words[0] not in ("*NONE", "*MAP", "*NOCHK") or any(w not in ("*DROP", "*CVTSRC") for w in words[1:]):
+            raise BindError("Value for parameter FMTOPT not valid. Use *NONE, *MAP or *NOCHK.")
+        return words
     if k == "name*":
         v = values[0]
         if v.startswith("*"):
@@ -780,6 +795,14 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "EDTOBJAUT":
         obj, err = objlist.edit_authority(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
         return Outcome(err) if err else Outcome(view=("edtobjaut", obj))
+    if name == "CPYF":
+        if b["MBROPT"] not in ("*NONE", "*ADD", "*REPLACE", "*UPDADD"):
+            return Outcome(messages.syntax("Value for parameter MBROPT not valid. Use *NONE, *ADD, *REPLACE or *UPDADD."))
+        return Outcome(dbfiles.copy_file(store, actor, session, b["FROMFILE"], b["TOFILE"], b["MBROPT"], b["CRTFILE"],
+                                         b["FMTOPT"], b["FROMRCD"], b["NBRRCDS"]).message)
+    if name == "DSPPFM":
+        f, err = dbfiles.find_data_file(store, actor, session, b["FILE"])
+        return Outcome(err) if err else Outcome(view=("dsppfm", f))
     if name == "OVRDBF":
         if b["OVRSCOPE"] not in ("*ACTGRPDFN", "*CALLLVL", "*JOB"):
             return Outcome(messages.syntax("Value for parameter OVRSCOPE not valid. Use *ACTGRPDFN, *CALLLVL or *JOB."))

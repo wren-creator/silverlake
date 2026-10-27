@@ -97,6 +97,14 @@ Two ways a caller can change what an adopting program touches, both about what a
 - **Seeded.** `EMPDIR` adopts OPERATOR and reads `STAFF`, a public directory with the same layout as PAYROLL and a zero salary column. A basic user overrides STAFF to PAYROLL and the lookup shows real salaries. `EMPDIRX` is the same code owned by QDFTOWN, which has nothing on PAYROLL, so the redirected open is refused. `PAYRUN` adopts SECADMIN and calls `PAYCALC` by name alone. A basic user compiles their own `PAYCALC` into QTEMP, which is ahead of APPLIB on the list, and PAYRUN runs it with SECADMIN's authority. In the test it grants the user `*USE` on PAYROLL with QCMDEXC. `PAYRUNX` calls `APPLIB/PAYCALC`, so the list cannot choose.
 - **Why the fix for EMPDIR is the owner and not an override.** A real RPG program opens its files before its first statement, so it cannot override its own files in time. The real defenses are a CL driver that overrides with SECURE(*YES) (CL programs are not built here), an owner who can reach only what the program needs, and USROPN with the override first (USROPN is not in the runtime). The seed uses the least-privilege one.
 
+## CPYF and DSPPFM
+
+Files can now be copied and read without writing RPG. Code is in `system/dbfiles.py` and `screens/pfm.py`. Nothing here was captured from a real system: the authority each needs is from IBM's pages as remembered and the completion wording and the display layout are ours.
+
+- **CPYF** `FROMFILE(lib/file) TOFILE(lib/file) MBROPT(*NONE|*ADD|*REPLACE|*UPDADD) CRTFILE(*NO|*YES) FROMRCD NBRRCDS FMTOPT(*NONE|*MAP|*NOCHK)`. `*USE` on the from-file, `*OBJOPR` and `*ADD` on the to-file, plus `*DLT` to replace and `*UPD` to update. A to-file that already has records is refused unless MBROPT says what to do. A unique key refuses a duplicate. `FMTOPT(*NONE)` needs the same field names, `*MAP` and `*NOCHK` copy the fields the two share. Source files are refused (CPYSRCF is not built), FROMMBR and TOMBR are accepted and ignored.
+- **The lesson.** A file made by CRTFILE(*YES) belongs to the person who copied and gets the library's create authority, so it is not on the original's authorization list. `*USE` on a locked file is enough to leave with a copy nobody locks. In QTEMP the copy leaves no trace after sign-off.
+- **DSPPFM** `FILE(lib/file)` needs `*USE` and shows each record as its raw characters (numbers as zero-filled digits, no decimal point and no sign zone). Control takes a record number, T or B, Roll moves a page, F19 and F20 shift 71 columns. Not built: F10, F11 (hex), F21, Find, a member other than the first.
+
 ## What it is not (yet)
 
 - **Adopted authority and `QCMDEXC` are built** (next section). Not covered: system request, the attention key, break handling programs and debug (nothing here starts one), and `TFRGRPJOB` (not built). The IFS does not support adoption either, and the simulated PASE will have to keep that true.
