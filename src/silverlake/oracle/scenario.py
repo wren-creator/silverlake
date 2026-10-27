@@ -133,6 +133,14 @@ AUTHENTICATED["auth-spool"] = [
     *[{"key": "F12", "always": True}] * 2, *[{"key": "F3", "always": True}] * 2,
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the profile's own message queue, the system operator's queue, and the SNDMSG prompt, which
+# is opened and cancelled with F12. Nothing is sent, answered, removed or cleared.
+AUTHENTICATED["auth-msgs"] = [
+    _SIGNON, *_cmd("DSPMSG"), *_cmd("DSPMSG MSGQ(QSYSOPR)"),
+    {"fill": {"0": "SNDMSG"}, "key": "ENTER"}, {"key": "F12", "always": True},
+    *[{"key": "F3", "always": True}] * 2,
+    {**_SIGNOFF, "always": True},
+]
 # Looks at the keys and option the edit screen and the work list offer beyond what is built, on the
 # same kind of throwaway job-local data area as auth-objopts. It only presses function keys after
 # the option numbers, never Enter on a screen it did not expect, and every back out runs whatever

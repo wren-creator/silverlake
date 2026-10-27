@@ -127,6 +127,15 @@ The read-only `auth-spool` scenario (2026-10-27) opened the profile's first spoo
 - **Work with Spooled File Attributes** has job, user, number, creation date and time, status, output queue and library, form type, priority, copies, and a second page. Silverlake follows the first page.
 - The capture holds the test profile's own job names and stays local.
 
+## What the message captures taught us
+
+The read-only `auth-msgs` scenario (2026-10-27) ran `DSPMSG`, `DSPMSG MSGQ(QSYSOPR)` and opened `SNDMSG`.
+
+- **`QSYSOPR` is open to a basic profile.** Severity 99, delivery `*HOLD`, with system events naming other people's jobs and users (`Job message queue for N/USER/JOB has been wrapped`, jobs held and released, work stations ended). That is free reconnaissance and Silverlake reproduces it.
+- **A user's own queue is in `QUSRSYS`, delivery `*BREAK`, severity 00,** and showed `(No messages available)` when empty. A messages from a user shows a `From` line and the text, a system event only the text. There were no input fields, since nothing needed a reply.
+- **`SNDMSG` typed with no parameters got no answer in 15 seconds,** so the prompt screen was not captured, the harness stopped and sent nothing more, and the job was left to time out on the host. Silverlake's SNDMSG asks for TOUSR or TOMSGQ in a message line instead.
+- The capture holds other people's job and user names and stays local.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "SIGNOFF") for c in _fills(name)), name
 
@@ -407,6 +407,15 @@ def test_the_spool_scenario_only_displays_and_backs_out():
     assert fills == ["WRKSPLF", "5", "8", "SIGNOFF"]                    # no 1, 2, 3, 4, 6, 9: nothing changes
     assert all(a.get("always") for a in actions[2:-1] if a["key"] in ("F12", "F3"))
     assert actions[1]["proceed_if"] == ["QPJOBLOG"] and actions[-1].get("always")
+
+
+def test_the_message_scenario_sends_nothing():
+    fills = [a["fill"]["0"] for a in scenario.SCENARIOS["auth-msgs"][1:] if "fill" in a]
+    assert fills == ["DSPMSG", "DSPMSG MSGQ(QSYSOPR)", "SNDMSG", "SIGNOFF"]       # SNDMSG is only opened
+    keys = [a["key"] for a in scenario.SCENARIOS["auth-msgs"][1:]]
+    assert keys.index("F12") > [a.get("fill", {}).get("0") for a in scenario.SCENARIOS["auth-msgs"][1:]].index("SNDMSG")
+    assert not any(a["key"] == "ENTER" and a.get("fill", {}).get("0") not in ("DSPMSG", "DSPMSG MSGQ(QSYSOPR)", "SNDMSG", "SIGNOFF")
+                   for a in scenario.SCENARIOS["auth-msgs"][1:])
 
 
 def test_the_description_scenario_is_read_only():

@@ -214,6 +214,45 @@ def dspsplf_screen(f, top: int = 0, message: str = "") -> Screen:
     return Screen(rows, cursor="control")
 
 
+def message_lines(q) -> list[str]:
+    """The queue as screen lines (captured shapes): a message from a user shows a From line
+    and then the text, a system event shows the text alone."""
+    out: list[str] = []
+    for m in (q.data or {}).get("messages", []):
+        when = datetime.fromisoformat(m["when"])
+        if m.get("from"):
+            out.append(f"From  . . . :   {m['from']:<14}{when:%y-%m-%d}   {when:%H:%M:%S}")
+        out.append(m["text"])
+    return out or ["(No messages available)"]
+
+
+def dspmsg_screen(q, system_name: str, top: int = 0, message: str = "") -> Screen:
+    """Display Messages, laid out like the real display (captured twice: a user queue and QSYSOPR).
+    Thirteen lines from row 7, rolled by a screenful. F11 (remove one message) needs a cursor on
+    a message and is not built; F13 and F16 clear the queue."""
+    lines = message_lines(q)
+    more = top + 13 < len(lines)
+    d = q.data or {}
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    v = lambda r, c, t: Text(r, c, t, ds.ATTR_WHITE)
+    rows: list = [
+        Text(0, 32, "Display Messages", ds.ATTR_WHITE),
+        Text(1, 55, "System:", ds.ATTR_WHITE), v(1, 65, system_name),
+        g(2, 1, "Queue . . . . . :"), v(2, 21, q.name), g(2, 45, "Program . . . . :"), v(2, 65, "*DSPMSG"),
+        g(3, 3, "Library . . . :"), v(3, 23, q.library), g(3, 47, "Library . . . :"),
+        g(4, 1, "Severity  . . . :"), v(4, 21, d.get("sev", "00")), g(4, 45, "Delivery  . . . :"),
+        v(4, 65, d.get("dlvry", "*HOLD")),
+        Text(6, 1, "Type reply (if required), press Enter.", ds.ATTR_BLUE),
+    ]
+    rows += [Text(7 + i, 3, line[:74], ds.ATTR_WHITE) for i, line in enumerate(lines[top:top + 13])]
+    rows.append(Text(20, 72 if more else 73, "More..." if more else "Bottom", ds.ATTR_BLUE))
+    rows += [Text(21, 1, "F3=Exit              F11=Remove a message                 F12=Cancel", ds.ATTR_BLUE),
+             Text(22, 1, "F13=Remove all       F16=Remove all except unanswered     F24=More keys", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
+
+
 def spoolattr_screen(f, system_name: str) -> Screen:
     """Work with Spooled File Attributes, first page, laid out like the real one (captured). The
     second page and F13 (change) are not built."""

@@ -20,7 +20,7 @@ from datetime import datetime
 
 from ..cl import commands
 from ..proto import datastream as ds
-from ..system import admin, autls, menus, messages, objects, profiles, spool
+from ..system import admin, autls, menus, messages, msgq, objects, profiles, spool
 from ..system.authority import ALL, CHANGE, EXCLUDE
 from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
@@ -28,7 +28,7 @@ from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
-                        dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
+                        dspmsg_screen, message_lines as dspmsg_lines, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -289,6 +289,8 @@ class SignonController:
             return ("work", WorkList("spool", spec[1], spec[2]))
         if kind == "dspsplf":
             return ("spoolview", spec[1], 0)
+        if kind == "dspmsg":
+            return ("msgview", spec[1], 0)
         if kind == "wrkactjob":
             sbs = spec[1]
             own = self.session.job.qualified if self.session.job else ""
@@ -320,6 +322,8 @@ class SignonController:
             return dspobjd_screen(obj, detail, SYSTEM_NAME, page)
         if self.view[0] == "spoolview":
             return dspsplf_screen(self.view[1], self.view[2], message)
+        if self.view[0] == "msgview":
+            return dspmsg_screen(self.view[1], SYSTEM_NAME, self.view[2], message)
         if self.view[0] == "spoolattr":
             return spoolattr_screen(self.view[1], SYSTEM_NAME)
         if self.view[0] == "add":
@@ -347,6 +351,8 @@ class SignonController:
             return self._in_add(aid, values)
         if kind == "spoolview":
             return self._in_spoolview(aid)
+        if kind == "msgview":
+            return self._in_msgview(aid)
         if kind == "spoolattr":
             if aid == "F3":
                 self.view = None
@@ -533,6 +539,27 @@ class SignonController:
         wl.refresh()
         message = last if len(picks) == 1 else (f"{done} objects deleted." + (f" {last}" if done < len(picks) else ""))
         return self._draw_view(message)
+
+    def _in_msgview(self, aid: str) -> Screen:
+        _, q, top = self.view
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            last = max(0, len(dspmsg_lines(q)) - 1) // 13 * 13
+            self.view = ("msgview", q, max(0, min(top + (13 if aid == "ROLLUP" else -13), last)))
+            return self._draw_view()
+        if aid in ("F13", "F16"):
+            if not msgq.can_change(self.store, self.profile, q):
+                return self._draw_view(msgq.not_authorized(q).text)
+            msgq.messages_of(q).clear()
+            self.store.on_change()
+            self.view = ("msgview", q, 0)
+            return self._draw_view("All messages removed." if aid == "F13" else "Messages removed.")
+        if aid in ("F11", "F24"):
+            return self._draw_view(f"{aid} is not available in Silverlake yet.")
+        return self._close_view()
 
     def _in_spoolview(self, aid: str) -> Screen:
         _, f, top = self.view

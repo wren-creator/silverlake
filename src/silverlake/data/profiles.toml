@@ -435,3 +435,29 @@ lines = """
  *NONE      Command                      26-10-19  08:40:55,000000  QCMD
                                       Message . . . . :   GRTOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE) USER(OLDTEMP) AUT(*ALL)
 """
+
+# ---------------------------------------------------------------------------
+# Message queues. QSYSOPR is the system operator's queue: it ships readable and
+# writable by everyone, and it collects events about other people's jobs, so a
+# plain profile learns job names and users from it (a real basic profile on
+# PUB400 could read its own). The messages here are ours. Every profile also has
+# a queue named after it in QUSRSYS, made on first use.
+# ---------------------------------------------------------------------------
+
+[[object]]
+name = "QSYSOPR"
+type = "*MSGQ"
+owner = "QSYS"
+public = "*CHANGE"
+text = "System operator message queue"
+[object.data]
+dlvry = "*HOLD"
+sev = "99"
+messages = [
+  { from = "", when = "2026-10-26T06:02:11", text = "Job message queue for 004412/QUSER/QZRCSRVS has been wrapped." },
+  { from = "", when = "2026-10-26T06:02:44", text = "Job message queue for 004418/QUSER/QZDASOINIT has been wrapped." },
+  { from = "", when = "2026-10-26T09:15:30", text = "Job 004502/OPERATOR/QPADEV0003 held by user OPERATOR with option SPLFILE(*NO)." },
+  { from = "", when = "2026-10-26T09:41:02", text = "Job 004502/OPERATOR/QPADEV0003 released by user OPERATOR." },
+  { from = "", when = "2026-10-26T17:30:00", text = "All jobs at work station QPADEV0003 ended." },
+  { from = "QSECOFR", when = "2026-10-27T07:55:20", text = "Backup window tonight. Service account SVCACCT will run the save." },
+]

@@ -8,7 +8,7 @@ are named in IGNORED so a copied command from a real system still runs."""
 import fnmatch
 from dataclasses import dataclass
 
-from ..system import admin, autls, messages, objects, objlist, spool
+from ..system import admin, autls, messages, msgq, objects, objlist, spool
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -84,6 +84,11 @@ RVKOBJAUT_PARAMS = [
     Param("ASPDEV", "ignored", "*"), Param("AUTL", "name*", "*NONE"),
 ]
 
+DSPMSG_PARAMS = [Param("MSGQ", "msgqname", "*WRKUSR"), Param("OUTPUT", "output", "*"), Param("MSGTYPE", "ignored", "*ALL"),
+                 Param("START", "ignored", "*LAST"), Param("SEV", "ignored", "0"), Param("ASTLVL", "ignored", "*PRV")]
+SNDMSG_PARAMS = [Param("MSG", "msgtext", "", required=True), Param("TOMSGQ", "msgqs", "", 50), Param("TOUSR", "touser", ""),
+                 Param("MSGTYPE", "msgtype", "*INFO"), Param("RPYMSGQ", "ignored", "*WRKSTN"), Param("CCSID", "ignored", "*JOB")]
+CLRMSGQ_PARAMS = [Param("MSGQ", "msgqname", "", required=True), Param("CLEAR", "clearopt", "*ALL")]
 WRKSPLF_PARAMS = [Param("SELECT", "splsel", "*CURRENT", 6), Param("JOB", "ignored", "*ALL"),
                   Param("PERIOD", "ignored", "*AVAIL"), Param("ASPDEV", "ignored", "*"),
                   Param("OUTPUT", "output", "*"), Param("DSPFMT", "ignored", "*INLENV"), Param("ASTLVL", "ignored", "*PRV")]
@@ -145,7 +150,7 @@ COMMANDS = {
     "CRTAUTL": CRTAUTL_PARAMS, "DLTAUTL": DLTAUTL_PARAMS, "ADDAUTLE": ADDAUTLE_PARAMS,
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
-    "WRKACTJOB": WRKACTJOB_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
+    "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
     "DLTSPLF": DLTSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
     "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS,
@@ -252,6 +257,26 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
             if v not in SPECIAL_VALUES and v not in _DETAILED and v != "*AUTLMGT":
                 raise BindError(f"Value {v} for parameter AUT not valid.")
         return list(values)
+    if k == "msgqname":
+        v = values[0].upper()
+        if v.startswith("*"):
+            if v not in ("*WRKUSR", "*SYSOPR", "*USRPRF", "*WRKSTN"):
+                raise BindError(f"Value {v} for parameter {p.key} not valid.")
+            return v
+        return _qualified(p.key, values)
+    if k == "msgqs":
+        return [v.upper() if v.upper() == "*SYSOPR" else _qualified(p.key, [v]) for v in values]
+    if k == "touser":
+        v = values[0].upper()
+        if v.startswith("*") and v not in ("*SYSOPR", "*ALLACT", "*REQUESTER"):
+            raise BindError(f"Value {v} for parameter TOUSR not valid.")
+        return v
+    if k == "msgtext":
+        return values[0][:512]
+    if k == "msgtype":
+        return _one(p.key, values, ("*INFO", "*INQ"))
+    if k == "clearopt":
+        return _one(p.key, values, ("*ALL", "*KEEPUNANS"))
     if k == "splsel":                       # SELECT(user device form userdata asp splfile): user and file only
         user = values[0].upper()
         if user.startswith("*") and user not in ("*CURRENT", "*ALL"):
@@ -471,6 +496,27 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         if not rows:
             return Outcome(messages.syntax("No user profiles found, or you are not authorized to any."))
         return Outcome(view=("wrkusrprf", rows))
+    if name == "DSPMSG":
+        q, err = msgq.display(store, actor, session, b["MSGQ"])
+        return Outcome(err) if err else Outcome(view=("dspmsg", q))
+    if name == "SNDMSG":
+        if b["MSGTYPE"] == "*INQ":
+            return Outcome(messages.syntax("Inquiry messages are not modeled."))
+        if b.get("TOMSGQ") and b.get("TOUSR"):
+            return Outcome(messages.syntax("TOMSGQ and TOUSR cannot both be given."))
+        if b.get("TOUSR") in ("*ALLACT", "*REQUESTER"):
+            return Outcome(messages.syntax(f"TOUSR({b['TOUSR']}) is not modeled."))
+        targets = b.get("TOMSGQ") or ([b.get("TOUSR")] if b.get("TOUSR") else [])
+        if not targets:
+            return Outcome(messages.syntax("Give TOUSR or TOMSGQ."))
+        if b.get("TOUSR") and b.get("TOUSR") != "*SYSOPR":
+            q = msgq.user_queue(store, b.get("TOUSR"))
+            if q is None:
+                return Outcome(messages.Message("CPF2204", f"User profile {b['TOUSR']} not found.", messages.DOCUMENTED))
+            targets = [f"{q.library}/{q.name}"]
+        return Outcome(msgq.send(store, actor, session, b["MSG"], targets).message)
+    if name == "CLRMSGQ":
+        return Outcome(msgq.clear(store, actor, session, b["MSGQ"]).message)
     if name == "WRKSPLF":
         user, fname = b["SELECT"]
         if user not in ("*CURRENT", "*ALL") and "*" not in user and user not in store.profiles:

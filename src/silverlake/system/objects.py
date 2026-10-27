@@ -36,7 +36,7 @@ LIBCRTAUT = CHANGE          # "same as the create authority for QSYS", from QCRT
 # which has no *ADD, so "needs *ADD to QSYS" cannot be what stops ordinary users. What
 # stopped a basic profile on a real system was authority to the command itself ("Not
 # authorized to command CRTLIB in library *LIBL."), and commands are not objects here yet.
-TYPES = ("*LIB", "*FILE", "*CMD", "*MENU", "*PGM", "*OUTQ")   # the object types modeled so far
+TYPES = ("*LIB", "*FILE", "*CMD", "*MENU", "*PGM", "*OUTQ", "*MSGQ")   # the object types modeled so far
 
 
 @dataclass(frozen=True)

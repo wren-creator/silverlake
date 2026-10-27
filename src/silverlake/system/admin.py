@@ -19,6 +19,7 @@ queue and output queue (there is no object model yet), and password rules.
 import re
 from dataclasses import dataclass
 
+from . import msgq
 from . import messages
 from .authority import CHANGE, USE, Auth, SpecialAuthority, UserClass, can_grant, class_authorities
 from .profiles import Profile, ProfileStore
@@ -168,7 +169,8 @@ def delete(store: ProfileStore, actor: Profile, name: str, ownobjopt: tuple[str,
     if store.active.get(name):
         return _no(messages.not_deleted(name, "A user is signed on under the profile."))
 
-    owned = [o for o in store.objects.values() if o.owner == name]
+    own_queue = (msgq.USER_LIB, name, "*MSGQ")       # a profile's message queue goes with it
+    owned = [o for o in store.objects.values() if o.owner == name and o.key != own_queue]
     mode = ownobjopt[0]
     if owned and mode == "*NODLT":
         return _no(messages.not_deleted(name, "It owns objects and OWNOBJOPT(*NODLT) is in effect."))
@@ -184,6 +186,7 @@ def delete(store: ProfileStore, actor: Profile, name: str, ownobjopt: tuple[str,
             return _no(messages.profile_not_found(new_owner or "(none)"))
 
     # Past every check. Now change things.
+    store.objects.pop(own_queue, None)
     notes = []
     if owned:
         for obj in owned:

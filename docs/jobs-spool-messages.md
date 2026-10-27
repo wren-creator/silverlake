@@ -41,9 +41,19 @@ Options 2, 3, 4, 5, 6, 7, 8 and 13 are laid out as on the real display and say "
 
 **What the range seeds.** `QPRINT` is `DSPDTA(*YES)` with public `*USE`, and holds a payroll register: the classic mistake, readable by a profile with no special authority. `QEZJOBLOG` is `DSPDTA(*OWNER)`, and holds an old `QSECOFR` job log with admin commands in it, readable by `*SPLCTL` and `*JOBCTL` profiles (SPOOLMAN, JOBMAN) and nobody else. Both are our picks.
 
-## Step 3: messages
+## Step 3: message queues (built)
 
-DSPMSG, SNDMSG, and a queue per user and per device (the real capture opened one named after the display device, from `QPGMR`, delivery `*NOTIFY`). Reading a queue needs `*USE`, sending needs `*ADD`, and a world writable queue can be spoofed into. `QSYSOPR` is the interesting one.
+`DSPMSG`, `SNDMSG` and `CLRMSGQ`, with the Display Messages screen laid out from two captures (a user queue and `QSYSOPR`). A queue is a `*MSGQ` object, so `GRTOBJAUT`, `RVKOBJAUT` and `DSPOBJAUT` work on it, its messages live in the object's data and are saved with the state, and `QSYSOPR` is seeded. Every profile has a queue named after it in `QUSRSYS`, made the first time anyone reaches for it and removed with the profile.
+
+| Command | Needs (IBM's page) |
+|---|---|
+| `SNDMSG` | `*OBJOPR` and `*ADD` to the queue, `*USE` to the queue and its library |
+| `CLRMSGQ` (and `F13` and `F16` on the display) | `*CHANGE` to the queue, `*USE` to the library |
+| `DSPMSG` | the page has no authority section, only `CPF2408`; `*USE` is inferred and fits the capture |
+
+**What the capture showed, and what the range seeds.** A basic profile on PUB400 read `QSYSOPR` and learned other people's job names and users from it. Silverlake seeds `QSYSOPR` public `*CHANGE` (our pick, matching what was seen) with a few events and a note from QSECOFR, so a plain profile reads it. User queues take the library's create authority, as CRTMSGQ's page says, and `QUSRSYS` is public `*CHANGE` in the seed, so by default anyone can read and write anyone's queue (an inference, flagged). Revoke public authority on a queue and the plain profile gets `CPF2408`, "Not authorized to message queue X."
+
+**Not modeled.** Delivery and severity are shown and not acted on, so nothing interrupts a session. Inquiry messages and replies, `*ALLACT` and `*REQUESTER` as recipients, the work station queue, `RMVMSG` (the page says compiled CL only), F11 (remove one message, needs a cursor on a message), `WRKMSGQ`, and `CRTMSGQ`/`CHGMSGQ`. The real `*WRKUSR` default showed a device queue in one capture and the user queue in another, so Silverlake always shows the user queue.
 
 ## Later
 
