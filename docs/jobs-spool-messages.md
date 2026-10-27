@@ -65,6 +65,16 @@ In `CHGJOB`, `RUNPTY`, `TIMESLICE`, `PURGE`, `DFTWAIT`, `CPUTIME` and `MAXTMPSTG
 
 Message IDs (`CPF1321`, `CPF1342`, `CPF1343`, `CPF1344`, `CPF1346`, `CPF1349`) are from the pages, with the condition for each inferred. A refused `JOBCTL`-only change uses `CPF1337`, which came from a summary of CHGJOB's page.
 
+## DSPJOBLOG and WRKJOB (built)
+
+Both laid out from a read-only capture of the profile's own job on PUB400. `DSPJOBLOG` shows the **live** log: each command as `3>> COMMAND` and the message it raised as plain text, with the command itself last, as the real one shows. Roll, F5, F17 and F18 work, F10 (detailed messages) says it is not built. A live session's log is the same list its job log is written from at sign-off, so `DSPJOBLOG JOB(n/u/name)` reads another session's commands as they happen.
+
+`WRKJOB` is the Work with Job menu (ten options, `Selection or command` line, as captured). Option 4 lists that job's spool files, 10 is `DSPJOBLOG`, 13 is the library list for your own job. Options 1, 2, 3, 11, 12, 14, 15 and 16 are drawn and say "not available yet", as is the second page. `WRKACTJOB` option 5 opens it.
+
+Rules, quoted from IBM's pages: `DSPJOBLOG` needs `*JOBCTL` or the job's own user name, and "to display a job log for a job that has all object (*ALLOBJ) special authority, you must have *ALLOBJ" (or a function usage entry that is not modeled). So JOBMAN reads a plain user's log but not QSECOFR's, and LEGACY (`*ALLOBJ` and `*JOBCTL`) reads both. The refusal is `CPF2441`, "Not authorized to display job log." `WRKJOB` needs the same user or `*JOBCTL`, refused as `CPF1071`. `*SPLCTL` is mentioned on neither page. A seeded system job has no log (`CPF2523`) and a job that has ended says `CPF2443`, because its log is a spool file by then (inferred, read it with `DSPSPLF`).
+
+F12 on a list opened from another screen now goes back one level instead of straight to the menu. F3 still leaves everything.
+
 ## Later
 
-`WRKJOB` and `DSPJOBLOG`, a live job's attributes and log, and the real confirm and prompt screens for options 2 and 4 once captured (the oracle will not end or change jobs on a shared system).
+The real confirm and prompt screens for `WRKACTJOB` options 2 and 4 once captured (the oracle will not end or change jobs on a shared system), `DSPJOB`, and `WRKJOB`'s other options.

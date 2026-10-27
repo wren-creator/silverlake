@@ -141,6 +141,13 @@ AUTHENTICATED["auth-msgs"] = [
     *[{"key": "F3", "always": True}] * 2,
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the profile's own job log and its own Work with Job menu, each looked at and left with F3 and
+# F12. Nothing is changed, held, ended or sent. WRKJOB with no parameters is the profile's own job.
+AUTHENTICATED["auth-joblog"] = [
+    _SIGNON, *_cmd("DSPJOBLOG"), *_cmd("WRKJOB"),
+    *[{"key": "F12", "always": True}] * 2, *[{"key": "F3", "always": True}] * 2,
+    {**_SIGNOFF, "always": True},
+]
 # Looks at the keys and option the edit screen and the work list offer beyond what is built, on the
 # same kind of throwaway job-local data area as auth-objopts. It only presses function keys after
 # the option numbers, never Enter on a screen it did not expect, and every back out runs whatever

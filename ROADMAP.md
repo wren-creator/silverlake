@@ -26,7 +26,8 @@
 - [x] Phase 3c-3c step 2: spool files (WRKSPLF, DSPSPLF, DLTSPLF, QPJOBLOG per session, *OUTQ objects, DSPDTA/OPRCTL rules), from the PUB400 captures
 - [x] HLDSPLF, RLSSPLF and WRKSPLF options 3 and 6, WRKSPLF JOB filter, WRKACTJOB option 8, F17 and F18 on WRKOBJOWN and the edit screen
 - [x] HLDJOB, RLSJOB, ENDJOB, CHGJOB gated on the job's owner or *JOBCTL, behind WRKACTJOB options 2, 3, 4, 6; an ended session notices and signs itself off
-- [ ] Job leftovers: WRKJOB and DSPJOBLOG, WRKACTJOB options 5, 7, 13 and keys F7, F10, F11, the real confirm for option 4 and prompt for option 2 (need captures, the oracle will not end or change jobs)
+- [x] DSPJOBLOG (live log, *JOBCTL or same user, *ALLOBJ jobs need *ALLOBJ) and WRKJOB (menu, options 4, 10, 13), WRKACTJOB option 5, from the PUB400 captures
+- [ ] Job leftovers: WRKJOB options 1, 2, 3, 11, 12, 14, 15, 16 and page two, DSPJOB, DSPJOBLOG F10, WRKACTJOB options 7, 13 and keys F7, F10, F11, the real confirm for option 4 and prompt for option 2 (need captures, the oracle will not end or change jobs)
 - [ ] Spool leftovers: WRKOUTQ and its capture, WRKSPLF options 1, 2, 4 (confirm), 7, 9, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF, CRTOUTQ
 - [x] Phase 3c-3c step 3: message queues (DSPMSG, SNDMSG, CLRMSGQ, QSYSOPR, per-user queues in QUSRSYS), from the PUB400 captures
 - [ ] Message leftovers: the real SNDMSG prompt (needs a longer wait), inquiry messages and replies, F11 remove one, WRKMSGQ, CRTMSGQ/CHGMSGQ/DLTMSGQ, RMVMSG, break delivery to a live session, work station queues

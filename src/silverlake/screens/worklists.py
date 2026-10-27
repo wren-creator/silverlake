@@ -214,6 +214,57 @@ def dspsplf_screen(f, top: int = 0, message: str = "") -> Screen:
     return Screen(rows, cursor="control")
 
 
+def dspjoblog_screen(job, lines: list[str], system_name: str, top: int = 0, message: str = "") -> Screen:
+    """Display Job Log, laid out like the real one (captured): the job on row 2, fourteen lines of the
+    log from row 4, and a key line. F10 (detailed messages) is not built."""
+    more = top + 14 < len(lines)
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    v = lambda r, c, t: Text(r, c, t, ds.ATTR_WHITE)
+    rows: list = [
+        Text(0, 8, "System:", ds.ATTR_WHITE), Text(0, 31, "Display Job Log", ds.ATTR_WHITE), v(1, 71, system_name),
+        g(2, 1, "Job . . :"), v(2, 13, job.name), g(2, 27, "User . . :"), v(2, 40, job.user),
+        g(2, 54, "Number . . . :"), v(2, 71, job.number),
+    ]
+    rows += [Text(4 + i, 1, line[:77], ds.ATTR_WHITE) for i, line in enumerate(lines[top:top + 14])]
+    rows.append(Text(18, 72 if more else 73, "More..." if more else "Bottom", ds.ATTR_BLUE))
+    rows += [Text(19, 1, "Press Enter to continue.", ds.ATTR_BLUE),
+             Text(21, 1, "F3=Exit   F5=Refresh   F10=Display detailed messages   F12=Cancel", ds.ATTR_BLUE),
+             Text(22, 1, "F17=Top   F18=Bottom", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
+
+
+WRKJOB_OPTIONS = [
+    (6, 6, "1. Display job status attributes"), (7, 6, "2. Display job definition attributes"),
+    (8, 6, "3. Display job run attributes, if active"), (9, 6, "4. Work with spooled files"),
+    (11, 5, "10. Display job log, if active, on job queue, or pending"), (12, 5, "11. Display call stack, if active"),
+    (13, 5, "12. Work with locks, if active"), (14, 5, "13. Display library list, if active"),
+    (15, 5, "14. Display open files, if active"), (16, 5, "15. Display file overrides, if active"),
+    (17, 5, "16. Display commitment control status, if active"),
+]
+
+
+def wrkjob_screen(job, system_name: str, message: str = "") -> Screen:
+    """Work with Job, laid out like the real menu (captured, first page). The selection goes on the
+    command line, as it does there. The second page of options is not built."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    v = lambda r, c, t: Text(r, c, t, ds.ATTR_WHITE)
+    rows: list = [
+        Text(0, 33, "Work with Job", ds.ATTR_WHITE), Text(1, 61, "System:", ds.ATTR_WHITE), v(1, 71, system_name),
+        g(2, 1, "Job:"), v(2, 8, job.name), g(2, 23, "User:"), v(2, 31, job.user), g(2, 46, "Number:"), v(2, 56, job.number),
+        Text(4, 1, "Select one of the following:", ds.ATTR_BLUE),
+    ]
+    rows += [Text(r, c, t, ds.ATTR_WHITE) for r, c, t in WRKJOB_OPTIONS]
+    rows += [Text(18, 72, "More...", ds.ATTR_BLUE), Text(19, 1, "Selection or command", ds.ATTR_GREEN),
+             Text(20, 1, "===>", ds.ATTR_GREEN), Input(20, 6, 153, "command"),
+             Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F4=Prompt", ds.ATTR_BLUE),
+             Text(22, 23, "F9=Retrieve", ds.ATTR_BLUE), Text(22, 37, "F12=Cancel", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows, cursor="command")
+
+
 def message_lines(q) -> list[str]:
     """The queue as screen lines (captured shapes): a message from a user shows a From line
     and then the text, a system event shows the text alone."""

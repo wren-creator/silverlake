@@ -209,3 +209,112 @@ def test_chgjob_option_2_takes_its_attributes_from_the_command_line(store):
 
 def test_job_control_commands_are_command_objects(store):
     assert all(("QSYS", n, "*CMD") in store.objects for n in ("HLDJOB", "RLSJOB", "ENDJOB", "CHGJOB"))
+
+
+# -- DSPJOBLOG and WRKJOB ---------------------------------------------------------------------------------------
+
+def test_dspjoblog_shows_the_live_log_in_the_captured_layout(store):
+    c = _signed(store, "STUDENT", "QPADEV0011")
+    c.handle("ENTER", {"command": "dsplibl"})
+    c.handle("F3", {})
+    c.handle("ENTER", {"command": "crtlib nosuch/zz"})
+    s = c.handle("ENTER", {"command": "dspjoblog"})
+    f = {(x.row, x.col): x for x in s.fields}
+    assert f[(0, 31)].text == "Display Job Log" and f[(2, 13)].text == "QPADEV0011" and f[(2, 40)].text == "STUDENT"
+    lines = [x.text for x in s.fields if isinstance(x, Text) and x.row >= 4 and x.row <= 17 and x.col == 1]
+    assert lines[0] == "3>> DSPLIBL" and lines[-1] == "3>> DSPJOBLOG"          # the command itself is the last line
+    assert f[(21, 1)].text.startswith("F3=Exit   F5=Refresh   F10=Display detailed messages")
+    assert f[(18, 73)].text == "Bottom" and not s.inputs()
+
+
+def test_dspjoblog_rules_same_user_or_jobctl_and_allobj_jobs_need_allobj(store):
+    plain, pjob = _victim(store, "STUDENT", "QPADEV0012")
+    boss, bjob = _victim(store, "QSECOFR", "QPADEV0013")
+    ref = lambda j: f"DSPJOBLOG JOB({j.qualified})"
+    text, out = _run(store, "GUEST", ref(pjob))
+    assert out.message.id == "CPF2441" and text == "Not authorized to display job log."
+    assert _run(store, "JOBMAN", ref(pjob))[1].view                               # *JOBCTL reads a plain user's log
+    assert _run(store, "JOBMAN", ref(bjob))[1].message.id == "CPF2441"            # but not a job that has *ALLOBJ
+    assert _run(store, "LEGACY", ref(bjob))[1].view                               # *ALLOBJ plus *JOBCTL does
+    assert _run(store, "SPOOLMAN", ref(pjob))[1].message.id == "CPF2441"          # *SPLCTL is not mentioned
+
+
+def test_dspjoblog_not_found_ended_and_no_log(store):
+    assert _run(store, "QSECOFR", "DSPJOBLOG JOB(NOSUCH)")[1].message.id == "CPF1070"
+    assert _run(store, "QSECOFR", "DSPJOBLOG JOB(100188/QSECOFR/QPADEV0001)")[1].message.id == "CPF2443"   # seeded, ended
+    sysjob = next(j for j in store.jobs.jobs if j.name == "QTCPIP")
+    assert _run(store, "QSECOFR", f"DSPJOBLOG JOB({sysjob.qualified})")[1].message.id == "CPF2523"
+
+
+def test_joblog_keys_roll_refresh_and_jump(store):
+    c = _signed(store, "STUDENT", "QPADEV0014")
+    for _ in range(20):
+        c.handle("ENTER", {"command": "dsplibl"})
+        c.handle("F3", {})
+    c.handle("ENTER", {"command": "dspjoblog"})
+    assert c.view[2] == 0
+    c.handle("ROLLUP", {})
+    assert c.view[2] == 14
+    c.handle("F18", {})
+    assert c.view[2] > 0
+    c.handle("F17", {})
+    assert c.view[2] == 0
+    assert "F10 is not available" in _text(c.handle("F10", {}))
+    c.handle("F12", {})
+    assert c.view is None
+
+
+def test_wrkjob_layout_follows_the_capture_and_takes_a_selection_on_the_command_line(store):
+    c = _signed(store, "STUDENT", "QPADEV0015")
+    s = c.handle("ENTER", {"command": "wrkjob"})
+    f = {(x.row, x.col): x for x in s.fields}
+    assert f[(0, 33)].text == "Work with Job" and f[(2, 8)].text == "QPADEV0015" and f[(2, 31)].text == "STUDENT"
+    assert f[(6, 6)].text == "1. Display job status attributes" and f[(11, 5)].text.startswith("10. Display job log")
+    assert [(i.row, i.col, i.length) for i in s.inputs()] == [(20, 6, 153)]
+    assert "Option 1 is not available" in _text(c.handle("ENTER", {"command": "1"}))
+    assert "Option 99 is not valid" in _text(c.handle("ENTER", {"command": "99"}))
+    s = c.handle("ENTER", {"command": "10"})
+    assert {(x.row, x.col): x for x in s.fields}[(0, 31)].text == "Display Job Log"
+    c.handle("F12", {})
+    assert c.view[0] == "wrkjobview"
+    s = c.handle("ENTER", {"command": "13"})                                   # own job: the library list
+    assert "User Library List" in _text(s) or "Library List" in _text(s)
+
+
+def test_wrkjob_option_4_lists_that_jobs_spool_files_and_a_command_runs(store):
+    from silverlake.system import spool
+    c = _signed(store, "QSECOFR", "QPADEV0001")
+    job = store.jobs.find("QPADEV0001")[0]
+    store.spool.append(spool.SpoolFile("QSYSPRT", "QSECOFR", job.name, job.number, 1, "QPRINT", "QGPL"))
+    c.handle("ENTER", {"command": "wrkjob"})
+    s = c.handle("ENTER", {"command": "4"})
+    assert c.view[0] == "work" and [f.name for f in c.view[1].rows] == ["QSYSPRT"]
+    c.handle("F12", {})
+    assert c.view[0] == "wrkjobview"
+    s = c.handle("ENTER", {"command": "dltlib nosuch"})                     # a command typed on the menu runs
+    assert c.view[0] == "wrkjobview" and "NOSUCH" in _text(s)
+    assert _run(store, "QSECOFR", "WRKJOB JOB(NOSUCH)")[1].message.id == "CPF1070"
+
+
+def test_wrkjob_needs_the_same_user_or_jobctl(store):
+    plain, pjob = _victim(store, "STUDENT", "QPADEV0016")
+    out = commands.execute(store, store.get("GUEST"), f"WRKJOB JOB({pjob.qualified})")
+    assert out.message.id == "CPF1071" and out.message.text == f"No authority to job {pjob.qualified}."
+    assert commands.execute(store, store.get("JOBMAN"), f"WRKJOB JOB({pjob.qualified})").view
+    assert commands.execute(store, store.get("SPOOLMAN"), f"WRKJOB JOB({pjob.qualified})").message.id == "CPF1071"
+
+
+def test_wrkactjob_option_5_opens_work_with_job(store):
+    c = _signed(store, "QSECOFR", "QPADEV0001")
+    other, job = _victim(store, "STUDENT", "QPADEV0017")
+    c.handle("ENTER", {"command": "wrkactjob"})
+    idx = [j.qualified for j in c.view[1].rows].index(job.qualified)
+    c.view[1].page = idx // 9
+    s = c.handle("ENTER", {f"opt{idx % 9}": "5"})
+    assert c.view[0] == "wrkjobview" and {(x.row, x.col): x for x in s.fields}[(2, 8)].text == "QPADEV0017"
+    c.handle("F12", {})
+    assert c.view[0] == "work"
+
+
+def test_new_commands_are_objects(store):
+    assert all(("QSYS", n, "*CMD") in store.objects for n in ("DSPJOBLOG", "WRKJOB"))

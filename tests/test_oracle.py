@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "SIGNOFF") for c in _fills(name)), name
 
@@ -416,6 +416,12 @@ def test_the_message_scenario_sends_nothing():
     assert keys.index("F12") > [a.get("fill", {}).get("0") for a in scenario.SCENARIOS["auth-msgs"][1:]].index("SNDMSG")
     assert not any(a["key"] == "ENTER" and a.get("fill", {}).get("0") not in ("DSPMSG", "DSPMSG MSGQ(QSYSOPR)", "SNDMSG", "SIGNOFF")
                    for a in scenario.SCENARIOS["auth-msgs"][1:])
+
+
+def test_the_job_scenario_only_looks_at_its_own_job():
+    fills = [a["fill"]["0"] for a in scenario.SCENARIOS["auth-joblog"][1:] if "fill" in a]
+    assert fills == ["DSPJOBLOG", "WRKJOB", "SIGNOFF"]           # no JOB parameter, so only the profile's own job
+    assert all(a["key"] in ("ENTER", "F3", "F12") for a in scenario.SCENARIOS["auth-joblog"][1:])
 
 
 def test_the_description_scenario_is_read_only():

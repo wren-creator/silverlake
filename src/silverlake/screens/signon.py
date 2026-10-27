@@ -20,7 +20,7 @@ from datetime import datetime
 
 from ..cl import commands
 from ..proto import datastream as ds
-from ..system import admin, autls, menus, messages, msgq, objects, profiles, spool
+from ..system import admin, autls, jobctl, menus, messages, msgq, objects, profiles, spool
 from ..system.authority import ALL, CHANGE, EXCLUDE
 from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
@@ -28,7 +28,7 @@ from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
-                        dspmsg_screen, message_lines as dspmsg_lines, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
+                        WRKJOB_OPTIONS, dspjoblog_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -177,6 +177,7 @@ class SignonController:
         self.store.sign_on(profile)
         self.session.job = self.store.jobs.start_interactive(
             profile.name, self.display, max((int(f.job_number) for f in self.store.spool), default=0))
+        self.session.job.log = self.session.joblog
         if program != "*NONE":
             self.session.mode = "cmdentry"
             return self._base()
@@ -294,6 +295,10 @@ class SignonController:
             return ("spoolview", spec[1], 0)
         if kind == "dspmsg":
             return ("msgview", spec[1], 0)
+        if kind == "dspjoblog":
+            return ("joblogview", spec[1], 0)
+        if kind == "wrkjob":
+            return ("wrkjobview", spec[1])
         if kind == "wrkactjob":
             sbs = spec[1]
             own = self.session.job.qualified if self.session.job else ""
@@ -325,6 +330,10 @@ class SignonController:
             return dspobjd_screen(obj, detail, SYSTEM_NAME, page)
         if self.view[0] == "spoolview":
             return dspsplf_screen(self.view[1], self.view[2], message)
+        if self.view[0] == "joblogview":
+            return dspjoblog_screen(self.view[1], jobctl.log_lines(self.view[1]), SYSTEM_NAME, self.view[2], message)
+        if self.view[0] == "wrkjobview":
+            return wrkjob_screen(self.view[1], SYSTEM_NAME, message)
         if self.view[0] == "msgview":
             return dspmsg_screen(self.view[1], SYSTEM_NAME, self.view[2], message)
         if self.view[0] == "spoolattr":
@@ -356,6 +365,10 @@ class SignonController:
             return self._in_spoolview(aid)
         if kind == "msgview":
             return self._in_msgview(aid)
+        if kind == "joblogview":
+            return self._in_joblog(aid)
+        if kind == "wrkjobview":
+            return self._in_wrkjob(aid, values)
         if kind == "spoolattr":
             if aid == "F3":
                 self.view = None
@@ -401,7 +414,9 @@ class SignonController:
 
     def _in_work(self, aid: str, values: dict[str, str]) -> Screen:
         wl: WorkList = self.view[1]
-        if aid in ("F3", "F12"):
+        if aid == "F12":
+            return self._close_view()          # one level back: the screen that opened this list, or the menu
+        if aid == "F3":
             self.view = None
             self.parents.clear()
             return self._base()
@@ -459,6 +474,8 @@ class SignonController:
         if wl.kind == "jobs":
             if row.type != "SBS":
                 ref = f"JOB({row.qualified})"
+                if opt == "5":
+                    return f"WRKJOB {ref}", ""
                 if opt == "8":
                     return f"WRKSPLF SELECT(*ALL) {ref}", ""
                 if opt == "3":
@@ -561,6 +578,63 @@ class SignonController:
         wl.refresh()
         message = last if len(picks) == 1 else (f"{done} objects deleted." + (f" {last}" if done < len(picks) else ""))
         return self._draw_view(message)
+
+    def _in_joblog(self, aid: str) -> Screen:
+        _, job, top = self.view
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        lines = len(jobctl.log_lines(job))
+        last = max(0, lines - 1) // 14 * 14
+        if aid in ("ROLLUP", "ROLLDOWN", "F17", "F18"):
+            top = {"ROLLUP": top + 14, "ROLLDOWN": top - 14, "F17": 0, "F18": last}[aid]
+            self.view = ("joblogview", job, max(0, min(top, last)))
+            return self._draw_view()
+        if aid == "F5":
+            return self._draw_view()
+        if aid == "F10":
+            return self._draw_view("F10 is not available in Silverlake yet.")
+        return self._close_view()
+
+    WRKJOB_RUNS = {"1": None, "2": None, "3": None, "4": "WRKSPLF SELECT(*ALL) JOB({job})",
+                   "10": "DSPJOBLOG JOB({job})", "13": None}
+
+    def _in_wrkjob(self, aid: str, values: dict[str, str]) -> Screen:
+        """The selection goes on the command line: a number picks an option, anything else runs as a
+        command. Options 4 and 10 are built, 13 only for your own job, the rest say so."""
+        _, job = self.view
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid == "F12":
+            return self._close_view()
+        if aid in ("F4", "F9"):
+            return self._draw_view(f"{aid} is not available in Silverlake yet.")
+        line = values.get("command", "").strip()
+        if not line:
+            return self._draw_view()
+        if line.isdigit():
+            if line not in {t.split(".")[0] for _, _, t in WRKJOB_OPTIONS}:
+                return self._draw_view(f"Option {line} is not valid.")
+            template = self.WRKJOB_RUNS.get(line)
+            if line == "13" and job is self.session.job:
+                template = "DSPLIBL"
+            if template is None:
+                return self._draw_view(f"Option {line} is not available in Silverlake yet.")
+            line = template.format(job=job.qualified)
+        outcome = commands.execute(self.store, self.profile, line, self.session)
+        self._log(line, outcome)
+        if outcome.view:
+            self.parents.append(self.view)
+            self.view = self._open_view(outcome.view)
+            return self._draw_view()
+        if outcome.signoff or outcome.go or outcome.cmdentry:
+            self.view = None
+            self.parents.clear()
+            return self._apply(outcome, line)
+        return self._draw_view(outcome.message.text if outcome.message else "")
 
     def _in_msgview(self, aid: str) -> Screen:
         _, q, top = self.view

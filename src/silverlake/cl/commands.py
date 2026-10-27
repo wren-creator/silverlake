@@ -103,6 +103,10 @@ ENDJOB_PARAMS = [Param("JOB", "jobq", "", 3, required=True), Param("OPTION", "ig
                  Param("ADLINTJOBS", "ignored", "*NONE"), Param("DUPJOBOPT", "ignored", "*SELECT")]
 CHGJOB_PARAMS = [Param("JOB", "jobq", "*", 3)] + [
     Param(k, "jobattr", "*SAME") for k in ("JOBPTY", "OUTPTY", "RUNPTY", "TIMESLICE", "PURGE", "DFTWAIT", "CPUTIME", "MAXTMPSTG")]
+DSPJOBLOG_PARAMS = [Param("JOB", "jobq", "*", 3), Param("OUTPUT", "output", "*"), Param("OUTFILE", "ignored", "*NONE"),
+                    Param("OUTMBR", "ignored", "*FIRST"), Param("MSGF", "ignored", "*MSG"), Param("DUPJOBOPT", "ignored", "*SELECT")]
+WRKJOB_PARAMS = [Param("JOB", "jobq", "*", 3), Param("OUTPUT", "output", "*"), Param("OPTION", "ignored", "*SELECT"),
+                 Param("SLTTHD", "ignored", "*INITIAL"), Param("DUPJOBOPT", "ignored", "*SELECT")]
 HLDSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
                   Param("CRTDATE", "ignored", "*ONLY"), Param("OPTION", "ignored", "*IMMED")]
@@ -165,7 +169,7 @@ COMMANDS = {
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
-    "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
+    "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
     "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS,
@@ -534,6 +538,12 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         return Outcome(msgq.send(store, actor, session, b["MSG"], targets).message)
     if name == "CLRMSGQ":
         return Outcome(msgq.clear(store, actor, session, b["MSGQ"]).message)
+    if name == "DSPJOBLOG":
+        job, err = jobctl.display_log(store, actor, b["JOB"], session.job)
+        return Outcome(err) if err else Outcome(view=("dspjoblog", job))
+    if name == "WRKJOB":
+        job, err = jobctl.work_with(store, actor, b["JOB"], session.job)
+        return Outcome(err) if err else Outcome(view=("wrkjob", job))
     if name in ("HLDJOB", "RLSJOB", "ENDJOB", "CHGJOB"):
         job, err = jobctl.find(store, b["JOB"], session.job, name in ("ENDJOB", "CHGJOB"))
         if err:

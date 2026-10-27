@@ -43,6 +43,7 @@ class Job:
     function: str = ""
     cpu: float = 0.0
     spooled: list = field(default_factory=list)
+    log: list = field(default_factory=list)     # (time, "command"/"message", text), shared with the session
     held_from: str = ""          # the status a held job goes back to on release
     ending: bool = False         # set by ENDJOB; the session notices on its next key
     attrs: dict = field(default_factory=lambda: {
