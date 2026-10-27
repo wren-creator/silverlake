@@ -3,7 +3,7 @@
      * its owner (OPERATOR, who may read the file) and anyone may call it to
      * see a record. It cannot change anything, because its owner cannot.
 
-     FPAYLOOK   CF   E             WORKSTN
+     FEMPINQ    CF   E             WORKSTN
      FPAYROLL   IF   E           K DISK
 
      C                   DOW       *in03 = *off

@@ -295,7 +295,6 @@ attr = "RPGLE"
 usrprf = "*USER"
 useadpaut = "*YES"
 source_file = "adventure.rpgle"
-dspf_file = "adventure.dspf"
 
 [[object]]
 library = "APPLIB"
@@ -309,7 +308,6 @@ attr = "RPGLE"
 usrprf = "*USER"
 useadpaut = "*YES"
 source_file = "salesrpt.rpgle"
-dspf_file = "salesrpt.dspf"
 
 [[object]]
 library = "APPLIB"
@@ -323,7 +321,6 @@ attr = "RPGLE"
 usrprf = "*OWNER"
 useadpaut = "*NO"
 source_file = "paylook.rpgle"
-dspf_file = "paylook.dspf"
 
 [[object]]
 library = "APPLIB"
@@ -337,7 +334,6 @@ attr = "RPGLE"
 usrprf = "*OWNER"
 useadpaut = "*NO"
 source_file = "payadj.rpgle"
-dspf_file = "payadj.dspf"
 
 [[object]]
 library = "APPLIB"
@@ -403,6 +399,61 @@ source_file = "regrptx.rpgle"
 
 [[object]]
 library = "APPLIB"
+name = "SCREEN"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*USE"
+text = "Display file for the ADVENTURE game."
+[object.data]
+attr = "DSPF"
+dds_file = "adventure.dspf"
+
+[[object]]
+library = "APPLIB"
+name = "REPORT"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*USE"
+text = "Display file for the sales report."
+[object.data]
+attr = "DSPF"
+dds_file = "salesrpt.dspf"
+
+[[object]]
+library = "APPLIB"
+name = "EMPINQ"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*USE"
+text = "Employee inquiry screen, used by PAYLOOK."
+[object.data]
+attr = "DSPF"
+dds_file = "paylook.dspf"
+
+[[object]]
+library = "APPLIB"
+name = "SALADJ"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*USE"
+text = "Salary adjust screen, used by PAYADJ."
+[object.data]
+attr = "DSPF"
+dds_file = "payadj.dspf"
+
+[[object]]
+library = "APPLIB"
+name = "RUNCMD"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*USE"
+text = "Command helper screen, shared by RUNCMD and RUNCMDX."
+[object.data]
+attr = "DSPF"
+dds_file = "runcmd.dspf"
+
+[[object]]
+library = "APPLIB"
 name = "RUNCMD"
 type = "*PGM"
 owner = "QSECOFR"
@@ -413,7 +464,6 @@ attr = "RPGLE"
 usrprf = "*OWNER"
 useadpaut = "*YES"
 source_file = "runcmd.rpgle"
-dspf_file = "runcmd.dspf"
 
 [[object]]
 library = "APPLIB"
@@ -427,7 +477,6 @@ attr = "RPGLE"
 usrprf = "*OWNER"
 useadpaut = "*NO"
 source_file = "runcmdx.rpgle"
-dspf_file = "runcmdx.dspf"
 
 [[object]]
 name = "SRCLIB"

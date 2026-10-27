@@ -47,7 +47,9 @@ LOOP = "\n".join([
 def test_the_seeded_programs_are_real_objects_with_source(store):
     for name in ("ADVENTURE", "SALESRPT"):
         obj = store.objects[("APPLIB", name, "*PGM")]
-        assert rpg.is_rpg(obj) and "WORKSTN" in obj.data["source"] and obj.data["dspf"].strip()
+        assert rpg.is_rpg(obj) and "WORKSTN" in obj.data["source"]
+    for name in ("SCREEN", "REPORT"):                       # their display files are objects of their own
+        assert store.objects[("APPLIB", name, "*FILE")].data["attr"] == "DSPF"
 
 
 def test_call_runs_the_program_and_its_screen_lands_where_the_dds_put_it(store):
@@ -141,7 +143,7 @@ def test_a_program_you_may_not_use_is_refused_by_authority(store):
 
 def test_a_program_can_call_another_and_its_screen_shows_through(store):
     sales = store.objects[("APPLIB", "SALESRPT", "*PGM")].data       # a short name: factor 2 holds fourteen characters
-    add_program(store, "SR", sales["source"], sales["dspf"])
+    add_program(store, "SR", sales["source"])
     caller = "\n".join(["     C                   CALL      'APPLIB/SR'",
                         "     C                   EVAL      *inlr = *on", "     C                   RETURN"]) + "\n"
     add_program(store, "OUTER", caller)
@@ -180,7 +182,8 @@ def test_signing_off_with_a_program_on_the_screen_closes_it(store):
 def test_source_and_attributes_survive_a_save_and_load(store):
     again = state.from_dict(state.to_dict(store))
     obj = again.objects[("APPLIB", "ADVENTURE", "*PGM")]
-    assert obj.data["attr"] == "RPGLE" and "WORKSTN" in obj.data["source"] and "MAIN" in obj.data["dspf"]
+    assert obj.data["attr"] == "RPGLE" and "WORKSTN" in obj.data["source"]
+    assert "R MAIN" in again.objects[("APPLIB", "SCREEN", "*FILE")].data["dds"]
 
 
 def test_dsppgm_shows_the_two_captured_pages(store):

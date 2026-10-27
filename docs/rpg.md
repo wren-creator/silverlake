@@ -57,6 +57,15 @@ A program that declares a `PRINTER` file in its F-spec prints through a `*FILE` 
 - **Who can read it** is the queue's business, which is the lesson. `REGRPT` prints the payroll register to QPRINT, which is `DSPDTA(*YES)`, so a basic user can open the file payroll staff just printed. `REGRPTX` is the same program with a printer file that names `APPLIB/PAYOUTQ`, `DSPDTA(*NO)`: the entry is still listed, the contents are not shown to anyone but the file's owner and users with `*SPLCTL`.
 - Page length is 66 lines and overflow is at line 60, the CRTPRTF defaults. Not modeled: printer file attributes beyond the queue (copies, form type, page size), CHGPRTF and OVRPRTF.
 
+## Display files
+
+A program's `WORKSTN` file is a `*FILE` object with attribute DSPF that carries the DDS (`dds`). The F-spec name is looked up through the library list, needs `*USE`, and several programs can name the same file: `RUNCMD` and `RUNCMDX` both open the display file `RUNCMD`, so there is one screen layout to read and one to change. Edit the object's DDS and every program that uses it shows the new screen.
+
+- **A simplification.** After the library list, the program's own library is tried. A real job would fail to open a display file whose library is not on the list, and that would make `CALL APPLIB/ADVENTURE` fail for anyone who had not run ADDLIBLE first. Programs and files that are not on the list otherwise follow the list.
+- **Older form.** A program object may still carry its DDS inline in `data["dspf"]`. It is used only when no display file of that name is on the list, so programs made before this change keep working.
+- **Seeded.** `SCREEN` (ADVENTURE), `REPORT` (SALESRPT), `EMPINQ` (PAYLOOK), `SALADJ` (PAYADJ) and `RUNCMD`, all in APPLIB. The first two are named after the F-specs in the library's example programs.
+- A program with more than one display file gets their record formats merged, since the runtime takes one set.
+
 ## What it is not (yet)
 
 - **No compile step.** Source is parsed when the program is called, not by `CRTBNDRPG`. A syntax error shows as "ended abnormally" at call time instead of a compile listing. Nothing can create a program yet except the seed.

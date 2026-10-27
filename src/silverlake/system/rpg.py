@@ -1,7 +1,8 @@
 """Running RPG IV programs inside a session, on the rpgle runtime.
 
-A program object (`*PGM`, attribute RPGLE) keeps its source in `data["source"]` and the DDS of its
-display file in `data["dspf"]`. CALL starts it as a generator, and every EXFMT becomes a screen on
+A program object (`*PGM`, attribute RPGLE) keeps its source in `data["source"]`. Its display files are
+`*FILE` objects (attribute DSPF) found by the F-spec name; a program may still carry its DDS inline in
+`data["dspf"]`, used only when no such file is on the library list. CALL starts it as a generator, and every EXFMT becomes a screen on
 the terminal until the program ends. Nothing here compiles anything yet: the source is parsed when
 the program is called, which on a real system would be CRTBNDRPG's job.
 
@@ -140,6 +141,35 @@ class Files:
             pfs[name] = pf
         return pfs
 
+    def display(self, prog, stack: list[str], inline: str = ""):
+        """The record formats of the display files a program declares. Each WORKSTN F-spec names a `*FILE`
+        object with attribute DSPF, found through the library list and needing *USE. The program's own
+        library is tried after the list, a simplification: a real job would fail to open a display file
+        whose library is not on the list, and CALL APPLIB/ADVENTURE would be a poor first experience. A program written
+        before display files were objects can still carry its DDS in its own `dspf`, used when no such
+        file exists anywhere on the list."""
+        from . import objects
+        who = effective(self.store, self.actor, stack)
+        home = stack[-1].partition("/")[0] if stack else ""
+        search = self.session.search_order()
+        search = search + [home] if home and home not in search else search    # see the docstring
+        texts = []
+        for fs in prog.files:
+            if (fs.device or "").upper() != "WORKSTN":
+                continue
+            name = fs.name.upper()
+            if inline and not any((lib, name, "*FILE") in self.store.objects for lib in search):
+                continue
+            obj, err = objects.locate(self.store, who, name, "*FILE", search)
+            if err:
+                raise RpgleError(err.text)
+            if obj.data.get("attr") != "DSPF" or not obj.data.get("dds"):
+                raise RpgleError(f"File {obj.name} in library {obj.library} is not a display file.")
+            if USE not in self.store.authority_to_object(who, obj):
+                raise RpgleError(messages.not_authorized_to_object(obj.name, obj.library, "*FILE").text)
+            texts.append(obj.data["dds"])
+        return parse_dds("\n".join(texts) if texts else inline)
+
     def _attach_printer(self, who, obj) -> None:
         """A printer file needs *USE, and so does the queue its output goes to. The queue and the file are
         checked now, as whoever the stack holds when the program is loaded. The spool file is the job's
@@ -249,9 +279,11 @@ class StoreLoader(ProgramLoader if AVAILABLE else object):
                 prog = parse_rpgle(obj.data["source"])
             except RpgleError as exc:
                 raise RpgleError(f"{obj.name}: {exc}") from None
-            pfs = self.files.attach(prog, [*self.active, f"{obj.library}/{obj.name}"]) if self.files else {}
+            stack = [*self.active, f"{obj.library}/{obj.name}"]
+            pfs = self.files.attach(prog, stack) if self.files else {}
+            dds = self.files.display(prog, stack, obj.data.get("dspf", "")) if self.files else parse_dds(obj.data.get("dspf", ""))
             cached = LoadedProgram(key=key, path=Path(f"/QSYS.LIB/{obj.library}.LIB/{obj.name}.PGM"), prog=prog,
-                                   dds=parse_dds(obj.data.get("dspf", "")), pfs=pfs)
+                                   dds=dds, pfs=pfs)
             self._loaded[obj.key] = cached
         return cached
 
@@ -319,7 +351,6 @@ def start(store, actor, obj, session) -> tuple[Run | None, messages.Message | No
         return None, messages.syntax(f"Program {obj.name} cannot be run: it has no RPG source.")
     try:
         prog = parse_rpgle(obj.data["source"])
-        dds = parse_dds(obj.data.get("dspf", ""))
     except RpgleError as exc:
         return None, messages.info(f"Program {obj.name} did not load: {exc}")
     files = Files(store, actor, session)
@@ -328,6 +359,7 @@ def start(store, actor, obj, session) -> tuple[Run | None, messages.Message | No
     files.loader = loader
     try:
         pfs = files.attach(prog, [loader.main_name])
+        dds = files.display(prog, [loader.main_name], obj.data.get("dspf", ""))
     except RpgleError as exc:
         return None, messages.info(str(exc))
     gen = run_program(prog, dds, files.db, pfs, loader, files.spool, max_steps=MAX_STEPS,

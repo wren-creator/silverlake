@@ -3,7 +3,7 @@
      * It checks nothing about who is calling. The only thing between a
      * user and a raise is whether the user may CALL it.
 
-     FPAYADJ    CF   E             WORKSTN
+     FSALADJ    CF   E             WORKSTN
      FPAYROLL   UF   E           K DISK
 
 
