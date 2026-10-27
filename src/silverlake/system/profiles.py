@@ -7,6 +7,7 @@ golden state; nothing here writes back to it.
 
 import hmac
 import tomllib
+from datetime import date, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,6 +36,7 @@ class Profile:
     password: str | None = NO_PASSWORD
     status: str = "*ENABLED"          # or *DISABLED
     password_expired: bool = False    # PWDEXP(*YES)
+    password_changed: str | None = None   # ISO date the password was last set; None = unknown
     limited_capabilities: str = "*NO"  # LMTCPB: *NO, *PARTIAL, *YES. Recorded, not enforced yet.
     group_profile: str | None = None
     supplemental_groups: list[str] = field(default_factory=list)
@@ -55,6 +57,9 @@ class System:
     qpwdlvl: int = 0
     mode: str = "vulnerable"
     default_profile_owner: str = "QSECOFR"  # who "created" the seeded accounts
+    qmaxsign: int = 3        # QMAXSIGN: bad sign-on attempts allowed in a row, 0 is *NOMAX
+    qmaxsgnacn: int = 3      # QMAXSGNACN: 1 disable device, 2 disable profile, 3 both (devices are not simulated)
+    qpwdexpitv: int = 0      # QPWDEXPITV: days a password lasts, 0 is *NOMAX
 
 
 class ProfileStore:
@@ -69,6 +74,8 @@ class ProfileStore:
         self.spool: list = list(spool or [])      # SpoolFile rows, kept in the state file
         self.jobs = JobTable()                    # live jobs, in memory only
         self.on_change = lambda: None             # persistence hook, set by the state layer
+        self.bad_signons: dict[str, int] = {}     # consecutive bad passwords per profile, memory only
+        self.today = lambda: date.today()         # a test swaps this to move the clock
 
     # -- lookups ---------------------------------------------------------------
 
@@ -141,6 +148,28 @@ class ProfileStore:
             a, b = a.upper(), b.upper()
         return hmac.compare_digest(a.encode(), b.encode())
 
+    def password_is_expired(self, profile: Profile) -> bool:
+        """PWDEXP(*YES), or older than QPWDEXPITV days (IBM: the interval is counted from the last change)."""
+        if profile.password_expired:
+            return True
+        days = self.system.qpwdexpitv
+        if not days or not profile.password_changed:
+            return False
+        return self.today() > date.fromisoformat(profile.password_changed) + timedelta(days=days)
+
+    def stamp_password(self, profile: Profile) -> None:
+        profile.password_changed = self.today().isoformat()
+
+    def _bad_password(self, profile: Profile) -> None:
+        """Count a wrong password. At QMAXSIGN in a row the profile is disabled (QMAXSGNACN 2 or 3).
+        A device cannot be varied off here, so action 1 only counts. Not read off a real host."""
+        limit = self.system.qmaxsign
+        n = self.bad_signons[profile.name] = self.bad_signons.get(profile.name, 0) + 1
+        if limit and n >= limit and self.system.qmaxsgnacn in (2, 3):
+            profile.status = "*DISABLED"
+            self.bad_signons.pop(profile.name, None)
+            self.on_change()
+
     def check_signon(self, user: str, password: str) -> "SignonResult":
         user = user.strip().upper()
         profile = self.get(user)
@@ -149,10 +178,33 @@ class ProfileStore:
         if profile.password is None:
             return SignonResult(None, messages.no_password(user))
         if not self._password_matches(profile, password):
+            if profile.status == "*ENABLED":
+                self._bad_password(profile)
             return SignonResult(None, messages.password_not_correct(user))
         if profile.status != "*ENABLED":
             return SignonResult(None, messages.cannot_sign_on(user))
-        return SignonResult(profile, None)
+        self.bad_signons.pop(profile.name, None)
+        return SignonResult(profile, None, self.password_is_expired(profile))
+
+    def change_password(self, profile: Profile, current: str, new: str, verify: str) -> messages.Message | None:
+        """The Change Password display at sign-on. None means it worked. Rules are the minimum
+        that mean anything here; QPWDMINLEN, QPWDRQDDIF and the rest of the rules are not built."""
+        if not self._password_matches(profile, current):
+            return messages.password_not_correct(profile.name)
+        if not new:
+            return messages.info("New password is required.")
+        limit = 10 if self.system.qpwdlvl < 2 else 128
+        if len(new) > limit:
+            return messages.info(f"New password is longer than {limit} characters.")
+        if new != verify:
+            return messages.info("New password and verify password do not match.")
+        if self._password_matches(profile, new):
+            return messages.info("New password must be different from the current password.")
+        profile.password = new
+        profile.password_expired = False
+        self.stamp_password(profile)
+        self.on_change()
+        return None
 
     def describe(self, profile: Profile) -> dict[str, str]:
         """What a security review of this profile would list."""
@@ -176,6 +228,7 @@ class ProfileStore:
 class SignonResult:
     profile: Profile | None
     message: messages.Message | None
+    must_change_password: bool = False
 
 
 # -- loading ---------------------------------------------------------------------
@@ -210,6 +263,9 @@ def load(path: Path | str | None = None) -> ProfileStore:
         qpwdlvl=int(sysdata.get("qpwdlvl", 0)),
         mode=sysdata.get("mode", "vulnerable"),
         default_profile_owner=str(sysdata.get("default_profile_owner", "QSECOFR")).upper(),
+        qmaxsign=int(sysdata.get("qmaxsign", 3)),
+        qmaxsgnacn=int(sysdata.get("qmaxsgnacn", 3)),
+        qpwdexpitv=int(sysdata.get("qpwdexpitv", 0)),
     )
     if system.qsecurity not in QSECURITY_LEVELS:
         raise SeedError(f"qsecurity must be one of {QSECURITY_LEVELS}, not {system.qsecurity}")
@@ -231,6 +287,7 @@ def load(path: Path | str | None = None) -> ProfileStore:
             password=None if pw == "*NONE" else str(pw),
             status=_enum_status(raw.get("status", "*ENABLED"), name),
             password_expired=bool(raw.get("password_expired", False)),
+            password_changed=raw.get("password_changed"),
             limited_capabilities=raw.get("limited_capabilities", "*NO"),
             group_profile=(raw.get("group_profile") or None) and str(raw["group_profile"]).upper(),
             supplemental_groups=[str(g).upper() for g in raw.get("supplemental_groups", [])],

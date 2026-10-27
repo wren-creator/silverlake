@@ -9,6 +9,9 @@
 qsecurity = 40        # 20, 30, 40 or 50. Try 20: every *USER gets *ALLOBJ.
 qpwdlvl   = 0         # 0 or 1 ignore case in passwords, 2 and 3 do not
 mode      = "vulnerable"
+qmaxsign   = 3         # bad passwords in a row before the profile is disabled. 0 is *NOMAX: guess forever.
+qmaxsgnacn = 3         # 1 device only (not simulated, so no lockout), 2 or 3 disable the profile
+qpwdexpitv = 0         # days a password lasts. 0 is *NOMAX. Seeded profiles have no change date, so they never age.
 default_profile_owner = "SECADMIN"   # the security administrator created the accounts below
 
 # ---------------------------------------------------------------------------

@@ -101,6 +101,7 @@ def create(store: ProfileStore, actor: Profile, name: str, attrs: dict) -> Resul
         initial_menu=attrs["initial_menu"], current_library=attrs["current_library"], text=attrs["text"],
         owner=actor.name, public_authority=attrs["public_authority"],
     )
+    store.stamp_password(profile)
     store.profiles[name] = profile
     store.on_change()
     return _ok(f"User profile {name} created.")
@@ -136,6 +137,10 @@ def change(store: ProfileStore, actor: Profile, name: str, attrs: dict) -> Resul
             target.supplemental_groups = list(value)
         else:
             setattr(target, key, value)
+    if "password" in attrs:
+        store.stamp_password(target)
+    if attrs.get("status") == "*ENABLED":
+        store.bad_signons.pop(name, None)      # re-enabling starts the count again
     store.on_change()
     return _ok(f"User profile {name} changed.")
 

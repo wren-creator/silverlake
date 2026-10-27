@@ -207,6 +207,22 @@ The wording is Silverlake's own. IDs we have not seen on a real system are marke
 
 Passwords ignore case at `qpwdlvl` 0 and 1, and respect it at 2 and 3.
 
+### Lockout and expiry
+
+Three system values in the seed's `[system]` table drive them (and they are saved with the state):
+
+| Value | Meaning | Seed |
+|---|---|---|
+| `qmaxsign` | bad passwords in a row before the profile is disabled, `0` is `*NOMAX` | 3 |
+| `qmaxsgnacn` | `1` device, `2` profile, `3` both. Devices are not simulated, so `1` counts and does nothing | 3 |
+| `qpwdexpitv` | days a password lasts, `0` is `*NOMAX` | 0 |
+
+A wrong password for a real, enabled profile counts against it. At the limit the profile goes `*DISABLED` (saved, so a restart does not forgive it), and from then on even the right password gets `CPF1394`. A good sign-on resets the count. An unknown user is never counted. A `*SECADM` user re-enables it with `CHGUSRPRF STATUS(*ENABLED)`, which starts the count again. Set `qmaxsign = 0` and an attacker can guess forever, which is a scenario of its own.
+
+A password is expired when the profile has `PWDEXP(*YES)`, or when it is older than `qpwdexpitv` days since it was last set. The right password then lands on a Change Password display (current, new, verify) instead of a session, and a good change clears the flag and starts the interval over. The seeded profiles have no change date, so they never age until someone sets a password. `CRTUSRPRF` and a `CHGUSRPRF` that sets `PASSWORD` stamp today's date.
+
+The behavior follows IBM's description of these values. The messages on the last attempt, the warnings before it, and the Change Password layout were not seen on a real system, so the layout and wording are ours and are on the verification list in the roadmap. Not built: device lockout, the warnings, `QSECOFR` being exempt at the console, `CHGPWD`, and the other password rules (`QPWDMINLEN`, `QPWDRQDDIF` and friends).
+
 ## Profile administration messages
 
 IBM's command reference lists these IDs for the profile commands but does not say exactly which condition raises each one. Silverlake's mapping is an inference, so every one is marked as such in `system/messages.py` (`DOCUMENTED`). Completion messages carry no ID because none is documented. Command line mistakes (unknown command, bad keyword) also carry no ID yet.
@@ -269,7 +285,7 @@ Said plainly, so nobody assumes otherwise:
 
 - F4 prompting and keyword abbreviation on the command line, `DSPUSRPRF` types other than `*BASIC`, and `WRKUSRPRF` options other than 5.
 - Authority to the job description, message queue and output queue named on a profile.
-- Programs other than `QCMD`, so `INLPGM` and `CALL` cannot run anything else, and menu options that are not CL commands. Expired passwords and forced change, failed-attempt lockout (`MAXSIGN`), and the `QMAXSIGN` warnings.
+- Programs other than `QCMD`, so `INLPGM` and `CALL` cannot run anything else, and menu options that are not CL commands. The `QMAXSIGN` warnings before the last attempt (see Lockout and expiry above for what is built).
 - Adopted authority, and the exceptions to `*ALLOBJ`.
 - Whether special authorities flow from a group profile. Silverlake does not pass them down.
 - Object types beyond those five, creating objects, generic names and `*ALL` on the object commands, `*PRINT` and `*OUTFILE` output, the `CRTAUT` and `CRTOBJAUD` library settings, and primary groups on objects.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Sign-on lockout and password expiry. Three bad passwords in a row (`qmaxsign`, seeded at 3, `0` means guess forever) disable the profile, and the disabled state is saved. A good sign-on resets the count, unknown users are not counted, and `CHGUSRPRF STATUS(*ENABLED)` brings it back. An expired password (`PWDEXP(*YES)`, or older than `qpwdexpitv` days) lands on a Change Password display instead of a session. Built from IBM's descriptions of the system values, not from a capture, so the last-attempt messages and the Change Password layout are ours and sit on the verification list. Not built: device lockout, the warnings, CHGPWD and the other password rules.
+
 - Colors now follow the real host on every screen that has a capture: list rows and values green (they were turquoise or white), More... and Bottom white (they were blue), column headings white. A test holds the rules. The sign-on screen keeps its own turquoise block, which the real one draws.
 - DSPJOB and the three job attribute pages (status, definition, run), from a read-only capture of the real displays. They are also behind WRKJOB options 1, 2 and 3. The run page shows what CHGJOB changed. The job screens now use the colors the real host uses (green for labels, values and options, white titles, blue prompts and keys), which the capture showed older screens get wrong.
 

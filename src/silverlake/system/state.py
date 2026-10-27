@@ -23,11 +23,13 @@ def to_dict(store: ProfileStore) -> dict:
     sysd = store.system
     return {
         "system": {"qsecurity": sysd.qsecurity, "qpwdlvl": sysd.qpwdlvl, "mode": sysd.mode,
-                   "default_profile_owner": sysd.default_profile_owner},
+                   "default_profile_owner": sysd.default_profile_owner,
+                   "qmaxsign": sysd.qmaxsign, "qmaxsgnacn": sysd.qmaxsgnacn, "qpwdexpitv": sysd.qpwdexpitv},
         "profiles": [{
             "name": p.name, "user_class": p.user_class.value,
             "special": None if p.special_authorities is None else sorted(a.value for a in p.special_authorities),
             "password": p.password, "status": p.status, "password_expired": p.password_expired,
+            "password_changed": p.password_changed,
             "limited_capabilities": p.limited_capabilities, "group_profile": p.group_profile,
             "supplemental_groups": p.supplemental_groups, "initial_program": p.initial_program,
             "initial_menu": p.initial_menu, "current_library": p.current_library, "text": p.text,
@@ -52,6 +54,7 @@ def from_dict(data: dict) -> ProfileStore:
         name=p["name"], user_class=UserClass(p["user_class"]),
         special_authorities=None if p["special"] is None else frozenset(SpecialAuthority(a) for a in p["special"]),
         password=p["password"], status=p["status"], password_expired=p["password_expired"],
+        password_changed=p.get("password_changed"),
         limited_capabilities=p["limited_capabilities"], group_profile=p["group_profile"],
         supplemental_groups=list(p["supplemental_groups"]), initial_program=p["initial_program"],
         initial_menu=p["initial_menu"], current_library=p["current_library"], text=p["text"],

@@ -84,6 +84,29 @@ def signon_screen(display: str, message: str = "", user: str = "") -> Screen:
     return Screen(rows, cursor="user")
 
 
+def change_password_screen(profile: Profile, last_changed: str | None, message: str = "") -> Screen:
+    """Shown instead of a session when the password has expired. The layout and wording
+    are ours, not read off a real host."""
+    rows: list[Text | Input] = [
+        Text(0, 33, "Change Password", ds.ATTR_WHITE),
+        Text(2, 2, "Your password has expired. You must enter a new password to sign on."),
+        Text(4, 2, "User  . . . . . . . . . . . . . . . :"),
+        Text(4, 41, profile.name, INFO_VALUE_ATTR),
+        Text(5, 2, "Password last changed . . . . . . . :"),
+        Text(5, 41, last_changed or "unknown", INFO_VALUE_ATTR),
+        Text(7, 2, dotted("Current password", 37)),
+        Input(7, 41, 10, "current", hidden=True),
+        Text(8, 2, dotted("New password", 37)),
+        Input(8, 41, 10, "new", hidden=True),
+        Text(9, 2, dotted("New password (to verify)", 37)),
+        Input(9, 41, 10, "verify", hidden=True),
+        Text(23, 2, "F3=Exit", ds.ATTR_BLUE),
+    ]
+    if message:
+        rows.append(Text(22, 0, message[:80], ds.ATTR_WHITE))
+    return Screen(rows, cursor="current")
+
+
 @dataclass
 class _AutlRow:
     """An authorization list, shaped like an object row so the confirm screen can show it."""
@@ -115,6 +138,8 @@ class SignonController:
         self.view: tuple | None = None
         # views a work list opened (option 5 and the like), so Enter and F3 come back to the list
         self.parents: list[tuple] = []
+        # (profile, sign-on values) while the Change Password display is up
+        self.pending_password: tuple[Profile, dict[str, str]] | None = None
 
     def first(self) -> Screen:
         return signon_screen(self.display)
@@ -138,13 +163,30 @@ class SignonController:
                 self._sign_off()
                 return signon_screen(self.display)
             return self._home(aid, values)
+        if self.pending_password is not None:
+            return self._change_password(aid, values)
         user = values.get("user", "").strip()
         if not user:
             return signon_screen(self.display)
         result = self.store.check_signon(user, values.get("password", ""))
         if result.profile is None:
             return signon_screen(self.display, result.message.line(), user.upper())
+        if result.must_change_password:
+            self.pending_password = (result.profile, {**values, "password": values.get("password", "")})
+            return change_password_screen(result.profile, result.profile.password_changed)
         return self._start(result.profile, values)
+
+    def _change_password(self, aid: str, values: dict[str, str]) -> Screen:
+        profile, signon = self.pending_password
+        if aid in ("F3", "F12"):
+            self.pending_password = None
+            return signon_screen(self.display)
+        err = self.store.change_password(profile, values.get("current", ""), values.get("new", ""),
+                                         values.get("verify", ""))
+        if err:
+            return change_password_screen(profile, profile.password_changed, err.line())
+        self.pending_password = None
+        return self._start(profile, signon)
 
     # -- sign-on values ---------------------------------------------------------------
 

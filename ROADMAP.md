@@ -9,7 +9,7 @@
 - [ ] Phase 2 follow-ups: confirm title and label columns and colors from a stock capture (positions came from a photo), configurable password length, authenticated captures (harness done, first real run pending), Query path against a real host, more scenarios as Phase 3 lands
 - [x] Phase 3a: user profiles and the access model (five classes, eight special authorities, object authority), sign-on checks, seed-file assignment of any access level (docs/access-model.md)
 - [x] Phase 3b: CRTUSRPRF, CHGUSRPRF, DSPUSRPRF, DLTUSRPRF, WRKUSRPRF, SIGNOFF from a command line as *SECADM, profiles as secured objects, changes saved in SQLite
-- [ ] Phase 3b follow-ups: F4 prompting and keyword abbreviation, limited capabilities enforcement, password expiry and forced change, MAXSIGN lockout, adopted authority, more WRKUSRPRF options, DSPUSRPRF types
+- [ ] Phase 3b follow-ups: F4 prompting and keyword abbreviation, limited capabilities enforcement, adopted authority, more WRKUSRPRF options, DSPUSRPRF types
 - [ ] Confirm the profile command message IDs and which condition raises each (CPF2204, CPF2217, CPF2228 and the rest are documented, not seen); safe read-only checks on PUB400 are an unknown command and DSPUSRPRF on your own profile
 - [x] Phase 3c-1: libraries and objects as real SQLite tables keyed by library, name and type; library authority checked before object authority; CRTLIB, DLTLIB, WRKLIB, DSPLIBL, ADDLIBLE, RMVLIBLE, DSPOBJAUT, GRTOBJAUT, RVKOBJAUT
 - [ ] Phase 3c-1 follow-ups: generic names and *ALL on GRTOBJAUT and RVKOBJAUT, more object types, WRKLIB options, CRTAUT on libraries, REFOBJ, *OUTFILE for DSPOBJAUT, DSPLIB, primary group on objects
@@ -38,6 +38,8 @@
 - [ ] Work list options still to build: 3 (copy, CRTDUPOBJ), WRKAUTL 2 (needs a capture from a profile that may edit a list); edit screen F10 and F11 (the real host did not answer F10, retry with a longer wait); DSPOBJD page three and option 8, creation dates for non-library objects; F4 prompting, F11, F16 and F17 positioning, F17 and F18 top and bottom on WRKOBJOWN; capture the real WRKAUTL delete confirm and the F6 Add new users screen
 - [ ] More object types (*DTAARA and *USRSPC next), *AUTL in the object table, generic names on RNMOBJ and CHGOBJD
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
+- [x] Sign-on lockout (QMAXSIGN, QMAXSGNACN) and password expiry (PWDEXP, QPWDEXPITV) with a Change Password display, built from IBM's descriptions, not a capture
+- [ ] Lockout and expiry follow-ups: device lockout (QMAXSGNACN 1), the warnings before the last attempt, QSECOFR exempt at the console, CHGPWD, password rules (QPWDMINLEN, QPWDRQDDIF), per-profile PWDEXPITV, an expiry warning before the day
 - [x] Phase 3c-3c complete: jobs, spool files and message queues, merged to main 2026-10-27
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
 - [ ] Phase 5: vulnerable and secure modes, seeded weak configs, exposed services, scenarios, flag checker, instructor and trainee docs
@@ -54,6 +56,7 @@ Things Silverlake does from IBM's pages, memory or inference and has not seen on
 - [ ] CHGJOB: that RUNPTY, TIMESLICE, PURGE, DFTWAIT, CPUTIME and MAXTMPSTG need *JOBCTL even on your own job, and CPF1337 as the refusal (inferred). Write
 - [ ] Spool rules: the parts of CRTOUTQ's page that only came through as a summary, and the inferred OPRCTL, DSPDTA and AUTCHK behavior for other people's files
 - [ ] Job log filing: that passwords are masked is Silverlake's choice, not something seen. Check what a real QPJOBLOG holds for a typed password
+- [ ] Lockout and expiry: what the real host does on the QMAXSIGN-th bad password (which message, which screen), what the disabled profile says, and the real Change Password display. All inferred. Needs a made-up or deliberately sacrificed profile, so a human decides
 - [ ] Confirm CPF1107, CPF1118, CPF1394 (needs a deliberate wrong-password attempt, so a human decides, with a made-up user)
 - [ ] Profile command message IDs and which condition raises each (CPF2204, CPF2217, CPF2228 and the rest are documented, not seen); safe read-only checks are an unknown command and DSPUSRPRF on your own profile
 - [ ] The ID of "Not authorized to command" and what a limited user sees at a command line; the LMTCPB message wording
