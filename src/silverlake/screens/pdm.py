@@ -56,6 +56,14 @@ def _msg(rows: list, message: str) -> None:
             rows.append(Text(23, 78, "+", ds.ATTR_WHITE))
 
 
+def _prompt_step(ctx: Context, line: str, **preset: str) -> Step:
+    from .prompt import Prompt                                    # imported late: prompt imports this module
+    widget = Prompt.for_command(ctx, line, **preset)
+    if widget is None:
+        return Step("F4 prompting is not built for that command." if line else "")
+    return Step(go="open", widget=widget)
+
+
 # -- STRPDM ------------------------------------------------------------------------------------------------
 
 class PdmMenu:
@@ -88,6 +96,8 @@ class PdmMenu:
         if aid == "F12":
             return Step(go="back")
         line = values.get("command", "").strip()
+        if aid == "F4":
+            return _prompt_step(ctx, line)
         hint = {"1": "Use WRKLIB to work with libraries.",
                 "2": "Use WRKOBJPDM LIB(library) to work with the objects of a library.",
                 "3": "Use WRKMBRPDM FILE(library/file) to work with the members of a source file.",
@@ -194,6 +204,8 @@ class MemberList:
             return Step()
         if aid == "F5":
             return Step()
+        if aid == "F4":
+            return self._f4(values)
         if aid == "F6":
             self.mode = "new"
             self.draft = {"member": "", "type": "", "text": ""}
@@ -226,6 +238,24 @@ class MemberList:
                 return Step("That command needs a full display. Leave PDM and run it from the command line.")
             return Step(out.message.text if out.message else "")
         return Step()
+
+    def _f4(self, values: dict[str, str]) -> Step:
+        """F4 with option 14 typed beside a member prompts the compile command for it, filled in. With a command
+        on the line it prompts that command."""
+        names = self.names()
+        for i in range(self.PER_PAGE):
+            idx = self.page * self.PER_PAGE + i
+            if values.get(f"opt{i}", "").strip() == "14" and idx < len(names):
+                mem = source.member(self.file, names[idx])
+                command = TYPE_COMMANDS.get((mem or {}).get("type", "").upper())
+                if command is None:
+                    return Step(f"Member {names[idx]} is type {(mem or {}).get('type') or '(none)'} and cannot be compiled.")
+                key = "PGM" if command == "CRTBNDRPG" else "FILE"
+                preset = {key: names[idx], "SRCFILE": self.file.name, "SRCFILE@": self.file.library}
+                if command == "CRTBNDRPG":
+                    preset["SRCMBR"] = names[idx]
+                return _prompt_step(self.ctx, command, **preset)
+        return _prompt_step(self.ctx, values.get("command", "").strip())
 
     def _option(self, name: str, opt: str, param: str) -> Step:
         ctx, f = self.ctx, self.file

@@ -29,7 +29,7 @@ from .model import Input, Screen, Text
 from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
                         WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
-from . import jobextra, pdm, pfm
+from . import jobextra, pdm, pfm, prompt
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -283,6 +283,8 @@ class SignonController:
                     sess.mode = origin
             return self._base()
         line = values.get("command", "").strip()
+        if aid == "F4":
+            return self._prompt(line)
         if not line:
             return self._base()
         if sess.mode == "menu":
@@ -292,6 +294,15 @@ class SignonController:
             if self.profile.limited_capabilities == "*YES":
                 return self._base(messages.command_line_not_allowed().line())
         return self._run(line)
+
+    def _prompt(self, line: str) -> Screen:
+        """F4 on the command line: the prompt for the command typed there, when it has one."""
+        widget = prompt.Prompt.for_command(self._ctx(), line)
+        if widget is None:
+            return self._base("F4 prompting is not built for that command." if line else "")
+        self.parents.clear()
+        self.view = ("widget", widget)
+        return self._draw_view()
 
     def _log(self, line: str, outcome: "commands.Outcome") -> None:
         """What the job log will say: the command, and the message it raised."""

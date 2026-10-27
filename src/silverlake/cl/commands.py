@@ -190,9 +190,11 @@ CRTBNDRPG_PARAMS = [Param("PGM", "qname*", "*CTLSPEC"), Param("SRCFILE", "qname"
                     Param("USEADPAUT", "yesno", "*YES")]
 
 
-def _crt_dds_params(first_default: str) -> list[Param]:
+def _crt_dds_params(first_default: str, *middle: Param) -> list[Param]:
+    """FILE, source file, member, the command's own extras, then the options every one of them has. The order
+    is the order of the captured prompts, which is also what a positional list follows."""
     return [Param("FILE", "qname", "", required=True), Param("SRCFILE", "qname*", first_default),
-            Param("SRCMBR", "name*", "*FILE"), Param("GENLVL", "ignored", "20"),
+            Param("SRCMBR", "name*", "*FILE"), *middle, Param("GENLVL", "ignored", "20"),
             Param("FLAG", "ignored", "0"), Param("TEXT", "text", "*SRCMBRTXT")]
 
 
@@ -215,9 +217,13 @@ WRKMBRPDM_PARAMS = [Param("FILE", "qname", "QRPGLESRC"), Param("MBR", "wrkname",
 WRKOBJPDM_PARAMS = [Param("LIB", "name*", "*CURLIB"), Param("OBJ", "wrkname", "*ALL")]
 STRSEU_PARAMS = [Param("SRCFILE", "qname", "QTXTSRC"), Param("SRCMBR", "name", "", required=True),
                  Param("TYPE", "name*", "*SAME"), Param("OPTION", "number", "2")]
-CRTPF_PARAMS = _crt_dds_params("QDDSSRC")
-CRTDSPF_PARAMS = _crt_dds_params("QDDSSRC")
-CRTPRTF_PARAMS = _crt_dds_params("QDDSSRC")
+CRTPF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SRCFILE", "qname*", "QDDSSRC"),
+                Param("SRCMBR", "name*", "*FILE"), Param("RCDLEN", "ignored", "*NONE"),
+                Param("GENLVL", "ignored", "20"), Param("FLAG", "ignored", "0"),
+                Param("FILETYPE", "ignored", "*DATA"), Param("MBR", "ignored", "*FILE"),
+                Param("TEXT", "text", "*SRCMBRTXT")]
+CRTDSPF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*REQUESTER"))
+CRTPRTF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*JOB"), Param("DEVTYPE", "ignored", "*SCS"))
 DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU": ("MENU", "*MENU"),
                    "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ")}
 
