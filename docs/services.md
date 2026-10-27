@@ -14,7 +14,9 @@ Everything in Silverlake is reached through 5250 unless you start it with `./sta
 
 The `ftp-limited-bypass` lesson: FTP does not know what limited capability is, so a profile with no command line can still list and get what it may read. The secure state registers a request exit program (a record on `QUSRSYS/FTPEXIT`) that turns away limited capability profiles. That is a simplification of a real exit point, which can refuse any single request.
 
-Read only on purpose: there is no `STOR`, `DELE`, `MKD`, `RMD` or `RNFR`. Not built: members other than the first, IFS directories, `SITE`, active mode (`PORT`), TLS.
+`RCMD` (`quote rcmd <CL command>`) runs a CL command as the signed on profile through Silverlake's own dispatcher, in this process, never a shell. It is the profile's own authority and nothing more, it answers 250 with the text of the result (messages, `DSPMSG`, `WRKUSRPRF`, `DSPUSRPRF`; a command that needs a screen says so) and 550 when the command fails, and the exit program of the `ftp-limited-bypass` lesson turns it away for limited profiles as it does the file commands.
+
+Read only on purpose for files: there is no `STOR`, `DELE`, `MKD`, `RMD` or `RNFR`. Not built: members other than the first, IFS directories, `SITE`, active mode (`PORT`), TLS.
 
 ## Host servers
 

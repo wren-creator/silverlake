@@ -4,7 +4,7 @@ Sign-on is the profile store's, and bad attempts count against the profile. It i
 server is without TLS, which is not built yet. After sign-on it is the same authority as everywhere else:
 a file is read only if the profile may read it, through the same finder DSPPFM uses.
 
-Read only by construction: there is no STOR, DELE, MKD, RMD or RNFR.
+Read only by construction: there is no STOR, DELE, MKD, RMD or RNFR. RCMD runs a CL command as the profile.
 
 FtpSession is a pure state machine (a command line in, a Step out) so the tests need no sockets."""
 
@@ -16,10 +16,13 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from ..cl import commands
 from ..cl.session import Session
 from ..system import dbfiles
 from ..system.authority import Auth
 from ..system.profiles import Profile, ProfileStore
+from ..system.rpg import _FAILED          # the words QCMDEXC treats as a failed command
+from . import textview
 
 log = logging.getLogger("silverlake.ftp")
 
@@ -123,7 +126,7 @@ class FtpSession:
 
     def _help(self, arg: str) -> Step:
         return Step([(214, "The following commands are recognized:\nUSER PASS SYST FEAT PWD CWD NAMEFMT TYPE "
-                           "PASV LIST NLST RETR HELP NOOP QUIT\nEnd of help.")])
+                           "PASV LIST NLST RETR RCMD HELP NOOP QUIT\nEnd of help.")])
 
     def _namefmt(self, arg: str) -> Step:
         if arg not in ("0", "1"):
@@ -206,6 +209,22 @@ class FtpSession:
         pf = dbfiles.layout(obj)
         text = "".join(dbfiles.record_text(pf, r) + "\r\n" for r in obj.data.get("records", []))
         return self._data(text)
+
+    def _rcmd(self, arg: str) -> Step:
+        """`quote rcmd <CL command>`: run a CL command as the signed on profile, through Silverlake's own
+        dispatcher in this process (never a shell). It is the profile's own authority and nothing more, and
+        like the file commands it ignores limited capability until the exit program is registered."""
+        if (no := self._turned_away()):
+            return no
+        if not arg:
+            return Step([(501, "RCMD needs a CL command.")])
+        outcome = commands.execute(self.store, self.actor, arg, self.job)
+        text = textview.outcome_text(self.store, outcome, arg)
+        said = outcome.message
+        failed = bool(said and ((said.id and not said.id.startswith("CPC")) or any(w in said.text.lower() for w in _FAILED)))
+        if failed:
+            return Step([(550, text or "Command failed.")])
+        return Step([(250, text or "Command successful.")])
 
     def _data(self, text: str) -> Step:
         return Step(before=[(150, "Opening data connection.")], data=text, after=[(226, "Transfer complete.")])

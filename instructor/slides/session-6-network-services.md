@@ -18,6 +18,7 @@ Needs `./start.sh --services`. Everything still binds to 127.0.0.1.
 ## Slide 4: ftp-limited-bypass
 - Sign on to the 5250 as CLERK: no command line. Now `ftp 127.0.0.1 2121`, same user and password.
 - `cd APPLIB`, `ls`, `get DAILYOPS`. Limited capability only ever applied to the menu.
+- `quote rcmd DSPMSG MSGQ(QSYSOPR)` runs a command as the clerk, with the clerk's authority and nothing more. The menu never allowed that.
 - The password crossed the wire in clear text. Say so out loud.
 
 ## Slide 5: hostsvr-recon

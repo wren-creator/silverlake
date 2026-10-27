@@ -62,7 +62,7 @@ def test_a_file_the_profile_may_not_read_is_refused_and_one_it_may_read_comes_ba
 
 def test_there_is_no_way_to_write(store):
     s, _ = login(store, "QSECOFR")
-    for c in ("STOR APPLIB/X", "DELE APPLIB/PAYROLL", "MKD X", "RMD X", "RNFR X", "RCMD DSPLIBL"):
+    for c in ("STOR APPLIB/X", "DELE APPLIB/PAYROLL", "MKD X", "RMD X", "RNFR X"):
         assert code(s.handle(c)) == 500
 
 
@@ -144,3 +144,33 @@ def test_the_notes_are_for_the_clerk_only(store):
     s.handle("CWD APPLIB")
     assert "DAILYOPS" not in s.handle("LIST").data
     assert code(s.handle("RETR DAILYOPS")) == 550
+
+
+def test_rcmd_runs_a_cl_command_as_the_signed_on_profile_and_no_more(store):
+    s, _ = login(store, "OPERATOR")
+    assert code(s.handle("RCMD DSPLIBL")) in (250, 550)
+    ok = s.handle("RCMD DSPMSG MSGQ(QSYSOPR)")
+    assert code(ok) == 250 and "Backup window" in ok.replies[0][1]
+    refused = s.handle("RCMD CRTUSRPRF USRPRF(EVIL) PASSWORD(EVIL) USRCLS(*SECOFR)")
+    assert code(refused) == 550 and "EVIL" not in store.profiles
+
+
+def test_rcmd_checks_the_command_and_the_arguments(store):
+    s, _ = login(store, "STUDENT")
+    assert code(s.handle("RCMD")) == 501
+    assert code(s.handle("RCMD NOSUCHCMD")) == 550
+    assert code(s.handle("RCMD DSPMSG MSGQ(QTMHHTTP)")) == 550
+
+
+def test_rcmd_needs_a_sign_on_and_never_reaches_a_shell(store):
+    assert code(ftpd.FtpSession(store).handle("RCMD DSPLIBL")) == 530
+    s, _ = login(store, "QSECOFR")
+    s.handle("RCMD CALL PGM(QSH) PARM('rm -rf /')")
+    assert store.profiles["QSECOFR"]
+
+
+def test_the_exit_program_turns_away_rcmd_for_a_limited_profile_too(store):
+    s, _ = login(store, "CLERK")
+    assert code(s.handle("RCMD DSPMSG MSGQ(QSYSOPR)")) == 250
+    store.objects[("QUSRSYS", "FTPEXIT", "*PGM")].data["registered"] = "yes"
+    assert code(s.handle("RCMD DSPMSG MSGQ(QSYSOPR)")) == 550
