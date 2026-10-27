@@ -47,6 +47,7 @@ class Job:
     started: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     held_from: str = ""          # the status a held job goes back to on release
     ending: bool = False         # set by ENDJOB; the session notices on its next key
+    info: object = field(default=None, repr=False, compare=False)   # the live Session behind an interactive job
     attrs: dict = field(default_factory=lambda: {
         "JOBPTY": "5", "OUTPTY": "5", "RUNPTY": "20", "TIMESLICE": "2000", "PURGE": "*YES",
         "DFTWAIT": "30", "CPUTIME": "*NOMAX", "MAXTMPSTG": "*NOMAX"})

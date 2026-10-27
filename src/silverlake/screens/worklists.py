@@ -245,9 +245,29 @@ WRKJOB_OPTIONS = [
 ]
 
 
-def wrkjob_screen(job, system_name: str, message: str = "") -> Screen:
+WRKJOB_PAGE2 = [
+    (6, 5, "17. Display communications status, if active"), (7, 5, "18. Display activation groups, if active"),
+    (8, 5, "19. Work with mutexes, if active"), (9, 5, "20. Work with threads, if active"),
+    (10, 5, "21. Work with media library attributes, if active"), (11, 5, "22. Display environment variables, if active"),
+    (13, 5, "30. All of the above"),
+    (15, 5, "40. Change job"), (16, 5, "41. End job"), (17, 5, "42. Hold job"),
+]
+DSPJOB_PAGE2 = [
+    (6, 5, "17. Display communications status, if active"), (7, 5, "18. Display activation groups, if active"),
+    (8, 5, "19. Display mutexes, if active"), (9, 5, "20. Display threads, if active"),
+    (10, 5, "21. Display media library attributes, if active"), (11, 5, "22. Display environment variables, if active"),
+    (13, 5, "30. All of the above"),
+]
+
+
+def _more(row: int, last: bool) -> Text:
+    """More... or Bottom the way the real host sends it: a run starting at column 67, padded."""
+    return Text(row, 67, ("Bottom" if last else "More...").rjust(12), ds.ATTR_WHITE)
+
+
+def wrkjob_screen(job, system_name: str, message: str = "", page: int = 0) -> Screen:
     """Work with Job, laid out like the real menu (captured, first page). The selection goes on the
-    command line, as it does there. The second page of options is not built."""
+    command line, as it does there. Page two (captured) adds 40 to 42. Options 17 to 22 and 30 are not built."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     v = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     rows: list = [
@@ -255,8 +275,8 @@ def wrkjob_screen(job, system_name: str, message: str = "") -> Screen:
         g(2, 1, "Job:"), v(2, 8, job.name), g(2, 23, "User:"), v(2, 31, job.user), g(2, 46, "Number:"), v(2, 56, job.number),
         Text(4, 1, "Select one of the following:", ds.ATTR_BLUE),
     ]
-    rows += [Text(r, c, t, ds.ATTR_GREEN) for r, c, t in WRKJOB_OPTIONS]
-    rows += [Text(18, 72, "More...", ds.ATTR_WHITE), Text(19, 1, "Selection or command", ds.ATTR_GREEN),
+    rows += [Text(r, c, t, ds.ATTR_GREEN) for r, c, t in (WRKJOB_PAGE2 if page else WRKJOB_OPTIONS)]
+    rows += [_more(18, False), Text(19, 1, "Selection or command", ds.ATTR_GREEN),
              Text(20, 1, "===>", ds.ATTR_GREEN), Input(20, 6, 153, "command"),
              Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F4=Prompt", ds.ATTR_BLUE),
              Text(22, 23, "F9=Retrieve", ds.ATTR_BLUE), Text(22, 37, "F12=Cancel", ds.ATTR_BLUE)]
@@ -275,9 +295,9 @@ DSPJOB_OPTIONS = [
 ]
 
 
-def dspjob_screen(job, system_name: str, message: str = "") -> Screen:
+def dspjob_screen(job, system_name: str, message: str = "", page: int = 0) -> Screen:
     """Display Job, laid out like the real menu (captured, first page). Unlike Work with Job it has
-    a two character selection field and no command line. The second page of options is not built."""
+    a two character selection field and no command line. Page two (captured) has options 17 to 22 and 30, none built."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     v = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     rows: list = [
@@ -285,8 +305,8 @@ def dspjob_screen(job, system_name: str, message: str = "") -> Screen:
         g(2, 1, "Job:"), v(2, 8, job.name), g(2, 23, "User:"), v(2, 31, job.user), g(2, 46, "Number:"), v(2, 56, job.number),
         Text(4, 1, "Select one of the following:", ds.ATTR_BLUE),
     ]
-    rows += [Text(r, c, t, ds.ATTR_GREEN) for r, c, t in DSPJOB_OPTIONS]
-    rows += [Text(18, 72, "More...", ds.ATTR_WHITE), g(19, 1, "Selection"), Input(20, 6, 2, "selection"),
+    rows += [Text(r, c, t, ds.ATTR_GREEN) for r, c, t in (DSPJOB_PAGE2 if page else DSPJOB_OPTIONS)]
+    rows += [_more(18, bool(page)), g(19, 1, "Selection"), Input(20, 6, 2, "selection"),
              Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F12=Cancel", ds.ATTR_BLUE)]
     if message:
         rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
@@ -301,16 +321,20 @@ def _job_page(job, system_name: str, title: str, items: list, more: bool, messag
     keys. `items` are (row, label column, label, value column, value) or (row, label column, label)."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     v = lambda r, c, t: Text(r, c, str(t), ds.ATTR_GREEN)
+    # Status and run titles start at their visible column in the capture; the definition and run pages
+    # start at column 12 padded, which is only how the host draws the same text.
+    shown = (80 - len(title)) // 2
+    start, padded = (12, " " * (shown - 12) + title) if "Definition" in title or "Run" in title else (shown, title)
     rows: list = [
-        Text(0, (80 - len(title)) // 2, title, ds.ATTR_WHITE), g(1, 61, "System:"), v(1, 71, system_name),
+        Text(0, start, padded, ds.ATTR_WHITE), g(1, 61, "System:"), v(1, 71, system_name),
         g(2, 1, "Job:"), v(2, 8, job.name), g(2, 23, "User:"), v(2, 31, job.user), g(2, 46, "Number:"), v(2, 56, job.number),
     ]
     for item in items:
         rows.append(g(item[0], item[1], item[2]))
         if len(item) > 3:
             rows.append(v(item[0], item[3], item[4]))
-    if more:
-        rows.append(Text(19, 72, "More...", ds.ATTR_WHITE))
+    if more is not None:
+        rows.append(_more(19, not more))
     rows += [Text(20, 1, "Press Enter to continue.", ds.ATTR_BLUE),
              Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F5=Refresh", ds.ATTR_BLUE),
              Text(22, 24, "F12=Cancel", ds.ATTR_BLUE), Text(22, 37, "F16=Job menu", ds.ATTR_BLUE)]
@@ -319,9 +343,14 @@ def _job_page(job, system_name: str, title: str, items: list, more: bool, messag
     return Screen(rows)
 
 
-def jobstatus_screen(job, system_name: str, message: str = "") -> Screen:
-    """Display Job Status Attributes, first page (captured). Page two is not built. Every job in the
-    table is active. The pool id is a pick."""
+def jobstatus_screen(job, system_name: str, message: str = "", page: int = 0) -> Screen:
+    """Display Job Status Attributes, both pages (captured). Every job in the table is active. The
+    pool id is a pick."""
+    if page:
+        return _job_page(job, system_name, "Display Job Status Attributes", [
+            (4, 1, "Controlled end requested  . . . . . . . . . :", 49, "NO"),
+            (5, 1, "System  . . . . . . . . . . . . . . . . . . :", 49, system_name),
+        ], False, message)
     when = job.started
     d, t = when.strftime("%y-%m-%d"), when.strftime("%H:%M:%S")
     return _job_page(job, system_name, "Display Job Status Attributes", [
@@ -343,11 +372,29 @@ def jobstatus_screen(job, system_name: str, message: str = "") -> Screen:
     ], True, message)
 
 
-def jobdef_screen(job, system_name: str, message: str = "") -> Screen:
-    """Display Job Definition Attributes, first page (captured). Page two is not built. The
-    description is named after the user for an interactive job, as it was in the capture, and is
-    QDFTJOBD for the rest (a pick). Message logging shows what the capture showed."""
+def jobdef_screen(job, system_name: str, message: str = "", page: int = 0) -> Screen:
+    """Display Job Definition Attributes, both pages (captured). The description is named after the
+    user for an interactive job, as it was in the capture, and is QDFTJOBD for the rest (a pick).
+    Message logging shows what the capture showed. On page two the printer device and the default
+    output queue are picks (PRT01 and QGPL/QPRINT: the capture's queue is not one we have), the date
+    and time are the clock's, and the separators and format are the defaults."""
     a = job.attrs
+    if page:
+        now = datetime.now()
+        return _job_page(job, system_name, "Display Job Definition Attributes", [
+            (4, 1, "Printer device  . . . . . . . . . . . . . . . . . :", 55, "PRT01"),
+            (5, 1, "Default output queue  . . . . . . . . . . . . . . :", 55, "QPRINT"),
+            (6, 3, "Library . . . . . . . . . . . . . . . . . . . . :", 57, "QGPL"),
+            (7, 1, "Job date  . . . . . . . . . . . . . . . . . . . . :", 55, f"{job.started:%Y-%m-%d}"),
+            (8, 1, "Date format . . . . . . . . . . . . . . . . . . . :", 55, "*YMD"),
+            (9, 1, "Date separator  . . . . . . . . . . . . . . . . . :", 55, "-"),
+            (10, 1, "Time separator  . . . . . . . . . . . . . . . . . :", 55, ":"),
+            (11, 1, "Job time:"),
+            (12, 3, "Current date  . . . . . . . . . . . . . . . . . :", 55, f"{now:%Y-%m-%d}"),
+            (13, 3, "Current time  . . . . . . . . . . . . . . . . . :", 55, f"{now:%H:%M:%S}"),
+            (14, 1, "Day of week . . . . . . . . . . . . . . . . . . . :", 55,
+             ("*MON", "*TUE", "*WED", "*THU", "*FRI", "*SAT", "*SUN")[now.weekday()]),
+        ], False, message)
     return _job_page(job, system_name, "Display Job Definition Attributes", [
         (4, 1, "Job description . . . . . . . . . . . . . . . . . :", 55, job.user if job.type == "INT" else "QDFTJOBD"),
         (5, 3, "Library . . . . . . . . . . . . . . . . . . . . :", 57, "QGPL"),
@@ -387,7 +434,148 @@ def jobrun_screen(job, system_name: str, message: str = "") -> Screen:
         (16, 3, "Group . . . . . . . . . . . . . . . . . . . . . :", 55, "*NOGROUP"),
         (17, 3, "Level . . . . . . . . . . . . . . . . . . . . . :", 55, "*NORMAL"),
         (18, 1, "Resources affinity group  . . . . . . . . . . . . :", 55, "*NO"),
-    ], False, message)
+    ], None, message)
+
+
+# -- what a job holds: call stack, locks, open files, overrides, commitment control. Captured from the
+# profile's own job on PUB400 sitting at the main menu. Silverlake knows what a session holds (its
+# library list, the menu it is on) and nothing else, so the rest is the captured shape with our names.
+
+def _job_head(job, system_name: str, title: str, title_col: int | None = None) -> list:
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    return [Text(0, title_col if title_col is not None else (80 - len(title)) // 2, title, ds.ATTR_WHITE),
+            g(1, 61, "System:"), g(1, 71, system_name),
+            g(2, 1, "Job:"), g(2, 8, job.name), g(2, 23, "User:"), g(2, 31, job.user),
+            g(2, 46, "Number:"), g(2, 56, job.number)]
+
+
+CALL_STACK = [("", "QCMD", "0519"), ("", "QUICMENU", "00C1"), ("1", "QUIMNDRV", "061E"),
+              ("2", "QUIMGFLW", "04D9"), ("3", "QUICMD", "056F")]     # as captured at the main menu
+
+
+def callstack_screen(job, system_name: str, message: str = "") -> Screen:
+    """Display Call Stack. An interactive job shows the captured stack (a command line or another
+    menu is assumed to look the same). Any other job has no stack here, so the list is empty."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    rows = _job_head(job, system_name, "Display Call Stack") + [
+        g(3, 1, "Thread:"), g(3, 11, "00000001"),
+        Text(6, 1, "Type", ds.ATTR_WHITE), Text(6, 7, "Program", ds.ATTR_WHITE),
+        Text(6, 32, "Statement", ds.ATTR_WHITE), Text(6, 50, "Procedure", ds.ATTR_WHITE),
+    ]
+    stack = CALL_STACK if job.type == "INT" else []
+    for i, (kind, prog, stmt) in enumerate(stack):
+        r = 7 + i
+        if kind:
+            rows.append(g(r, 1, f"{kind:>4}"))
+        rows += [g(r, 7, f"{prog:<10} QSYS"), g(r, 32, f"{'':>11}/{stmt}")]
+    rows += [_more(20, True),
+             Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 16, "F5=Refresh", ds.ATTR_BLUE),
+             Text(21, 60, "F12=Cancel", ds.ATTR_BLUE), Text(22, 1, "F16=Job menu", ds.ATTR_BLUE),
+             Text(22, 16, "F17=Top", ds.ATTR_BLUE), Text(22, 29, "F18=Bottom", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
+
+
+def job_locks(job) -> list[tuple[str, str, str, str]]:
+    """(object, library, type, lock) the job holds: every library on its library list, the menu it is
+    on, and the display file every interactive job holds. Sorted by object, as the capture was."""
+    held: list[tuple[str, str, str, str]] = []
+    sess = job.info
+    if sess is not None:
+        for lib, _ in sess.entries():
+            held.append((lib, "QSYS", "*LIB", "*SHRRD"))
+        if sess.mode == "menu" and sess.menu_stack:
+            lib, name = sess.menu_stack[-1]
+            held.append((name, lib, "*MENU", "*SHRNUP"))
+        held.append(("QDUI80", "QSYS", "*FILE-DSP", "*SHRNUP"))
+    return sorted(held)
+
+
+LOCK_ROWS = 9      # rows 11 to 19
+
+
+def joblocks_screen(job, system_name: str, top: int = 0, message: str = "", work: bool = False) -> Screen:
+    """Display Job Locks, and Work with Job Locks from WRKJOB. The real displays take options (5, and 8
+    on the work one) and F10 and F11. None is built, so the Opt column and those keys are left out
+    rather than drawn dead."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    locks = job_locks(job)
+    top = max(0, min(top, max(0, len(locks) - 1) // LOCK_ROWS * LOCK_ROWS))
+    title = "Work with Job Locks" if work else "Display Job Locks"
+    rows = _job_head(job, system_name, title.rjust(len(title) + (80 - len(title)) // 2 - 12), 12) + [
+        g(4, 1, "Job status:"), g(4, 15, "ACTIVE"),
+        Text(9, 30, "Object", ds.ATTR_WHITE), Text(9, 58, "Member", ds.ATTR_WHITE), Text(9, 66, "ASP", ds.ATTR_WHITE),
+        Text(10, 6, "Object", ds.ATTR_WHITE), Text(10, 18, "Library", ds.ATTR_WHITE), Text(10, 30, "Type", ds.ATTR_WHITE),
+        Text(10, 41, "Lock", ds.ATTR_WHITE), Text(10, 50, "Status", ds.ATTR_WHITE),
+        Text(10, 58, "Locks", ds.ATTR_WHITE), Text(10, 66, "Device", ds.ATTR_WHITE),
+    ]
+    for i, (obj, lib, typ, lock) in enumerate(locks[top:top + LOCK_ROWS]):
+        r = 11 + i
+        rows += [g(r, 6, obj), g(r, 18, lib), g(r, 30, typ), g(r, 41, lock), g(r, 51, "HELD")]
+    rows.append(_more(20, top + LOCK_ROWS >= len(locks)))
+    rows += [Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F5=Refresh", ds.ATTR_BLUE),
+             Text(22, 1, "F12=Cancel", ds.ATTR_BLUE), Text(22, 14, "F16=Job menu", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
+
+
+def openfiles_screen(job, system_name: str, message: str = "") -> Screen:
+    """Display Open Files. An interactive job has its display file open (device is the job's own
+    name), as captured. The data path count and the activation group number are the captured shape."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    files = [("QDUI80", job.name), ("QDDSPOF", job.name)] if job.type == "INT" else []
+    rows = [
+        Text(0, 20, "Display Open Files".rjust(28), ds.ATTR_WHITE),
+        g(2, 1, "Job . . :"), g(2, 13, job.name), g(2, 28, "User . . :"), g(2, 41, job.user),
+        g(2, 56, "Number . . . :"), g(2, 73, job.number),
+        g(3, 1, "Number of open data paths . . . . . . . . . . :"),
+        g(3, 51, f"{len(files):>4}"),
+        Text(6, 1, "Member/".rjust(29), ds.ATTR_WHITE),
+        Text(7, 1, "File       Library    Device      Scope       Activation Group", ds.ATTR_WHITE),
+    ]
+    for i, (name, dev) in enumerate(files):
+        r = 8 + i
+        rows += [g(r, 1, name), g(r, 12, "QSYS"), g(r, 23, dev), g(r, 35, "*ACTGRPDFN"),
+                 g(r, 47, "*DFTACTGRP"), g(r, 58, "0000000000000002")]
+    rows += [Text(19, 73, "Bottom", ds.ATTR_WHITE), Text(20, 1, "Press Enter to continue.", ds.ATTR_BLUE),
+             Text(22, 1, "F3=Exit   F5=Refresh   F12=Cancel   F16=Job menu", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
+
+
+def overrides_screen(job, system_name: str, message: str = "") -> Screen:
+    """Display All File Overrides. No job here has an override (OVRDBF is not a command), and the
+    real display says so in one line."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    rows = [Text(0, 9, "Display All File Overrides".rjust(40), ds.ATTR_WHITE),
+            g(2, 1, "Job  . . :"), g(2, 14, job.name), g(2, 26, "   User . . :"), g(2, 42, job.user),
+            g(2, 54, "   Number . . :"), g(2, 72, job.number),
+            g(3, 1, "Call level . . . . . . . . . . . . . :"), g(3, 42, "*"),
+            Text(8, 1, "Opt  File          Level   Type  Keyword Specifications", ds.ATTR_WHITE),
+            g(11, 3, "(No file overrides)"),
+            Text(22, 1, "F3=Exit   F5=Refresh   F12=Cancel     F16=Job menu", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
+
+
+def commit_screen(job, system_name: str, message: str = "") -> Screen:
+    """Display Commitment Control Status. Nothing here starts commitment control, so there is
+    never a definition to list."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    rows = _job_head(job, system_name, "Display Commitment Control Status") + [
+        Text(7, 9, "Commitment", ds.ATTR_WHITE),
+        Text(8, 1, "Opt", ds.ATTR_WHITE), Text(8, 9, "Definition", ds.ATTR_WHITE), Text(8, 24, "Text", ds.ATTR_WHITE),
+        g(10, 3, "(No commitment definitions are active)"),
+        _more(18, True), Text(19, 1, "Press Enter to continue.", ds.ATTR_BLUE),
+        Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F5=Refresh", ds.ATTR_BLUE),
+        Text(21, 24, "F12=Cancel", ds.ATTR_BLUE), Text(21, 37, "F16=Job menu", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
 
 
 def message_lines(q) -> list[str]:

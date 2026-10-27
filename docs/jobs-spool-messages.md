@@ -81,6 +81,14 @@ The three attribute pages, from the capture of the profile's own job, are shared
 
 F12 on a list opened from another screen now goes back one level instead of straight to the menu. F3 still leaves everything.
 
+## The rest of the job screens (built)
+
+From a second read-only capture of the profile's own job. **Page two of both menus** (Roll Up and Roll Down): Display Job has options 17 to 22 and 30, Work with Job has the same with 19 to 21 as "Work with" plus 40, 41 and 42. 41 runs `ENDJOB` and 42 runs `HLDJOB` on the job, under the same rules as the commands. 40 (change job) and options 17 to 22 and 30 say they are not available, and Work with Job's third page is not built.
+
+**Page two of the status and definition pages**, and the detail displays behind options **11** (call stack), **12** (locks, titled Work with Job Locks from Work with Job), **14** (open files), **15** (file overrides) and **16** (commitment control). Silverlake knows what a session holds, so the locks are real: every library on the job's library list shared read, the menu it is on and the display file shared no update. The call stack is the captured five programs for an interactive job (a command line or another menu is assumed to look the same), open files are the display file and its companion, and no job has overrides or commitment definitions because nothing here can start them. A system job has nothing to show. Same rule as the menu: whoever may open DSPJOB on a job may open these.
+
+Left out on purpose, because each is a feature and not a position: the option column on the locks display (5 and 8), F10 and F11 there, F11 and F22 on the call stack, the I/O details on open files. Drawing them would be dead keys.
+
 ## Later
 
 The real confirm and prompt screens for `WRKACTJOB` options 2 and 4 once captured (the oracle will not end or change jobs on a shared system), `DSPJOB`, and `WRKJOB`'s other options.

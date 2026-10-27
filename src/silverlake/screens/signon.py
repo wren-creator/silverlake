@@ -28,7 +28,7 @@ from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
-                        WRKJOB_OPTIONS, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
+                        WRKJOB_OPTIONS, WRKJOB_PAGE2, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -147,6 +147,7 @@ class SignonController:
         self.parents: list[tuple] = []
         # (profile, sign-on values) while the Change Password display is up
         self.pending_password: tuple[Profile, dict[str, str]] | None = None
+        self.job_top = 0       # first lock shown on the job locks display
 
     def first(self) -> Screen:
         return signon_screen(self.display)
@@ -227,6 +228,7 @@ class SignonController:
         self.session.job = self.store.jobs.start_interactive(
             profile.name, self.display, max((int(f.job_number) for f in self.store.spool), default=0))
         self.session.job.log = self.session.joblog
+        self.session.job.info = self.session
         if program != "*NONE":
             self.session.mode = "cmdentry"
             return self._base()
@@ -347,9 +349,9 @@ class SignonController:
         if kind == "dspjoblog":
             return ("joblogview", spec[1], 0)
         if kind == "wrkjob":
-            return ("wrkjobview", spec[1])
+            return ("wrkjobview", spec[1], 0)
         if kind == "dspjob":
-            return ("dspjobview", spec[1])
+            return ("dspjobview", spec[1], 0)
         if kind == "jobpage":
             return ("jobpageview", spec[1], spec[2])
         if kind == "wrkactjob":
@@ -386,12 +388,19 @@ class SignonController:
         if self.view[0] == "joblogview":
             return dspjoblog_screen(self.view[1], jobctl.log_lines(self.view[1]), SYSTEM_NAME, self.view[2], message)
         if self.view[0] == "wrkjobview":
-            return wrkjob_screen(self.view[1], SYSTEM_NAME, message)
+            return wrkjob_screen(self.view[1], SYSTEM_NAME, message, self.view[2])
         if self.view[0] == "dspjobview":
-            return dspjob_screen(self.view[1], SYSTEM_NAME, message)
+            return dspjob_screen(self.view[1], SYSTEM_NAME, message, self.view[2])
         if self.view[0] == "jobpageview":
-            page = {"1": jobstatus_screen, "2": jobdef_screen, "3": jobrun_screen}[self.view[2]]
-            return page(self.view[1], SYSTEM_NAME, message)
+            key, job = self.view[2], self.view[1]
+            if key in ("1", "1b", "2", "2b"):
+                page = jobstatus_screen if key[0] == "1" else jobdef_screen
+                return page(job, SYSTEM_NAME, message, int(key.endswith("b")))
+            if key in ("locks", "wlocks"):
+                return joblocks_screen(job, SYSTEM_NAME, self.job_top, message, key == "wlocks")
+            page = {"3": jobrun_screen, "stack": callstack_screen, "files": openfiles_screen,
+                    "overrides": overrides_screen, "commit": commit_screen}[key]
+            return page(job, SYSTEM_NAME, message)
         if self.view[0] == "msgview":
             return dspmsg_screen(self.view[1], SYSTEM_NAME, self.view[2], message)
         if self.view[0] == "spoolattr":
@@ -663,14 +672,19 @@ class SignonController:
         return self._close_view()
 
     WRKJOB_RUNS = {"1": ("jobpage", "1"), "2": ("jobpage", "2"), "3": ("jobpage", "3"), "4": "WRKSPLF SELECT(*ALL) JOB({job})",
-                   "10": "DSPJOBLOG JOB({job})", "13": None}
+                   "10": "DSPJOBLOG JOB({job})", "11": ("jobpage", "stack"), "12": ("jobpage", "locks"),
+                   "13": None, "14": ("jobpage", "files"), "15": ("jobpage", "overrides"),
+                   "16": ("jobpage", "commit"),
+                   "41": "ENDJOB JOB({job})", "42": "HLDJOB JOB({job})"}
+    PAGE2_ONLY = {"40", "41", "42"}       # Work with Job's second page only
 
     def _in_wrkjob(self, aid: str, values: dict[str, str]) -> Screen:
         """Work with Job and Display Job share their options. On Work with Job the selection goes on
         the command line: a number picks an option, anything else runs as a command. Display Job has
-        a two character selection field and takes numbers only. Options 1 to 4 and 10 are built, 13
-        only for your own job, the rest say so."""
-        kind, job = self.view
+        a two character selection field and takes numbers only. Options 1 to 4, 10 to 12 and 14 to 16
+        are built, 13 only for your own job, 41 and 42 run ENDJOB and HLDJOB on the job, and the rest
+        say so. Roll moves between the two captured pages of the menu."""
+        kind, job, page = self.view
         if aid == "F3":
             self.view = None
             self.parents.clear()
@@ -678,22 +692,32 @@ class SignonController:
         if aid == "F12":
             return self._close_view()
         if aid in ("ROLLUP", "ROLLDOWN"):
-            return self._draw_view("Page two of the options is not available in Silverlake yet.")
+            want = 1 if aid == "ROLLUP" else 0
+            if kind == "wrkjobview" and aid == "ROLLUP" and page == 1:
+                return self._draw_view("The third page of options is not available in Silverlake yet.")
+            self.view = (kind, job, want)
+            return self._draw_view()
         if kind == "wrkjobview" and aid in ("F4", "F9"):
             return self._draw_view(f"{aid} is not available in Silverlake yet.")
         line = values.get("selection" if kind == "dspjobview" else "command", "").strip()
         if not line or (kind == "dspjobview" and aid != "ENTER"):
             return self._draw_view()
         if line.isdigit() or kind == "dspjobview":
-            if line not in {t.split(".")[0] for _, _, t in WRKJOB_OPTIONS}:
+            valid = {t.split(".")[0] for _, _, t in (WRKJOB_OPTIONS + WRKJOB_PAGE2)}
+            if kind == "dspjobview":
+                valid = {t.split(".")[0] for _, _, t in (WRKJOB_OPTIONS + DSPJOB_PAGE2)}
+            if line not in valid:
                 return self._draw_view(f"Option {line} is not valid.")
             template = self.WRKJOB_RUNS.get(line)
             if line == "13" and job is self.session.job:
                 template = "DSPLIBL"
+            if line == "12" and kind == "wrkjobview":
+                template = ("jobpage", "wlocks")
             if template is None:
                 return self._draw_view(f"Option {line} is not available in Silverlake yet.")
             if isinstance(template, tuple):
                 self.parents.append(self.view)
+                self.job_top = 0
                 self.view = self._open_view(("jobpage", job, template[1]))
                 return self._draw_view()
             line = template.format(job=job.qualified)
@@ -710,16 +734,26 @@ class SignonController:
         return self._draw_view(outcome.message.text if outcome.message else "")
 
     def _in_jobpage(self, aid: str) -> Screen:
-        """The attribute pages: F5 redraws, F16 goes back to the job menu, F3 leaves, and Enter and
-        F12 go back one level. Page two (More...) is not built."""
+        """The attribute pages and the detail displays: F5 redraws, F16 goes back to the job menu, F3
+        leaves, Enter and F12 go back one level. Roll moves between the two pages of the status and
+        definition displays, and through the locks."""
         if aid == "F3":
             self.view = None
             self.parents.clear()
             return self._base()
         if aid == "F5":
             return self._draw_view()
+        key = self.view[2]
         if aid in ("ROLLUP", "ROLLDOWN"):
-            return self._draw_view("Page two is not available in Silverlake yet.")
+            if key in ("1", "2") and aid == "ROLLUP":
+                self.view = ("jobpageview", self.view[1], key + "b")
+            elif key in ("1b", "2b") and aid == "ROLLDOWN":
+                self.view = ("jobpageview", self.view[1], key[0])
+            elif key in ("locks", "wlocks"):
+                self.job_top = max(0, self.job_top + (9 if aid == "ROLLUP" else -9))
+            return self._draw_view()
+        if aid in ("F17", "F18") and key == "stack":
+            return self._draw_view()
         if aid == "F16":
             while self.parents and self.view[0] not in ("wrkjobview", "dspjobview"):
                 self.view = self.parents.pop()
