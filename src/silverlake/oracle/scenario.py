@@ -232,6 +232,20 @@ AUTHENTICATED["auth-dspjob4"] = [
     {"key": "F12", "always": True}, {"key": "F3", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Read only: what a program call looks like from the outside, to plan running RPG. DSPPGM on the system's own
+# QCMDEXC (program attribute, whose authority it runs under, whether it passes adopted authority on), a CALL of
+# a program that is not there, and QCMDEXC given a command that checks an object exists (CHKOBJ, which changes
+# nothing), a command that does not exist, and a length that cuts the command short. Looked at and left with F3.
+# Nothing is created, changed, ended or sent, and no program of ours is compiled (that would be a write).
+AUTHENTICATED["auth-callpgm"] = [
+    _SIGNON,
+    {"fill": {"0": "DSPPGM PGM(QSYS/QCMDEXC)"}, "key": "ENTER"}, {"key": "ROLLUP"}, {"key": "F3", "always": True},
+    {"fill": {"0": "CALL PGM(NOSUCHPGM)"}, "key": "ENTER"}, {"key": "F3", "always": True},
+    {"fill": {"0": "CALL PGM(QSYS/QCMDEXC) PARM('CHKOBJ OBJ(QSYS/QCMDEXC) OBJTYPE(*PGM)' 38)"}, "key": "ENTER"}, {"key": "F3", "always": True},
+    {"fill": {"0": "CALL PGM(QSYS/QCMDEXC) PARM('NOSUCHCMD' 9)"}, "key": "ENTER"}, {"key": "F3", "always": True},
+    {"fill": {"0": "CALL PGM(QSYS/QCMDEXC) PARM('CHKOBJ OBJ(QSYS/QCMDEXC) OBJTYPE(*PGM)' 12)"}, "key": "ENTER"}, {"key": "F3", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 # Read only: the output queue display. A queue that does not exist (the refusal wording), then the default
 # printer queue, then the job log queue the profile's own spool files sit in. Looked at and left with F3.
 # Not the bare WRKOUTQ: that lists every output queue on the host, and on a shared system it did not answer

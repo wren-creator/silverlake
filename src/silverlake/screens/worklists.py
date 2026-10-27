@@ -1045,3 +1045,42 @@ def _dspobjd_page_two(obj, title: str) -> Screen:
         Text(22, 1, "F3=Exit", ds.ATTR_BLUE), Text(22, 11, "F12=Cancel", ds.ATTR_BLUE),
         Text(19, 72, "More...", ds.ATTR_WHITE),      # the real one has a third page, not modeled
     ])
+
+
+# -- DSPPGM, laid out from the auth-callpgm capture of the system's own QCMDEXC ----------------------------
+
+def dsppgm_screen(obj, page: int, message: str = "") -> Screen:
+    """Display Program Information, two pages. The user profile and adopted authority lines are the
+    reason to look: *OWNER means the program runs with its owner's authority. Source file, library and
+    member are blank because there is no source file object yet, and observable information, fix decimal
+    data and teraspace are the captured values (the first is inferred for programs with source)."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    d = obj.data
+    when = d.get("created") or "2026-10-27T00:00:00"
+    rows: list = [
+        Text(0, 26, "Display Program Information", ds.ATTR_WHITE),
+        g(2, 1, "Program  . . . . . . . :"), g(2, 28, obj.name), g(2, 42, "Library  . . . . . . . :"), g(2, 69, obj.library),
+        g(3, 1, "Owner  . . . . . . . . :"), g(3, 28, obj.owner),
+        g(4, 1, "Program attribute  . . :"), g(4, 28, d.get("attr", "")),
+    ]
+    if page == 0:
+        info = [(6, 1, "Program creation information:"), (7, 3, "Program creation date/time . . . . . . . . . . . :"),
+                (8, 3, "Type of program  . . . . . . . . . . . . . . . . :"), (9, 3, "Source file  . . . . . . . . . . . . . . . . . . :"),
+                (10, 5, "Library  . . . . . . . . . . . . . . . . . . . :"), (11, 3, "Source member  . . . . . . . . . . . . . . . . . :"),
+                (12, 3, "Source file change date/time . . . . . . . . . . :"), (13, 3, "Observable information . . . . . . . . . . . . . :"),
+                (14, 3, "User profile . . . . . . . . . . . . . . . . . . :"), (15, 3, "Use adopted authority  . . . . . . . . . . . . . :"),
+                (16, 3, "Fix decimal data . . . . . . . . . . . . . . . . :"), (17, 3, "Teraspace enabled  . . . . . . . . . . . . . . . :")]
+        rows += [g(r, c, t) for r, c, t in info]
+        rows += [g(7, 56, f"{when[2:4]}-{when[5:7]}-{when[8:10]}"), g(7, 66, when[11:19] or "00:00:00"),
+                 g(8, 56, "ILE" if d.get("attr") in ("RPGLE", "CLLE") else d.get("type", "OPM")),
+                 g(13, 56, "*ALL" if d.get("source") else "*NONE"), g(14, 56, d.get("usrprf", "*USER")),
+                 g(15, 56, d.get("useadpaut", "*YES")), g(16, 56, "*NO"), g(17, 56, "*YES"),
+                 Text(19, 67, "More...".rjust(12), ds.ATTR_WHITE)]
+    else:
+        rows += [g(6, 3, "Text description . . . . . . . . . . . . . . . . :"), g(6, 56, obj.text[:24]),
+                 Text(19, 67, "Bottom".rjust(12), ds.ATTR_WHITE)]
+    rows += [Text(20, 1, "Press Enter to continue.", ds.ATTR_BLUE), Text(22, 1, "F3=Exit", ds.ATTR_BLUE),
+             Text(22, 11, "F12=Cancel", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)

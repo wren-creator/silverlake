@@ -152,6 +152,11 @@ def object_not_found(obj: str, lib: str, typ: str) -> Message:
     return _doc("CPF2208", f"Object {obj} in library {lib} type {typ} not found.")
 
 
+def call_program_not_found(name: str, lib: str) -> Message:
+    """CALL on a program that is not there. The wording is from a PUB400 capture (auth-callpgm), the ID is not known."""
+    return info(f"Program {name} in library {lib} not found.")
+
+
 def not_authorized_to_object(obj: str, lib: str, typ: str) -> Message:
     return _doc("CPF2207", f"Not authorized to use object {obj} in library {lib} type {typ}.")
 

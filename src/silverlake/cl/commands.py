@@ -8,7 +8,7 @@ are named in IGNORED so a copied command from a real system still runs."""
 import fnmatch
 from dataclasses import dataclass
 
-from ..system import admin, autls, jobctl, messages, msgq, objects, objlist, spool
+from ..system import admin, autls, jobctl, messages, msgq, objects, objlist, rpg, spool
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -177,6 +177,7 @@ DLTMNU_PARAMS = [Param("MENU", "qname", "", required=True), Param("DLTREFOBJ", "
 DLTPGM_PARAMS = [Param("PGM", "qname", "", required=True)]
 EDTOBJAUT_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
                     Param("ASPDEV", "ignored", "*")]
+DSPPGM_PARAMS = [Param("PGM", "qname", "", required=True), Param("OUTPUT", "output", "*")]
 DSPOBJD_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
                   Param("DETAIL", "detail", "*BASIC"), Param("ASPDEV", "ignored", "*"),
                   Param("OUTPUT", "output", "*")]
@@ -198,7 +199,7 @@ COMMANDS = {
     "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "DSPJOB": DSPJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
-    "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS,
+    "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS, "DSPPGM": DSPPGM_PARAMS,
 }
 
 
@@ -703,10 +704,18 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "CALL":
         prog, err = objects.use_object(store, actor, b["PGM"], "*PGM", session.search_order())
         if err:
+            if err.id == "CPF2208":          # not found: a CALL says it the way a real system does (captured)
+                lib = b["PGM"].split("/")[0].upper() if "/" in b["PGM"] else "*LIBL"
+                return Outcome(messages.call_program_not_found(b["PGM"].split("/")[-1].upper(), lib))
             return Outcome(err)
         if (prog.library, prog.name) == ("QSYS", "QCMD"):
             return Outcome(cmdentry=True)
-        return Outcome(messages.syntax(f"Program {prog.name} cannot be run: programs are not modeled yet."))
+        run, why = rpg.start(store, actor, prog, session)
+        if why:
+            return Outcome(why)
+        if run.done:
+            return Outcome(messages.info(f"Program {prog.name} ended abnormally: {run.error}") if run.error else None)
+        return Outcome(view=("rpgrun", run))
     if name == "CHGPWD":
         err = store.change_password(actor, b["PASSWORD"], b["NEWPASSWORD"], b["NEWPASSWORD2"])
         return Outcome(err or messages.info("Password changed."))
@@ -734,6 +743,9 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "EDTOBJAUT":
         obj, err = objlist.edit_authority(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
         return Outcome(err) if err else Outcome(view=("edtobjaut", obj))
+    if name == "DSPPGM":
+        prog, err = objects.use_object(store, actor, b["PGM"], "*PGM", session.search_order())
+        return Outcome(err) if err else Outcome(view=("dsppgm", prog))
     if name == "DSPOBJD":
         obj, err = objlist.describe_object(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
         return Outcome(err) if err else Outcome(view=("dspobjd", obj, b["DETAIL"]))

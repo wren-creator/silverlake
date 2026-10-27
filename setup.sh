@@ -12,4 +12,14 @@ info "creating .venv"
 python3 -m venv .venv
 .venv/bin/pip install --quiet --upgrade pip
 .venv/bin/pip install --quiet -e '.[dev]'
+
+# The RPG runtime. Optional: Silverlake runs without it, and CALL on an RPG program says so.
+if [ -d ../rpgle_library/python ]; then
+  info "installing rpgle_library from ../rpgle_library (editable)"
+  .venv/bin/pip install --quiet -e ../rpgle_library/python
+elif .venv/bin/pip install --quiet 'rpgle_library @ git+https://github.com/wren-creator/rpgle_library#subdirectory=python' 2>/dev/null; then
+  ok "installed rpgle_library from GitHub"
+else
+  info "rpgle_library not installed (no sibling folder, GitHub not reachable): RPG programs will not run"
+fi
 ok "ready. next: ./start.sh"

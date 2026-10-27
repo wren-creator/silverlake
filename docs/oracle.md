@@ -163,6 +163,14 @@ Taken from PUB400 on 2026-10-27, read only, the test profile's own job. `auth-ds
 - **Work with Job has a third page**, 43 (release job) and 45 (work with the JVM, if active). Option 40 opens the Change Job prompt, with job priority shown as `*SAME` and output priority as the job's own value.
 - **The local compare is noisy** when a scenario's step order differs from the local flow, since it pairs screens by position. A direct comparison of each screen's text positions against the matching capture screen is the quicker check, and left only the deliberately omitted keys, the job name and thread id.
 
+## What the program call capture taught us
+
+Taken from PUB400 on 2026-10-27, read only (`auth-callpgm`). It runs `DSPPGM` on the system's own QCMDEXC and three `CALL`s that change nothing, and compiles nothing, since that would be a write.
+
+- **DSPPGM is two pages.** The first holds creation date and time, type of program, source file and member, observable information, **user profile** and **use adopted authority**, fix decimal data and teraspace. The system's QCMDEXC is `*USER` with adopted authority `*YES`, OPM, owned by QSYS.
+- **A CALL on a missing program** says "Program NOSUCHPGM in library *LIBL not found." (second level text follows).
+- **QCMDEXC prints nothing when the command works**, says "Command NOSUCHCMD in library *LIBL not found." for an unknown one, and "A matching parenthesis not found." when the length parameter cuts the command in the middle of its parentheses.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

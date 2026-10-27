@@ -49,13 +49,19 @@
 - [x] CHGPWD, password rules (QPWDMINLEN/MAXLEN/RQDDGT/LMTAJC/LMTREP/RQDDIF), per-profile PWDEXPITV, expiry warning (QPWDEXPWRN)
 - [ ] Lockout leftovers: device lockout (QMAXSGNACN 1), QSECOFR exempt at the console, a warning before the last attempt if the real host has one
 - [x] Phase 3c-3c complete: jobs, spool files and message queues, merged to main 2026-10-27
-- [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
+- [x] Phase 4a: RPG programs run. CALL starts a `*PGM` with RPG source, EXFMT screens land on the 5250, keys and numeric fields behave like a display file, programs call programs through the library list and authority, a step cap stops runaway loops, DSPPGM from a capture (docs/rpg.md)
+- [ ] Phase 4b: adopted authority and QCMDEXC. A program runs with USRPRF(*OWNER) authority through a stack of effective profiles, and CALL 'QCMDEXC' (hook already in rpgle_library) runs a CL string through the same dispatcher, reproducing the captured messages. Seed a vulnerable wrapper (an *OWNER program owned by a powerful profile that passes a string to QCMDEXC) and its fix. Check first in IBM's pages whether special authorities are adopted
+- [ ] Phase 4c: files. Map RPG DISK files to `*FILE` objects (SQLite), with authority checked at open and on each operation, printer files into the spool, DSPF and PF objects instead of one DDS string per program
+- [ ] Phase 4d: the compile workflow. Source members in QRPGLESRC and QDDSSRC, CRTBNDRPG, CRTRPGMOD, CRTDSPF and CRTPF, compile errors as a listing, WRKMBRPDM and a source editor
+- [ ] Phase 4e: RPG leftovers: several inputs per row (needs rpgle_library to key input by field), function checks, a program dump, DSPPGM options (program references, source member), the real Change/Display Program attributes
 - [ ] Phase 4b: PASE, a simulated one. No real processes, ever: a Python shell over a virtual IFS, so it cannot touch the host and `reset.sh` stays exact. Stages: (1) an IFS (`/QOpenSys`, `/home`, `/tmp`, `/QSYS.LIB` mapped onto the existing library and object store) with rwx permissions tied to profiles and *ALLOBJ; (2) the shell behind `CALL QP2TERM`, `QSH` and a loopback SSH listener, with a whitelist (ls, cat, cd, pwd, id, whoami, ps, env, echo, export); (3) `system` to run CL from the shell and `db2util` or a small SQL runner for `QSYS2.QCMDEXC`; (4) seeded weaknesses: world writable `.ssh/authorized_keys`, a writable directory early in `$PATH`, writable `/etc/profile` and `~/.profile`, and CL reachable from a PASE shell by a limited-capability profile
 - [ ] PASE facts to check on a real system before teaching them: whether adopted authority carries into PASE (believed not to, unconfirmed), what `id` and `ps` really print, default IFS authorities on `/QOpenSys` and `/home`, and how a LMTCPB(*YES) profile fares with QP2TERM (read-only checks on PUB400, human decides)
 - [ ] Phase 5: vulnerable and secure modes, seeded weak configs, exposed services, scenarios, flag checker, instructor and trainee docs
 - [ ] Silverlake 101 EPUB, same format as the Mainframe 10x series
 
 ## Needs verification on a real system
+
+- [ ] RPG runner: that a function key a display file never named is refused with a message (Silverlake says "Function key not allowed."), whether adopted authority passes special authorities (read IBM's page, then test with a program owned by a profile that holds the authority), what a compile error listing looks like, and whether CALL needs *USE or *EXECUTE (writes, human decision)
 
 Things Silverlake does from IBM's pages, memory or inference and has not seen on a real IBM i. Tick one when it has been checked, and fix the docs if the real system disagrees. "Write" means it changes something on a shared system, so it needs a human decision and fresh approval first (PUB400 rules: read only, human paced).
 

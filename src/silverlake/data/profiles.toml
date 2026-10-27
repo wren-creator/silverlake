@@ -259,6 +259,39 @@ text = "Customer master."
 DEVELOPER = "*CHANGE"
 GUEST = "*EXCLUDE"
 
+# ---------------------------------------------------------------------------
+# Programs that actually run: RPG IV source and its display file DDS, kept in the object. CALL APPLIB/ADVENTURE.
+# Both come from rpgle_library's examples.
+# ---------------------------------------------------------------------------
+
+[[object]]
+library = "APPLIB"
+name = "ADVENTURE"
+type = "*PGM"
+owner = "QSECOFR"
+public = "*USE"
+text = "Text adventure. A small RPG IV program with one display file."
+[object.data]
+attr = "RPGLE"
+usrprf = "*USER"
+useadpaut = "*YES"
+source_file = "adventure.rpgle"
+dspf_file = "adventure.dspf"
+
+[[object]]
+library = "APPLIB"
+name = "SALESRPT"
+type = "*PGM"
+owner = "QSECOFR"
+public = "*USE"
+text = "Regional sales report. One screen of calculations."
+[object.data]
+attr = "RPGLE"
+usrprf = "*USER"
+useadpaut = "*YES"
+source_file = "salesrpt.rpgle"
+dspf_file = "salesrpt.dspf"
+
 [[object]]
 name = "SRCLIB"
 owner = "DEVELOPER"

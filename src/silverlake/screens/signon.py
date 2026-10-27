@@ -20,7 +20,7 @@ from datetime import datetime
 
 from ..cl import commands
 from ..proto import datastream as ds
-from ..system import admin, autls, jobctl, menus, messages, msgq, objects, profiles, spool
+from ..system import admin, autls, jobctl, menus, messages, msgq, objects, profiles, rpg, spool
 from ..system.authority import ALL, CHANGE, EXCLUDE
 from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
@@ -28,7 +28,7 @@ from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
-                        WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
+                        WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from . import jobextra
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
@@ -160,6 +160,8 @@ class SignonController:
         self._sign_off()
 
     def _sign_off(self) -> None:
+        if self.view and self.view[0] == "rpgview":
+            self.view[1].close()                   # a program on the screen goes with the session
         if self.profile is not None:
             self.store.sign_off(self.profile)
             spool.write_joblog(self.store, self.session.job, self.session.joblog)
@@ -360,6 +362,10 @@ class SignonController:
             return ("dspjobview", spec[1], 0)
         if kind == "jobpage":
             return ("jobpageview", spec[1], spec[2])
+        if kind == "rpgrun":
+            return ("rpgview", spec[1])
+        if kind == "dsppgm":
+            return _plist([0, 1], lambda rows, page: dsppgm_screen(spec[1], page), 1)
         if kind == "wrkactjob":
             sbs = spec[1]
             own = self.session.job.qualified if self.session.job else ""
@@ -389,6 +395,8 @@ class SignonController:
             if detail == "*BASIC":
                 return dspobjd_basic_screen(obj, message)
             return dspobjd_screen(obj, detail, SYSTEM_NAME, page)
+        if self.view[0] == "rpgview":
+            return rpg.to_screen(self.view[1].data, message)
         if self.view[0] == "spoolview":
             return dspsplf_screen(self.view[1], self.view[2], message)
         if self.view[0] == "joblogview":
@@ -455,6 +463,8 @@ class SignonController:
             return self._in_dobjd(aid, values)
         if kind == "add":
             return self._in_add(aid, values)
+        if kind == "rpgview":
+            return self._in_rpg(aid, values)
         if kind == "spoolview":
             return self._in_spoolview(aid)
         if kind == "splprompt":
@@ -779,6 +789,29 @@ class SignonController:
             self.parents.clear()
             return self._apply(outcome, line)
         return self._draw_view(outcome.message.text if outcome.message else "")
+
+    def _in_rpg(self, aid: str, values: dict[str, str]) -> Screen:
+        """A running RPG program owns the screen. Enter and any function key its display file names go to
+        the program, anything else is refused where it stands (a real keyboard would lock). The program
+        decides when to end, so F3 means nothing unless it asked for it. Signing off, or the session
+        being ended, closes the program with the screen."""
+        run = self.view[1]
+        data = run.data
+        if not rpg.usable_key(data, aid):
+            return self._draw_view("Function key not allowed.")
+        bad = rpg.bad_numeric(data, values)
+        if bad:
+            return self._draw_view(f"Field {bad.upper()} takes numbers only.")
+        run.send(aid, values)
+        if not run.done:
+            return self._draw_view()
+        self.view = None
+        self.parents.clear()
+        if run.error:
+            text = f"Program {run.obj.name} ended abnormally: {run.error}"
+            self.session.joblog.append((datetime.now(), "message", text))
+            return self._base(text)
+        return self._base()
 
     def _in_chgjob(self, aid: str, values: dict[str, str]) -> Screen:
         """The Change Job prompt. Enter runs CHGJOB with what was changed (JOBPTY, OUTPTY and RUNPTY, the three

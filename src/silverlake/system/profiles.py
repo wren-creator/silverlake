@@ -294,6 +294,27 @@ class SignonResult:
 
 # -- loading ---------------------------------------------------------------------
 
+RPG_DIR = Path(__file__).resolve().parent.parent / "data" / "rpg"
+
+
+def _with_source_files(o: dict) -> dict:
+    """A seeded program names its source and display file by file name (`source_file`, `dspf_file`) in
+    data/rpg, and the text goes into the object, where a student can read and change it."""
+    d = o.get("data")
+    if not d or not ({"source_file", "dspf_file"} & d.keys()):
+        return o
+    d = dict(d)
+    for key, out in (("source_file", "source"), ("dspf_file", "dspf")):
+        if key in d:
+            name = d.pop(key)
+            try:
+                d[out] = (RPG_DIR / name).read_text()
+            except OSError as exc:
+                raise SeedError(f"object {o['name']}: cannot read {name}: {exc}") from exc
+    return {**o, "data": d}
+
+#
+
 def _enum(cls, value, what):
     try:
         return cls(value)
@@ -392,6 +413,7 @@ def load(path: Path | str | None = None) -> ProfileStore:
              for a in data.get("authorization_list", [])]
     objects = []
     for o in data.get("object", []):
+        o = _with_source_files(o)
         public = o.get("public", "*EXCLUDE")
         objects.append(SecuredObject(
             name=o["name"].upper(), owner=o["owner"].upper(),

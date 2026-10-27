@@ -12,6 +12,9 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# RPG programs run on rpgle_library, which is not on PyPI yet. setup.sh installs it from the sibling folder
+# or from GitHub. Without it Silverlake runs and CALL on an RPG program says the runtime is missing.
+rpg = ["rpgle_library @ git+https://github.com/wren-creator/rpgle_library#subdirectory=python"]
 
 [project.scripts]
 silverlake = "silverlake.__main__:main"
@@ -20,7 +23,7 @@ silverlake = "silverlake.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-silverlake = ["data/*.toml"]
+silverlake = ["data/*.toml", "data/rpg/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
