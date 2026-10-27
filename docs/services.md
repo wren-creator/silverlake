@@ -2,11 +2,39 @@
 
 Everything in Silverlake is reached through 5250 unless you start it with `./start.sh --services`. That adds listeners for the other doors an IBM i has. They are off by default, bind only to 127.0.0.1 (the same guard as the 5250 listener, checked again in `net/services.py`), and live in the same process and event loop, so they answer from the same profiles and authority and see a lesson toggle the moment it is saved. `./scenario.sh` keeps them on across its restart.
 
-| Service | Port | Real port | Status |
-|---|---|---|---|
-| HTTP Server Administration console | 2001 (`SILVERLAKE_HTTPADMIN_PORT`) | 2001 | built |
-| FTP | 2121 (`SILVERLAKE_FTP_PORT`) | 21 | built |
-| Server mapper and sign-on server | 4449 and 8476 (`SILVERLAKE_MAPPER_PORT`, `SILVERLAKE_SIGNON_PORT`) | 449 and 8476 | built |
+## Ports
+
+Silverlake does not use the standard ports for everything. Three are on a different port because the real one is below 1024 and needs root, and 5250 is its own choice. Every port below can be moved, and every one binds to 127.0.0.1 only.
+
+| Service | Silverlake port | Real IBM i port | Why it differs | How to move it |
+|---|---|---|---|---|
+| 5250 (Telnet) | 5250 | 23 (992 with TLS) | not a standard port, picked to be memorable and above 1024 | `./start.sh --port N` or `SILVERLAKE_PORT` |
+| HTTP Server Administration console | 2001 | 2001 (2010 with TLS) | same as real | `SILVERLAKE_HTTPADMIN_PORT` |
+| FTP | 2121 | 21 (990 with TLS) | 21 is privileged | `SILVERLAKE_FTP_PORT` |
+| Host server mapper | 4449 | 449 | 449 is privileged | `SILVERLAKE_MAPPER_PORT` |
+| Sign-on server | 8476 | 8476 (9476 with TLS) | same as real | `SILVERLAKE_SIGNON_PORT` |
+
+The mapper names the sign-on server's real port in its answer, so if you move the sign-on server, the mapper follows. It still names the standard ports (8470 to 8475) for the other host servers, and nothing listens on them.
+
+Not built: every TLS port (992, 2010, 990, 9476). Everything is clear text, which is also one of the lessons.
+
+Things to know when you point a tool at it:
+
+- **Clients with a port option** just need it: `tn5250 127.0.0.1:5250`, `ftp 127.0.0.1 2121`, a browser at `http://127.0.0.1:2001/HTTPAdmin`.
+- **Clients that hard code the real ports** (an FTP client that insists on 21, a host server client that goes to 449 first) will not find anything. Either give them the port or forward the real one to ours, loopback only and needing root for a low port, for example `sudo socat TCP-LISTEN:21,bind=127.0.0.1,fork TCP:127.0.0.1:2121`. Silverlake does not do this for you.
+- **Scanners** need the port list: `nmap -p 5250,2001,2121,4449,8476 127.0.0.1`. A default scan of 127.0.0.1 will not find 5250, 2121 or 4449, and a scan of the real port numbers will find nothing at 23, 21 or 449. The `ibmi-httpadmin-nse` script works as is, because 2001 is the real port.
+- **A port in use:** `start.sh` checks the 5250 port and each service port before it starts and names the variable to change.
+- **Restarts:** `./scenario.sh` restarts with `--services` if the range was started with it, but it does not remember a custom port. Export the `SILVERLAKE_*_PORT` variables in the shell you run it from.
+- `./status.sh` lists every socket the process holds and fails if any is beyond loopback.
+
+## What exists
+
+| Service | Status |
+|---|---|
+| HTTP Server Administration console | built |
+| FTP | built, with RCMD |
+| Server mapper and sign-on server | built |
+| TLS on any of them | not built |
 
 ## FTP
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ports documented in full. `docs/services.md` now has a Ports section with every service, its real IBM i port, why Silverlake's differs (21 and 449 are privileged, 5250 is its own choice, 2001 and 8476 match), the variable that moves each one, and what to do about clients and scanners that assume the real numbers. The README, setup runbook and the network session slide point at it.
+
 - `RCMD` over FTP. `quote rcmd <CL command>` runs a CL command as the signed on profile through Silverlake's own dispatcher, in this process, with that profile's authority and nothing more (an ordinary profile cannot make a user profile this way). Output is text for messages, `DSPMSG`, `WRKUSRPRF` and `DSPUSRPRF`. The `ftp-limited-bypass` exit program turns it away for limited capability profiles like the file commands.
 
 - Host servers, the last of the three services. The server mapper on 4449 and the sign-on server on 8476 answer a client's opening exchange before anyone has signed on, in the byte shapes a live IBM i 7.5 sent, with the release, the datastream level and the password level taken from the saved state. Lesson `hostsvr-recon` (QPWDLVL 0 is free to anyone who asks, and at level 0 case does not matter in a password; the secure state is level 3). Its flag is a new kind, `fact`: the answer (`V7R4M0/0`) is read off the wire and submitted, and the checker compares it with the state, so it changes when the level does. Phase 5f's three steps are done. Left for later: TLS ports and the real low port numbers.
