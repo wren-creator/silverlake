@@ -89,6 +89,12 @@ From a second read-only capture of the profile's own job. **Page two of both men
 
 Left out on purpose, because each is a feature and not a position: the option column on the locks display (5 and 8), F10 and F11 there, F11 and F22 on the call stack, the I/O details on open files. Drawing them would be dead keys.
 
+## WRKOUTQ (built)
+
+Work with Output Queue, laid out from two PUB400 captures (the default printer queue and the job log queue): queue, library and status on row 2, the nine options on two rows, nine files from row 9 (file, user, user data, status, pages, copies, form type, priority), and a parameter line. `WRKOUTQ OUTQ(LIB/NAME)` or a name found on the library list. Options 3, 5, 6 and 8 work as they do on Work with All Spooled Files (hold, display, release, attributes), 1, 2, 4, 7 and 9 say they are not available, and F12 from a displayed file comes back to the queue. Bare `WRKOUTQ` (the real default is every queue on the host) says it is not built: no capture of it exists, because on a shared host it did not answer in 15 seconds.
+
+The rule worth teaching, from the capture: **a profile that may read the queue sees every file on it, with the owner and the job name, whatever DSPDTA says.** The job log queue is DSPDTA(*OWNER), and a basic profile still listed other people's job logs by name. The setting hides the contents (option 5 on someone else's log is refused), not the list. Reading the queue needs *READ to it and *EXECUTE to its library, which is inferred, not read on the page. A queue or library that is not there gets the same message, `Output queue NOQUEUE in library SLNOSUCH not found.`, as captured, so nobody can tell which was missing. Not drawn, because they are not built: F11 (view 2), F20 (writers), F22 (printers) and F24.
+
 ## Later
 
 The real confirm and prompt screens for `WRKACTJOB` options 2 and 4 once captured (the oracle will not end or change jobs on a shared system), `DSPJOB`, and `WRKJOB`'s other options.

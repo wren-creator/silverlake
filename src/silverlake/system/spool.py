@@ -136,6 +136,39 @@ def select(store: ProfileStore, actor: Profile, user: str = "*CURRENT", name: st
     return sorted(out, key=lambda f: (f.stamp(), f.file_no))
 
 
+def queue(store: ProfileStore, actor: Profile, spec: str, search: list[str]):
+    """WRKOUTQ's OUTQ: `LIB/NAME` or a name looked for along the library list. Returns (queue,
+    message). The real host answered a library that does not exist the same way as a queue that
+    does not exist (captured: "Output queue NOQUEUE in library SLNOSUCH not found."), so a low
+    authority user cannot tell the two apart. Needing *EXECUTE to the library and *READ to the
+    queue is inferred: the WRKOUTQ page's authority text was not read."""
+    from .objects import authority_to_library
+    lib_name, _, name = spec.upper().rpartition("/")
+    if lib_name in ("", "*LIBL"):
+        found = next((lib for lib in search if (lib, name, "*OUTQ") in store.objects), None)
+        if found is None:
+            return None, _msg("CPF3357", f"Output queue {name} in library *LIBL not found.")
+        lib_name = found
+    q = store.objects.get((lib_name, name, "*OUTQ"))
+    lib = store.find_library(lib_name)
+    if q is None or lib is None:
+        return None, _msg("CPF3357", f"Output queue {name} in library {lib_name} not found.")
+    if Auth.EXECUTE not in authority_to_library(store, actor, lib):
+        return None, messages.not_authorized_to_use_library(lib_name)
+    if Auth.READ not in store.authority_to_object(actor, q):
+        return None, _msg("CPF3330", f"Not authorized to output queue {name}.")
+    return q, None
+
+
+def in_queue(store: ProfileStore, q) -> list[SpoolFile]:
+    """Every file on the queue, in the order a queue holds them (priority, then when it arrived).
+    Whoever may list the queue sees all of them, the owner's name and the job's name included,
+    whatever the queue's DSPDTA says: that setting hides the contents, not the list (captured
+    on QEZJOBLOG, which listed other people's job logs to a basic profile)."""
+    files = [f for f in store.spool if (f.outq_lib, f.outq) == (q.library, q.name)]
+    return sorted(files, key=lambda f: (f.priority, f.stamp(), f.file_no))
+
+
 def find(store: ProfileStore, actor: Profile, name: str, job: str | tuple, splnbr: str):
     """DSPSPLF and DLTSPLF selection. `job` is "*" (your own current job) or (name, user, number)
     with "*" parts allowed, `splnbr` is *ONLY, *LAST, *ANY or a number. Returns (file, message)."""

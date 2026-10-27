@@ -100,6 +100,7 @@ CLRMSGQ_PARAMS = [Param("MSGQ", "msgqname", "", required=True), Param("CLEAR", "
 WRKSPLF_PARAMS = [Param("SELECT", "splsel", "*CURRENT", 6), Param("JOB", "jobq", "*ALL", 3),
                   Param("PERIOD", "ignored", "*AVAIL"), Param("ASPDEV", "ignored", "*"),
                   Param("OUTPUT", "output", "*"), Param("DSPFMT", "ignored", "*INLENV"), Param("ASTLVL", "ignored", "*PRV")]
+WRKOUTQ_PARAMS = [Param("OUTQ", "outqname", "*ALL"), Param("OUTPUT", "output", "*")]
 DSPSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
                   Param("CRTDATE", "ignored", "*ONLY"), Param("FOLD", "ignored", "*NO")]
@@ -179,7 +180,7 @@ COMMANDS = {
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "CRTMSGQ": CRTMSGQ_PARAMS, "CHGMSGQ": CHGMSGQ_PARAMS,
-    "DLTMSGQ": DLTMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
+    "DLTMSGQ": DLTMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "WRKOUTQ": WRKOUTQ_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
     "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "DSPJOB": DSPJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
@@ -296,6 +297,9 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
                 raise BindError(f"Value {v} for parameter {p.key} not valid.")
             return v
         return _qualified(p.key, values)
+    if k == "outqname":
+        v = values[0].upper()
+        return v if v == "*ALL" else _qualified(p.key, values)
     if k == "msgqs":
         return [v.upper() if v.upper() == "*SYSOPR" else _qualified(p.key, [v]) for v in values]
     if k == "touser":
@@ -600,6 +604,13 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         if not rows:
             return Outcome(messages.syntax("No spooled files found."))
         return Outcome(view=("wrksplf", rows, lambda: spool.select(store, actor, user, fname, job)))
+    if name == "WRKOUTQ":
+        if b["OUTQ"] == "*ALL":
+            return Outcome(messages.syntax("Work with All Output Queues is not available in Silverlake yet. Name a queue."))
+        q, err = spool.queue(store, actor, b["OUTQ"], session.search_order())
+        if err:
+            return Outcome(err)
+        return Outcome(view=("wrkoutq", q, spool.in_queue(store, q), lambda: spool.in_queue(store, q)))
     if name in ("DSPSPLF", "DLTSPLF", "HLDSPLF", "RLSSPLF"):
         job = b["JOB"]
         if job == "*":

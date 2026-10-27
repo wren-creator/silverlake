@@ -21,13 +21,14 @@ class WorkList:
     rows: list
     requery: Callable[[], list]
     owner: str = ""                    # the profile named at the top of "owner"
+    queue: tuple = ("", "")            # (queue, library) named at the top of "outq"
     retained: dict = field(default_factory=dict)   # options typed before a confirm screen was cancelled
     page: int = 0
     per_page: int = field(init=False)
     first_row: int = field(init=False)
 
     def __post_init__(self) -> None:
-        self.per_page, self.first_row = {"objects": (11, 7), "owner": (8, 10), "autls": (10, 8), "jobs": (9, 9), "spool": (9, 9)}[self.kind]
+        self.per_page, self.first_row = {"objects": (11, 7), "owner": (8, 10), "autls": (10, 8), "jobs": (9, 9), "spool": (9, 9), "outq": (9, 9)}[self.kind]
 
     @property
     def pages(self) -> int:
@@ -42,7 +43,7 @@ class WorkList:
         self.page = max(0, min(self.page, self.pages - 1))
 
     def screen(self, message: str = "") -> Screen:
-        return {"objects": _objects, "owner": _owner, "autls": _autls, "jobs": _jobs, "spool": _spool}[self.kind](self, message)
+        return {"objects": _objects, "owner": _owner, "autls": _autls, "jobs": _jobs, "spool": _spool, "outq": _outq}[self.kind](self, message)
 
 
 def _tail(rows: list, wl: WorkList, prompt: str, keys1: list[tuple[int, str]], keys2: list[tuple[int, str]],
@@ -189,6 +190,38 @@ def _spool(wl: WorkList, message: str) -> Screen:
     return _tail(rows, wl, "Parameters for options 1, 2, 3 or command",
                  [(1, "F3=Exit"), (11, "F10=View 4"), (24, "F11=View 2"), (37, "F12=Cancel"), (50, "F22=Printers"),
                   (65, "F24=More keys")], [], message)
+
+
+def _outq(wl: WorkList, message: str) -> Screen:
+    """Work with Output Queue, laid out like the real display (captured twice): the queue, library
+    and status on row 2, the same nine options as Work with All Spooled Files, nine files from row 9,
+    and a parameter line. F11 (view 2), F20, F22 and F24 are not built, so they are not drawn."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    rows: list = [
+        Text(0, 29, "Work with Output Queue", ds.ATTR_WHITE),
+        g(2, 1, "Queue:"), g(2, 10, wl.queue[0]), g(2, 25, "Library:"), g(2, 36, wl.queue[1]),
+        g(2, 51, "Status:"), g(2, 61, "RLS"),
+        Text(4, 1, "Type options, press Enter.", ds.ATTR_BLUE),
+        Text(5, 3, "1=Send", ds.ATTR_BLUE), Text(5, 12, "2=Change", ds.ATTR_BLUE), Text(5, 23, "3=Hold", ds.ATTR_BLUE),
+        Text(5, 32, "4=Delete", ds.ATTR_BLUE), Text(5, 43, "5=Display", ds.ATTR_BLUE),
+        Text(5, 55, "6=Release", ds.ATTR_BLUE), Text(5, 67, "7=Messages", ds.ATTR_BLUE),
+        Text(6, 3, "8=Attributes", ds.ATTR_BLUE), Text(6, 23, "9=Work with printing status", ds.ATTR_BLUE),
+        Text(8, 1, "Opt", ds.ATTR_WHITE), Text(8, 6, "File", ds.ATTR_WHITE), Text(8, 18, "User", ds.ATTR_WHITE),
+        Text(8, 30, "User Data", ds.ATTR_WHITE), Text(8, 42, "Sts", ds.ATTR_WHITE), Text(8, 48, "Pages", ds.ATTR_WHITE),
+        Text(8, 56, "Copies", ds.ATTR_WHITE), Text(8, 64, "Form Type", ds.ATTR_WHITE), Text(8, 76, "Pty", ds.ATTR_WHITE),
+    ]
+    for i, f in enumerate(wl.shown()):
+        r = wl.first_row + i
+        rows.append(Input(r, 2, 1, f"opt{i}", monocase=True))
+        rows += [g(r, 6, f.name), g(r, 18, f.user), g(r, 30, f.user_data[:10]), g(r, 42, f.status),
+                 g(r, 48, f"{f.pages:>5}"), g(r, 60, str(f.copies)), g(r, 64, f.form_type), g(r, 77, str(f.priority))]
+    rows.append(_more(18, wl.page >= wl.pages - 1))
+    rows += [g(19, 1, "Parameters for options 1, 2, 3 or command"), g(20, 1, "===>"),
+             Input(COMMAND_ROW, COMMAND_COL, COMMAND_LEN, "command"),
+             Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 24, "F12=Cancel", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows, cursor="opt0" if wl.shown() else "command")
 
 
 def dspsplf_screen(f, top: int = 0, message: str = "") -> Screen:

@@ -342,6 +342,8 @@ class SignonController:
             return ("work", WorkList(spec[2], spec[1], spec[4], owner=spec[3] or ""))
         if kind == "wrksplf":
             return ("work", WorkList("spool", spec[1], spec[2]))
+        if kind == "wrkoutq":
+            return ("work", WorkList("outq", spec[2], spec[3], queue=(spec[1].name, spec[1].library)))
         if kind == "dspsplf":
             return ("spoolview", spec[1], 0)
         if kind == "dspmsg":
@@ -532,7 +534,7 @@ class SignonController:
     def _work_option(self, wl: WorkList, row, opt: str, param: str) -> tuple[str | None, str]:
         """The command a work list option runs. The options the command line parameters feed
         are the ones the real display names ("Parameters for options 5, 7 and 13")."""
-        if wl.kind == "spool":
+        if wl.kind in ("spool", "outq"):
             if opt in ("5", "8"):
                 from ..system import spool
                 f = row

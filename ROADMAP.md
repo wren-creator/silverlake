@@ -31,8 +31,9 @@
 - [x] Job screens: page two of the DSPJOB and WRKJOB menus (WRKJOB 41 and 42 run ENDJOB and HLDJOB), page two of the status and definition pages, and options 11, 12, 14, 15, 16, from a second PUB400 capture
 - [ ] Job leftovers: options 17 to 22 and 30, WRKJOB 40 and its third menu page, the option column and F10, F11 on the locks display, F11 and F22 on the call stack, I/O details on open files, DSPJOBLOG F10, WRKACTJOB options 7, 13 and keys F7, F10, F11, the real confirm for option 4 and prompt for option 2 (need captures, the oracle will not end or change jobs)
 - [x] Colors: every captured screen now draws what the real host draws (labels, values, list rows and options green, titles, column headings and More... and Bottom white, prompts and keys blue), with a test holding the rules. Screens with no capture follow the same rules by analogy
-- [ ] WRKOUTQ: build it from the capture (captured 2026-10-27: Work with Output Queue, the not found message). A basic profile sees every file in a queue, user and job name included, whatever the queue's display rule says; options 1 to 9, F11 view 2, F20 and F22 are the rest of it
-- [ ] Spool leftovers: WRKOUTQ's options, WRKSPLF options 1, 2, 4 (confirm), 7, 9, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF, CRTOUTQ
+- [x] WRKOUTQ OUTQ(lib/name), from the PUB400 captures: the list, options 3, 5, 6, 8, the not found wording, and a profile that may read the queue sees every file in it (user and job name) whatever DSPDTA says
+- [ ] WRKOUTQ leftovers: options 1, 2, 4, 7, 9, F11 view 2, F20, F22, F24, status HLD for a held queue, and the bare form (Work with All Output Queues, needs a quieter capture)
+- [ ] Spool leftovers: WRKSPLF options 1, 2, 4 (confirm), 7, 9, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF, CRTOUTQ
 - [x] Phase 3c-3c step 3: message queues (DSPMSG, SNDMSG, CLRMSGQ, QSYSOPR, per-user queues in QUSRSYS), from the PUB400 captures
 - [x] CRTMSGQ, CHGMSGQ (DLVRY, SEV, TEXT) and DLTMSGQ from IBM's command pages, rules and inferences in docs/jobs-spool-messages.md
 - [ ] Message leftovers: the real SNDMSG prompt (needs a longer wait), inquiry messages and replies, F11 remove one, WRKMSGQ, CHGMSGQ break program and *DFT delivery, RMVMSG, break delivery to a live session, work station queues
@@ -57,6 +58,7 @@ Things Silverlake does from IBM's pages, memory or inference and has not seen on
 - [ ] DSPJOB: that its refusal is CPF1071 like WRKJOB (used without seeing it), the pool id and type of job for non interactive jobs, and the stack, locks and open files we show for non interactive jobs (a system job shows nothing)
 - [ ] DSPJOBLOG and WRKJOB: CPF2441 and CPF1071 wording, CPF2443 for an ended job (inferred), CPF2523 for a system job, and the QIBM_ACCESS_ALLOBJ_JOBLOG function usage that can also grant reading an *ALLOBJ job's log (not modeled)
 - [ ] CHGJOB: that RUNPTY, TIMESLICE, PURGE, DFTWAIT, CPUTIME and MAXTMPSTG need *JOBCTL even on your own job, and CPF1337 as the refusal (inferred). Write
+- [ ] WRKOUTQ: the IDs CPF3357 (queue not found) and CPF3330 (not authorized) are from memory of IBM's lists, not seen; that *READ to the queue and *EXECUTE to its library are what listing takes; what a held queue shows in Status; that options 3 and 6 follow the same rule as on WRKSPLF
 - [ ] Spool rules: the parts of CRTOUTQ's page that only came through as a summary, and the inferred OPRCTL, DSPDTA and AUTCHK behavior for other people's files
 - [ ] Job log filing: that passwords are masked is Silverlake's choice, not something seen. Check what a real QPJOBLOG holds for a typed password
 - [ ] Lockout and expiry: what the real host does on the QMAXSIGN-th bad password (which message, which screen), what the disabled profile says, and the real Change Password display. All inferred. Needs a made-up or deliberately sacrificed profile, so a human decides
