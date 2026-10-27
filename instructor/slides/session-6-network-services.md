@@ -4,7 +4,7 @@ Needs `./start.sh --services`. Everything still binds to 127.0.0.1.
 
 ## Slide 1: Doors besides 5250
 - An IBM i also answers on the network: a web console on 2001, FTP, and the host servers.
-- Ports: 5250 (real 23), 2001 (same), FTP 2121 (real 21), mapper 4449 (real 449), sign-on 8476 (same). Tell students before they scan.
+- Ports: 5250 (real 23), 2001 (same), FTP 2121 (real 21), mapper 4449 (real 449), sign-on 8476 (same). TLS: 5992, 2010, 2990, 9476. Tell students before they scan, and that the certificate is self-signed on purpose.
 - They check the same profiles and the same authority as the 5250 side. A weak password follows the attacker in.
 
 ## Slide 2: Find it

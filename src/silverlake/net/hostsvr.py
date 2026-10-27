@@ -110,8 +110,12 @@ def parse_signon_reply(data: bytes) -> dict[str, int | str]:
 
 
 async def serve(host: str, mapper_port: int, signon_port: int,
-                store_of: Callable[[], ProfileStore]) -> list[asyncio.Server]:
+                store_of: Callable[[], ProfileStore], tls_port: int | None = None,
+                ssl_context=None) -> list[asyncio.Server]:
     table = dict(DEFAULT_PORTS, **{"as-signon": signon_port})
+    if ssl_context is not None and tls_port is not None:
+        table["as-signon-s"] = tls_port
+        table["as-database-s"] = 9471               # named, nothing listens, as with the plain ones
 
     async def mapper(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -138,7 +142,10 @@ async def serve(host: str, mapper_port: int, signon_port: int,
     servers = [await asyncio.start_server(mapper, host, mapper_port)]
     try:
         servers.append(await asyncio.start_server(signon, host, signon_port))
+        if ssl_context is not None and tls_port is not None:
+            servers.append(await asyncio.start_server(signon, host, tls_port, ssl=ssl_context))
     except OSError:
-        servers[0].close()
+        for s in servers:
+            s.close()
         raise
     return servers

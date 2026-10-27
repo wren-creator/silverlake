@@ -18,7 +18,8 @@ async def run(host: str, port: int) -> None:
                                  os.environ.get("SILVERLAKE_STATE_DIR", "state"))
     server = await serve(host, port, lambda display: SignonController(display, store))
     # Before the line start.sh waits for, so a service that cannot bind fails the start instead of following it.
-    extra = await services.start(host, lambda: store) if services.wanted() else []
+    extra = (await services.start(host, lambda: store, make_controller=lambda display: SignonController(display, store))
+             if services.wanted() else [])
     logging.getLogger("silverlake").info("silverlake %s listening on %s:%d", __version__, host, port)
     try:
         async with server:
@@ -41,6 +42,9 @@ def main() -> int:
     except KeyboardInterrupt:
         pass
     except profiles.SeedError as exc:
+        print(f"silverlake: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:                       # a bad or repeated service port
         print(f"silverlake: {exc}", file=sys.stderr)
         return 1
     except OSError as exc:

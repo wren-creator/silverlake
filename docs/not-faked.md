@@ -15,7 +15,7 @@ IBM i has twenty-five years of surface area. Chasing all of it ends the project.
 
 ## In scope, but only as needed
 
-- 5250 and TN5250E, enough for real clients to sign on and work (on port 5250, not the real 23)
+- 5250 and TN5250E, enough for real clients to sign on and work (on port 5250, not the real 23; TLS on 5992, not the real 992)
 - CL commands that a scenario or a lesson touches
 - Authority and profile behavior that makes a finding real
 - RPG IV and DDS through rpgle_library

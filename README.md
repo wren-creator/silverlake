@@ -45,7 +45,7 @@ Everything binds to `127.0.0.1` and `start.sh` refuses to launch otherwise. A de
 
 The lessons are written up in [docs/scenarios.md](docs/scenarios.md) (instructor, with fixes) and [docs/scenarios-trainee.md](docs/scenarios-trainee.md), both generated from the scenario files by `python -m silverlake.scenario_docs`.
 
-The network services (the HTTP Admin console, FTP and the host servers) are opt in: `./start.sh --services`. Ports are not all the standard ones: 5250 for the 5250 session (real: 23), 2001 for the console (same), 2121 for FTP (real: 21), 4449 for the host server mapper (real: 449) and 8476 for the sign-on server (same). All are loopback only and can be moved, see the table in [docs/services.md](docs/services.md#ports).
+The network services (the HTTP Admin console, FTP and the host servers) are opt in: `./start.sh --services`. Ports are not all the standard ones: 5250 for the 5250 session (real: 23), 2001 for the console (same), 2121 for FTP (real: 21), 4449 for the host server mapper (real: 449) and 8476 for the sign-on server (same), with TLS on 5992, 2010, 2990 and 9476 once `./setup.sh` has made a certificate. All are loopback only and can be moved, see the table in [docs/services.md](docs/services.md#ports).
 
 Teaching it? [instructor/](instructor/) has the agenda, answer key, rubric, setup runbook and session slides.
 

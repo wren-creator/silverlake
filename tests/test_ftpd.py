@@ -5,6 +5,7 @@ import socket
 
 import pytest
 
+from netutil import all_ports, free_port
 from silverlake.net import ftpd, services
 from silverlake.system import profiles
 from silverlake.system.authority import EXCLUDE
@@ -89,12 +90,6 @@ def test_a_listing_leaves_out_what_the_profile_cannot_see_and_a_locked_library_i
     assert code(s2.handle("LIST")) == 550
 
 
-def free_port():
-    with socket.socket() as sk:
-        sk.bind(("127.0.0.1", 0))
-        return sk.getsockname()[1]
-
-
 def test_a_real_client_can_sign_on_list_and_get_a_file_over_sockets(store):
     import ftplib
     port = free_port()
@@ -109,10 +104,7 @@ def test_a_real_client_can_sign_on_list_and_get_a_file_over_sockets(store):
         return out
 
     async def go():
-        servers = await services.start("127.0.0.1", lambda: store, {"SILVERLAKE_HTTPADMIN_PORT": str(free_port()),
-                                                                     "SILVERLAKE_FTP_PORT": str(port),
-                                                                     "SILVERLAKE_MAPPER_PORT": str(free_port()),
-                                                                     "SILVERLAKE_SIGNON_PORT": str(free_port())})
+        servers = await services.start("127.0.0.1", lambda: store, all_ports(ftp=port))
         try:
             return await asyncio.get_running_loop().run_in_executor(None, client)
         finally:

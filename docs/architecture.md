@@ -76,4 +76,4 @@ A controller is anything with `first()`, `handle(aid, values)` and `close()`. Th
 - Unit tests cover framing split at every size, record round trips, exact rendered bytes, and screen validation.
 - An independent client, web3270's tn5250 session class, connects, sees the sign-on screen with the right fields and a hidden password, types, and gets the reply back (`tests/test_interop_web3270.py`).
 - The decoder reads a real PUB400 sign-on record correctly (two fields, a 128 long hidden password, cursor homed to the first field), and the structural diff against live PUB400 captures is how generic behavior gets confirmed (`docs/oracle.md`).
-- **Not yet checked:** lib5250's `tn5250`, IBM Access Client Solutions, or any real terminal. TLS is not built. Anything past the sign-on screen has not been compared with a real IBM i.
+- **Not yet checked:** lib5250's `tn5250`, IBM Access Client Solutions, or any real terminal. TLS on the 5250 listener is built (port 5992, with `--services`) but only checked against Python's own client. Anything past the sign-on screen has not been compared with a real IBM i.

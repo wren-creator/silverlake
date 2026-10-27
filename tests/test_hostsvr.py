@@ -9,6 +9,7 @@ import pytest
 from silverlake import flags, scenarios
 from silverlake.net import hostsvr, services
 from silverlake.system import profiles
+from netutil import all_ports, free_port
 
 REG = scenarios.registry()
 REQUEST = bytes(6) + struct.pack(">H", 0xE009) + bytes(10) + struct.pack(">H", 0x7003)
@@ -48,12 +49,6 @@ def test_the_job_is_in_the_reply_as_ebcdic(store):
     assert hostsvr._ebcdic("A/1") == bytes([0xC1, 0x61, 0xF1])
 
 
-def free_port():
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 def ask(port, raw):
     with socket.create_connection(("127.0.0.1", port), timeout=3) as s:
         s.sendall(raw)
@@ -65,8 +60,7 @@ def ask(port, raw):
 
 def test_over_real_sockets_the_mapper_points_at_the_signon_server_which_answers(store):
     mapper, signon = free_port(), free_port()
-    env = {"SILVERLAKE_HTTPADMIN_PORT": str(free_port()), "SILVERLAKE_FTP_PORT": str(free_port()),
-           "SILVERLAKE_MAPPER_PORT": str(mapper), "SILVERLAKE_SIGNON_PORT": str(signon)}
+    env = all_ports(mapper=mapper, signon=signon)
 
     async def go():
         servers = await services.start("127.0.0.1", lambda: store, env)

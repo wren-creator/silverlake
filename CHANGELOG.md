@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- TLS, so the range looks like a real IBM i from the outside. `./setup.sh` makes a throwaway self-signed certificate in `.tls/` (openssl, 2048 bit RSA, valid for localhost and 127.0.0.1) and, with `--services`, these start beside the plain ports: 5250 over TLS on 5992 (real 992), the console on 2010 (real 2010, same state as 2001), FTP with `AUTH TLS` upgrading 2121 in place and `PROT P` protecting data connections, FTP with implicit TLS on 2990 (real 990), and the sign-on server on 9476 (real 9476). The mapper names the TLS sign-on port. No certificate or no openssl and they are skipped with a log line. TLS 1.2 is the minimum. Tested with Python's ssl, ftplib and curl, not yet with a real 5250 client. `start.sh` checks every port before starting, two services cannot be given the same port, and a repeated or bad port is a message, not a traceback. Ports are all in one table in docs/services.md.
+
 - Ports documented in full. `docs/services.md` now has a Ports section with every service, its real IBM i port, why Silverlake's differs (21 and 449 are privileged, 5250 is its own choice, 2001 and 8476 match), the variable that moves each one, and what to do about clients and scanners that assume the real numbers. The README, setup runbook and the network session slide point at it.
 
 - `RCMD` over FTP. `quote rcmd <CL command>` runs a CL command as the signed on profile through Silverlake's own dispatcher, in this process, with that profile's authority and nothing more (an ordinary profile cannot make a user profile this way). Output is text for messages, `DSPMSG`, `WRKUSRPRF` and `DSPUSRPRF`. The `ftp-limited-bypass` exit program turns it away for limited capability profiles like the file commands.

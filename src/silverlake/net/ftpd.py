@@ -1,7 +1,7 @@
 """An IBM i style FTP server: the QTCP server a real system runs on 21, here on 2121 (21 is privileged).
 
-Sign-on is the profile store's, and bad attempts count against the profile. It is clear text, as a real
-server is without TLS, which is not built yet. After sign-on it is the same authority as everywhere else:
+Sign-on is the profile store's, and bad attempts count against the profile. It is clear text on the plain
+port, as a real server is until a client asks for AUTH TLS (or uses the implicit TLS port). After sign-on it is the same authority as everywhere else:
 a file is read only if the profile may read it, through the same finder DSPPFM uses.
 
 Read only by construction: there is no STOR, DELE, MKD, RMD or RNFR. RCMD runs a CL command as the profile.
@@ -42,6 +42,7 @@ class Step:
     after: list[Reply] = field(default_factory=list)
     pasv: bool = False
     close: bool = False
+    upgrade: bool = False                                  # switch the control connection to TLS after the reply
 
 
 def exit_program_registered(store: ProfileStore) -> bool:
@@ -65,6 +66,9 @@ class FtpSession:
         self.namefmt = 0
         self.cwd = "QGPL"
         self.job = Session()
+        self.tls_available = False       # the listener has a certificate, so AUTH TLS can work
+        self.secure = False              # the control connection is TLS now
+        self.prot_private = False        # PROT P: data connections are TLS too
 
     def greeting(self) -> Step:
         return Step([(220, "QTCP at SILVERLAKE.\nConnection will close if idle more than 5 minutes.")])
@@ -106,15 +110,31 @@ class FtpSession:
         return Step([(200, "OK.")])
 
     def _auth(self, arg: str) -> Step:
-        return Step([(502, "AUTH is not supported. TLS is not built.")])
+        if not self.tls_available:
+            return Step([(502, "AUTH is not supported, there is no certificate (run ./setup.sh).")])
+        if arg.upper() not in ("TLS", "TLS-C", "TLS-P", "SSL"):
+            return Step([(504, "Security mechanism not supported.")])
+        if self.secure:
+            return Step([(503, "Already secure.")])
+        return Step([(234, "Security environment established - ready for negotiation.")], upgrade=True)
 
     def _pbsz(self, arg: str) -> Step:
-        return Step([(503, "No security environment.")])
+        if not self.secure:
+            return Step([(503, "Send AUTH TLS first.")])
+        return Step([(200, "PBSZ=0")])
 
-    _prot = _pbsz
+    def _prot(self, arg: str) -> Step:
+        if not self.secure:
+            return Step([(503, "Send AUTH TLS first.")])
+        level = arg.upper()
+        if level not in ("C", "P"):
+            return Step([(504, "PROT C or P.")])
+        self.prot_private = level == "P"
+        return Step([(200, "Data channel protection level set to " + ("private." if self.prot_private else "clear."))])
 
     def _feat(self, arg: str) -> Step:
-        return Step([(211, "Extensions supported:\n NAMEFMT\nEND")])
+        tls = [" AUTH TLS", " PBSZ", " PROT"] if self.tls_available else []
+        return Step([(211, "\n".join(["Extensions supported:", *tls, " NAMEFMT", "END"]))])
 
     # -- information -----------------------------------------------------------------------------------------
 
@@ -240,9 +260,14 @@ def _wire(replies: list[Reply]) -> bytes:
     return ("\r\n".join(out) + "\r\n").encode("latin-1", "replace")
 
 
-async def serve(host: str, port: int, store_of: Callable[[], ProfileStore]) -> asyncio.Server:
+async def serve(host: str, port: int, store_of: Callable[[], ProfileStore], ssl_context=None,
+                implicit: bool = False) -> asyncio.Server:
+    """On the plain port, `ssl_context` lets AUTH TLS upgrade the connection in place. With `implicit` the
+    connection is TLS from the first byte, as on the real TLS port (990)."""
     async def on_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         session = FtpSession(store_of())
+        session.tls_available = ssl_context is not None
+        session.secure = implicit
         data_server: asyncio.Server | None = None
         data_conn: asyncio.Future | None = None
 
@@ -278,7 +303,8 @@ async def serve(host: str, port: int, store_of: Callable[[], ProfileStore]) -> a
                             fut.set_result(w)
                         else:
                             w.close()
-                    data_server = await asyncio.start_server(accepted, host, 0)
+                    data_server = await asyncio.start_server(accepted, host, 0,
+                                                             ssl=ssl_context if session.prot_private else None)
                     p = data_server.sockets[0].getsockname()[1]
                     send([(227, f"Entering Passive Mode (127,0,0,1,{p >> 8},{p & 255}).")])
                 elif step.data is not None:
@@ -299,6 +325,9 @@ async def serve(host: str, port: int, store_of: Callable[[], ProfileStore]) -> a
                 else:
                     send(step.replies)
                 await writer.drain()
+                if step.upgrade:
+                    await writer.start_tls(ssl_context)
+                    session.secure = True
                 if step.close:
                     break
         except (asyncio.TimeoutError, ConnectionError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
@@ -309,4 +338,4 @@ async def serve(host: str, port: int, store_of: Callable[[], ProfileStore]) -> a
             await close_data()
             writer.close()
 
-    return await asyncio.start_server(on_client, host, port)
+    return await asyncio.start_server(on_client, host, port, ssl=ssl_context if implicit else None)

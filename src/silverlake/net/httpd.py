@@ -54,8 +54,9 @@ def _wire(resp: Response) -> bytes:
     return "\r\n".join(head).encode("latin-1") + body
 
 
-async def serve(host: str, port: int, store_of: Callable[[], ProfileStore]) -> asyncio.Server:
-    state = State()
+async def serve(host: str, port: int, store_of: Callable[[], ProfileStore], ssl_context=None,
+                state: State | None = None) -> asyncio.Server:
+    state = state or State()
 
     async def on_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -76,4 +77,4 @@ async def serve(host: str, port: int, store_of: Callable[[], ProfileStore]) -> a
         finally:
             writer.close()
 
-    return await asyncio.start_server(on_client, host, port)
+    return await asyncio.start_server(on_client, host, port, ssl=ssl_context)

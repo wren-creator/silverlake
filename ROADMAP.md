@@ -4,7 +4,7 @@
 
 - [x] Phase 0: repo scaffold, lifecycle scripts, loopback guard, docs skeleton
 - [x] Phase 1: 5250 core, telnet + TN5250E negotiation, encoder/decoder, declarative screens
-- [ ] Phase 1 follow-ups: TLS listener, try real tn5250 and IBM Access clients, Query reply handling, 27x132 screens
+- [ ] Phase 1 follow-ups: try a real tn5250 over the new TLS port (5992), try real tn5250 and IBM Access clients, Query reply handling, 27x132 screens
 - [x] Phase 2: oracle harness, capture on a real IBM i, replay on Silverlake, diff structure
 - [ ] Phase 2 follow-ups: confirm title and label columns and colors from a stock capture (positions came from a photo), configurable password length, authenticated captures (harness done, first real run pending), Query path against a real host, more scenarios as Phase 3 lands
 - [x] Phase 3a: user profiles and the access model (five classes, eight special authorities, object authority), sign-on checks, seed-file assignment of any access level (docs/access-model.md)
@@ -75,7 +75,8 @@
   - [x] 5f-1: service plumbing plus the HTTP Admin console on 2001 (Basic auth against the profile store, a Create HTTP Server form whose description evaluates `exec` directives against the simulator's own commands as QTMHHTTP, and a fix flag), lesson `httpadmin-ssi-injection`, new lesson group D
   - [x] 5f-2: FTP on 2121 (cleartext sign-on, naming formats, file get through the normal authority checks), lesson `ftp-limited-bypass` (limited capability does not stop FTP); RCMD added afterwards
   - [x] 5f-3: host servers, the mapper on 4449 and the sign-on server on 8476 answering exchange attributes before any sign-on, lesson `hostsvr-recon`
-  - [ ] 5f later: TLS ports (2010, 990, 9476) with a throwaway cert, the real ports for FTP and the mapper (needs root), scenario docs and instructor kit pages for group D
+  - [x] 5f TLS: a throwaway certificate (`./setup.sh`, `.tls/`) and TLS ports for 5250 (5992), the console (2010), FTP (explicit AUTH TLS with PROT P on 2121, implicit on 2990) and the sign-on server (9476)
+  - [ ] 5f later: a lesson on requiring TLS (cleartext FTP and console sign-on refused), a certificate audit lesson on 2010, the real low ports (21, 449, 23, 992, 990) for people who run as root, TLS 1.3 only option
 - [ ] Silverlake 101 EPUB, same format as the Mainframe 10x series
 
 ## Needs verification on a real system

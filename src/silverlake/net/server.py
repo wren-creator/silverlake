@@ -195,7 +195,8 @@ class Connection:
             self.writer.close()
 
 
-async def serve(host: str, port: int, make_controller: ControllerFactory = SignonController) -> asyncio.Server:
+async def serve(host: str, port: int, make_controller: ControllerFactory = SignonController,
+                ssl_context=None) -> asyncio.Server:
     counter = 0
     active = 0
 
@@ -211,4 +212,4 @@ async def serve(host: str, port: int, make_controller: ControllerFactory = Signo
         finally:
             active -= 1
 
-    return await asyncio.start_server(on_client, host, port)
+    return await asyncio.start_server(on_client, host, port, ssl=ssl_context)

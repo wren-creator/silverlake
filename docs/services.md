@@ -4,28 +4,45 @@ Everything in Silverlake is reached through 5250 unless you start it with `./sta
 
 ## Ports
 
-Silverlake does not use the standard ports for everything. Three are on a different port because the real one is below 1024 and needs root, and 5250 is its own choice. Every port below can be moved, and every one binds to 127.0.0.1 only.
+Silverlake does not use the standard ports for everything. Some are on a different port because the real one is below 1024 and needs root, and 5250 is its own choice. Every port below can be moved, and every one binds to 127.0.0.1 only.
 
 | Service | Silverlake port | Real IBM i port | Why it differs | How to move it |
 |---|---|---|---|---|
-| 5250 (Telnet) | 5250 | 23 (992 with TLS) | not a standard port, picked to be memorable and above 1024 | `./start.sh --port N` or `SILVERLAKE_PORT` |
-| HTTP Server Administration console | 2001 | 2001 (2010 with TLS) | same as real | `SILVERLAKE_HTTPADMIN_PORT` |
-| FTP | 2121 | 21 (990 with TLS) | 21 is privileged | `SILVERLAKE_FTP_PORT` |
+| 5250 (Telnet) | 5250 | 23 | not a standard port, picked to be memorable and above 1024 | `./start.sh --port N` or `SILVERLAKE_PORT` |
+| 5250 over TLS | 5992 | 992 | 992 is privileged | `SILVERLAKE_TLS_PORT` |
+| HTTP Server Administration console | 2001 | 2001 | same as real | `SILVERLAKE_HTTPADMIN_PORT` |
+| Console over TLS | 2010 | 2010 | same as real | `SILVERLAKE_HTTPADMIN_TLS_PORT` |
+| FTP (and explicit TLS by `AUTH TLS`) | 2121 | 21 | 21 is privileged | `SILVERLAKE_FTP_PORT` |
+| FTP, implicit TLS | 2990 | 990 | 990 is privileged | `SILVERLAKE_FTP_TLS_PORT` |
 | Host server mapper | 4449 | 449 | 449 is privileged | `SILVERLAKE_MAPPER_PORT` |
-| Sign-on server | 8476 | 8476 (9476 with TLS) | same as real | `SILVERLAKE_SIGNON_PORT` |
+| Sign-on server | 8476 | 8476 | same as real | `SILVERLAKE_SIGNON_PORT` |
+| Sign-on server over TLS | 9476 | 9476 | same as real | `SILVERLAKE_SIGNON_TLS_PORT` |
 
-The mapper names the sign-on server's real port in its answer, so if you move the sign-on server, the mapper follows. It still names the standard ports (8470 to 8475) for the other host servers, and nothing listens on them.
+Two services cannot share a port, and `start.sh` and the server both say so. The mapper names the sign-on servers' ports in its answers (`as-signon`, `as-signon-s`), so if you move one the mapper follows. It also names the standard ports (8470 to 8475, and 9471) for the other host servers, and nothing listens on them.
 
-Not built: every TLS port (992, 2010, 990, 9476). Everything is clear text, which is also one of the lessons.
+The 5250 TLS port, the console TLS port, the FTP implicit port and the sign-on TLS port start only when a certificate exists (see below), and only with `--services`.
 
 Things to know when you point a tool at it:
 
-- **Clients with a port option** just need it: `tn5250 127.0.0.1:5250`, `ftp 127.0.0.1 2121`, a browser at `http://127.0.0.1:2001/HTTPAdmin`.
-- **Clients that hard code the real ports** (an FTP client that insists on 21, a host server client that goes to 449 first) will not find anything. Either give them the port or forward the real one to ours, loopback only and needing root for a low port, for example `sudo socat TCP-LISTEN:21,bind=127.0.0.1,fork TCP:127.0.0.1:2121`. Silverlake does not do this for you.
-- **Scanners** need the port list: `nmap -p 5250,2001,2121,4449,8476 127.0.0.1`. A default scan of 127.0.0.1 will not find 5250, 2121 or 4449, and a scan of the real port numbers will find nothing at 23, 21 or 449. The `ibmi-httpadmin-nse` script works as is, because 2001 is the real port.
+- **Clients with a port option** just need it: `tn5250 ssl:127.0.0.1:5992`, `ftp 127.0.0.1 2121`, a browser at `http://127.0.0.1:2001/HTTPAdmin` or `https://127.0.0.1:2010/HTTPAdmin`.
+- **Clients that hard code the real ports** (an FTP client that insists on 21, a host server client that goes to 449 first, a 5250 client that goes to 23 or 992) will not find anything. Either give them the port or forward the real one to ours, loopback only and needing root for a low port, for example `sudo socat TCP-LISTEN:21,bind=127.0.0.1,fork TCP:127.0.0.1:2121`. Silverlake does not do this for you.
+- **Scanners** need the port list: `nmap -p 5250,5992,2001,2010,2121,2990,4449,8476,9476 127.0.0.1`. A default scan of 127.0.0.1 will not find 5250, 5992, 2121, 2990 or 4449, and a scan of the real port numbers will find nothing at 23, 992, 21, 990 or 449. The `ibmi-httpadmin-nse` script works as is, because 2001 and 2010 are the real ports.
 - **A port in use:** `start.sh` checks the 5250 port and each service port before it starts and names the variable to change.
 - **Restarts:** `./scenario.sh` restarts with `--services` if the range was started with it, but it does not remember a custom port. Export the `SILVERLAKE_*_PORT` variables in the shell you run it from.
 - `./status.sh` lists every socket the process holds and fails if any is beyond loopback.
+
+## TLS
+
+`./setup.sh` makes one throwaway certificate with the openssl command line tool: self-signed, 2048 bit RSA, SHA-256, for SILVERLAKE, valid for `localhost` and 127.0.0.1, kept in `.tls/` (gitignored, mode 0600 for the key). `./setup.sh --force-tls` makes a new one, `reset.sh` never touches it, and `SILVERLAKE_TLS_DIR` moves it. With no certificate, or no openssl, the TLS ports are skipped and the log says so.
+
+It is a self-signed certificate on purpose, as on a stock IBM i. A client has to be told to trust it (`curl --cacert .tls/cert.pem`, `ssl.create_default_context(cafile=".tls/cert.pem")`, or an explicit "accept" in a browser). TLS 1.2 is the minimum.
+
+- **FTP** offers `AUTH TLS` on 2121: the control connection upgrades in place, then `PBSZ 0` and `PROT P` make data connections TLS too (`PROT C` keeps them clear). Port 2990 is TLS from the first byte. Clear text sign-on is still accepted on 2121, which is what a stock IBM i does too.
+- **The console** serves the same pages on 2001 and 2010 from one state, so a server created on one shows on the other.
+- **The sign-on server** answers the same exchange on 9476.
+- **5250** on 5992 negotiates telnet inside TLS, the way `tn5250 ssl:` and Access Client Solutions do.
+
+What is checked and what is not: all of it is tested with Python's `ssl` and `ftplib` clients and with curl for the console. No real 5250 client or ACS has been tried on 5992, and the cipher list is Python's default, not an IBM i's. A scanner's `ssl-enum-ciphers` will show what Python's OpenSSL offers, not what a real box offers.
 
 ## What exists
 
@@ -34,7 +51,7 @@ Things to know when you point a tool at it:
 | HTTP Server Administration console | built |
 | FTP | built, with RCMD |
 | Server mapper and sign-on server | built |
-| TLS on any of them | not built |
+| TLS on the 5250 port, the console, FTP and the sign-on server | built, with a self-signed certificate |
 
 ## FTP
 

@@ -25,4 +25,8 @@ fi
 # The instance secret that flags and secure-state passwords come from. Kept at the repo root, never committed,
 # and not wiped by reset.sh. Made once.
 .venv/bin/python -m silverlake.flags init >/dev/null && ok "instance secret in place (.instance-secret)"
+# The throwaway certificate behind the TLS ports (5250, the console, FTP, the sign-on server). Needs openssl;
+# without it the TLS ports just do not start. ./setup.sh --force-tls makes a new one.
+.venv/bin/python -m silverlake.net.certs $([ "${1:-}" = "--force-tls" ] && echo --force) \
+  && ok "TLS certificate in place (.tls/)" || warn "no TLS certificate (openssl missing?), TLS ports will not start"
 ok "ready. next: ./start.sh"

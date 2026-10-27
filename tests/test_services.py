@@ -10,12 +10,7 @@ from silverlake import flags
 from silverlake.config import ConfigError
 from silverlake.net import services
 from silverlake.system import profiles
-
-
-def free_port():
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+from netutil import all_ports, free_port
 
 
 def test_services_are_off_unless_asked_for():
@@ -24,8 +19,11 @@ def test_services_are_off_unless_asked_for():
 
 
 def test_ports_default_to_the_real_ones_and_can_move():
-    assert services.ports({}) == {"httpadmin": 2001, "ftp": 2121, "mapper": 4449, "signon": 8476}
-    assert services.ports({"SILVERLAKE_HTTPADMIN_PORT": "2999"}) == {"httpadmin": 2999, "ftp": 2121, "mapper": 4449, "signon": 8476}
+    assert services.ports({}) == {"httpadmin": 2001, "ftp": 2121, "mapper": 4449, "signon": 8476, "tls5250": 5992,
+                                  "httpadmin_tls": 2010, "ftp_tls": 2990, "signon_tls": 9476}
+    assert services.ports({"SILVERLAKE_HTTPADMIN_PORT": "2999"})["httpadmin"] == 2999
+    with pytest.raises(ValueError, match="same port"):
+        services.ports({"SILVERLAKE_HTTPADMIN_PORT": "2121"})
     with pytest.raises(ValueError):
         services.ports({"SILVERLAKE_HTTPADMIN_PORT": "70000"})
 
@@ -51,10 +49,7 @@ def test_the_console_answers_over_a_real_socket_and_the_exploit_works_end_to_end
     body = "name=ZZTEST&description=%3C%21--%23exec+cmd%3D%22DSPMSG+MSGQ%28QTMHHTTP%29%22+--%3E"
 
     async def go():
-        servers = await services.start("127.0.0.1", lambda: store, {"SILVERLAKE_HTTPADMIN_PORT": str(port),
-                                                                     "SILVERLAKE_FTP_PORT": str(free_port()),
-                                                                     "SILVERLAKE_MAPPER_PORT": str(free_port()),
-                                                                     "SILVERLAKE_SIGNON_PORT": str(free_port())})
+        servers = await services.start("127.0.0.1", lambda: store, all_ports(httpadmin=port))
         loop = asyncio.get_running_loop()
         try:
             call = lambda raw: loop.run_in_executor(None, request, port, raw)
