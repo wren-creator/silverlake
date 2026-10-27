@@ -102,3 +102,21 @@ def wrkautl_screen(lists: list, page: int = 0) -> Screen:
                  Text(r, 26, autl.text[:50], ds.ATTR_TURQUOISE)]
     _footer(rows, page, len(lists), "F3=Exit   F12=Cancel   Page Up/Down")
     return Screen(rows)
+
+
+def wrkobj_screen(objs: list, title: str, page: int = 0) -> Screen:
+    page, shown = _clamp(objs, page)
+    rows: list[Text | Input] = [
+        Text(0, max(0, (80 - len(title)) // 2), title, ds.ATTR_WHITE),
+        Text(2, 2, "Objects you have some authority to.", ds.ATTR_BLUE),
+        Text(4, 2, "Object", ds.ATTR_WHITE), Text(4, 14, "Type", ds.ATTR_WHITE),
+        Text(4, 22, "Library", ds.ATTR_WHITE), Text(4, 34, "Owner", ds.ATTR_WHITE),
+        Text(4, 46, "Text", ds.ATTR_WHITE),
+    ]
+    for i, o in enumerate(shown):
+        r = FIRST_ROW + i
+        rows += [Text(r, 2, o.name, ds.ATTR_TURQUOISE), Text(r, 14, o.type, ds.ATTR_TURQUOISE),
+                 Text(r, 22, o.library, ds.ATTR_TURQUOISE), Text(r, 34, o.owner, ds.ATTR_TURQUOISE),
+                 Text(r, 46, o.text[:32], ds.ATTR_TURQUOISE)]
+    _footer(rows, page, len(objs), "F3=Exit   F12=Cancel   Page Up/Down")
+    return Screen(rows)

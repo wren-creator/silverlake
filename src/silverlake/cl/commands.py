@@ -8,7 +8,7 @@ are named in IGNORED so a copied command from a real system still runs."""
 import fnmatch
 from dataclasses import dataclass
 
-from ..system import admin, autls, messages, objects
+from ..system import admin, autls, messages, objects, objlist
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -99,6 +99,13 @@ RMVAUTLE_PARAMS = [Param("AUTL", "autl", "", required=True), Param("USER", "user
 DSPAUTL_PARAMS = [Param("AUTL", "autl", "", required=True), Param("OUTPUT", "output", "*")]
 WRKAUTL_PARAMS = [Param("AUTL", "wrkname", "*ALL")]
 
+WRKOBJ_PARAMS = [Param("OBJ", "wrkobj", "", required=True), Param("OBJTYPE", "objtypes", "*ALL", 100)]
+WRKOBJOWN_PARAMS = [Param("USRPRF", "wrkowner", "*CURRENT"), Param("OBJTYPE", "objtypes", "*ALL", 100)]
+CHGOBJOWN_PARAMS = [
+    Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
+    Param("NEWOWN", "name", "", required=True), Param("CUROWNAUT", "curownaut", "*REVOKE"),
+]
+
 COMMANDS = {
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
     "DLTUSRPRF": DLT_PARAMS, "WRKUSRPRF": WRK_PARAMS, "SIGNOFF": [],
@@ -108,7 +115,8 @@ COMMANDS = {
     "GO": GO_PARAMS, "CALL": CALL_PARAMS, "CHGPRF": CHGPRF_PARAMS,
     "CRTAUTL": CRTAUTL_PARAMS, "DLTAUTL": DLTAUTL_PARAMS, "ADDAUTLE": ADDAUTLE_PARAMS,
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
-    "WRKAUTL": WRKAUTL_PARAMS,
+    "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
+    "CHGOBJOWN": CHGOBJOWN_PARAMS,
 }
 
 
@@ -180,6 +188,28 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
     if k == "aut":
         v = _one(p.key, values, ("*EXCLUDE", "*USE", "*CHANGE", "*ALL"))
         return parse_auth(v)
+    if k == "wrkobj":                       # (name or generic or *ALL, library spec)
+        v = values[0]
+        lib, _, obj = v.rpartition("/")
+        lib = lib.upper() or "*LIBL"
+        obj = obj.upper()
+        if not obj or len(obj) > 10 or (obj.startswith("*") and obj != "*ALL") or obj.count("*") > 1 \
+                or ("*" in obj and obj != "*ALL" and not obj.endswith("*")):
+            raise BindError(f"Object name {obj or v} in OBJ not valid.")
+        if lib.startswith("*") and lib not in ("*LIBL", "*CURLIB", "*USRLIBL", "*ALLUSR", "*ALL"):
+            raise BindError(f"Library {lib} in OBJ not valid.")
+        return (obj, lib)
+    if k == "objtypes":
+        if values == ["*ALL"]:
+            return "*ALL"
+        for v in values:
+            if v not in objects.TYPES:
+                raise BindError(f"Object type {v} is not modeled yet. Modeled: {' '.join(objects.TYPES)}.")
+        return list(values)
+    if k == "wrkowner":
+        return values[0].upper()
+    if k == "curownaut":
+        return _one(p.key, values, ("*REVOKE", "*SAME")) == "*SAME"
     if k == "autl":
         v = values[0]
         if "*" in v or not objects.NAME.match(v.upper()):
@@ -427,6 +457,15 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         if not attrs:
             return Outcome(messages.syntax("Nothing to change: give INLPGM, INLMNU or CURLIB."))
         return Outcome(admin.change_own_profile(store, actor, session.search_order(), attrs).message)
+    if name == "WRKOBJ":
+        rows, err = objlist.work_with_objects(store, actor, *b["OBJ"], b["OBJTYPE"], session)
+        return _object_view(rows, err, "Work with Objects")
+    if name == "WRKOBJOWN":
+        rows, err = objlist.work_with_objects_by_owner(store, actor, b["USRPRF"], b["OBJTYPE"])
+        return _object_view(rows, err, "Work with Objects by Owner")
+    if name == "CHGOBJOWN":
+        return Outcome(objlist.change_owner(store, actor, b["OBJ"], b["OBJTYPE"], b["NEWOWN"],
+                                            b["CUROWNAUT"], session.search_order()).message)
     if name in AUTL_COMMANDS:
         return _run_autl_command(store, actor, name, b)
     users = b.get("USER", [])
@@ -467,6 +506,14 @@ def _run_autl_command(store: ProfileStore, actor: Profile, name: str, b: dict) -
     if not rows:
         return Outcome(messages.syntax("No authorization lists found, or you are not authorized to any."))
     return Outcome(view=("wrkautl", rows))
+
+
+def _object_view(rows: list, err, title: str) -> Outcome:
+    if err:
+        return Outcome(err)
+    if not rows:
+        return Outcome(messages.syntax("No objects found, or you are not authorized to any."))
+    return Outcome(view=("wrkobj", rows, title))
 
 
 def _done(d: objects.Done) -> messages.Message:

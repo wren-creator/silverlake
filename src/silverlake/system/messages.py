@@ -231,6 +231,26 @@ def not_authorized_to_use_autl(name: str) -> Message:
     return _doc("CPF2207", f"Not authorized to use object {name} in library QSYS type *AUTL.")
 
 
+def object_list_library_not_found(lib: str) -> Message:
+    return _doc("CPF9810", f"Library {lib} not found.")
+
+
+def object_list_not_authorized_to_library(lib: str) -> Message:
+    return _doc("CPF9820", f"Not authorized to use library {lib}.")
+
+
+def not_authorized_to_object_in_library(obj: str, lib: str) -> Message:
+    return _doc("CPF2230", f"Not authorized to object {obj} in library {lib}.")
+
+
+def not_authorized_to_new_owner(name: str) -> Message:
+    return _doc("CPF2232", f"Not authorized to user profile {name}.")
+
+
+def no_delete_authority_to_owner(name: str) -> Message:
+    return _doc("CPF2233", f"No delete authority to user profile {name}.")
+
+
 def autl_not_found(name: str) -> Message:
     return _doc("CPF2283", f"Authorization list {name} does not exist.")
 

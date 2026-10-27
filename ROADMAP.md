@@ -18,7 +18,9 @@
 - [ ] Phase 3c-2 follow-ups: bring DSPLIBL and DSPOBJAUT to the real layouts (option column, Group column, F11 detail, Top and Bottom keys); F4 prompting; Command Entry fidelity (compare against a real one); programs behind INLPGM and CALL; confirm the LMTCPB message wording and the "Not authorized to command" ID on a real system
 - [x] Phase 3c-3a: authorization lists (CRTAUTL, DLTAUTL, ADDAUTLE, CHGAUTLE, RMVAUTLE, DSPAUTL, WRKAUTL), *AUTLMGT, list owner
 - [ ] Phase 3c-3a follow-ups: generic list names, WRKAUTL options, DSPAUTL *PRINT and *OUTFILE, lists owned by a deleted profile, QIBM_DB_SECADM, CHGOBJOWN, *AUTL as an object type for DSPOBJAUT
-- [ ] Phase 3c-3b: the rest of the dispatcher (WRKOBJ, jobs, spool, messages)
+- [x] Phase 3c-3b: WRKOBJ, WRKOBJOWN, CHGOBJOWN
+- [ ] Phase 3c-3b follow-ups: options on the WRKOBJ and WRKOBJOWN displays (not on the command pages; needs a real capture), more object types, *AUTL in the object table, DSPOBJD
+- [ ] Phase 3c-3c: jobs, spool and messages (WRKACTJOB, WRKSPLF, DSPMSG)
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
 - [ ] Phase 5: vulnerable and secure modes, seeded weak configs, exposed services, scenarios, flag checker, instructor and trainee docs

@@ -22,7 +22,7 @@ from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
-from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrkautl_screen, wrklib_screen
+from .objects import dsplibl_screen, dspobjaut_screen, dspautl_screen, pages, wrkautl_screen, wrklib_screen, wrkobj_screen
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -243,6 +243,9 @@ class SignonController:
             return ("plist", spec[2], 0, lambda rows, page: dspautl_screen(autl, rows, page))
         if kind == "wrkautl":
             return ("plist", spec[1], 0, wrkautl_screen)
+        if kind == "wrkobj":
+            title = spec[2]
+            return ("plist", spec[1], 0, lambda rows, page: wrkobj_screen(rows, title, page))
         raise AssertionError(kind)
 
     def _draw_view(self, message: str = "") -> Screen:

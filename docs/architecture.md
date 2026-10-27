@@ -51,6 +51,7 @@ src/silverlake/
   screens/home.py      wrap(), shared by the display screens
   system/menus.py      *MENU data: title, options, validation
   system/autls.py      authorization list commands and their rules
+  system/objlist.py    WRKOBJ, WRKOBJOWN, CHGOBJOWN
   screens/usrprf.py    DSPUSRPRF and WRKUSRPRF screens
   cl/parser.py         splits a command line into command, positional and keyword values
   cl/commands.py       binds parameters, runs the profile, library and object authority commands

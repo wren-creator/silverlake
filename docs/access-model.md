@@ -89,6 +89,16 @@ Menu options still run for a `*YES` user, and command entry still runs everythin
 
 Inferred, not read on a page: that a `*AUTLMGT` user may only hand out or remove authorities they hold themselves (the pages say "only to the *AUTLMGT level" and "at least the same specific authorities"), that `DSPAUTL` needs the owner, `*ALLOBJ` or an entry, and that adding someone who is already on the list is an error. IBM also names `QIBM_DB_SECADM` as an alternative to those rights, which does not exist here. A list owned by a deleted profile is not handled yet. The ID wording of the completion messages is ours (the pages list none). Generic list names (`PAY*`) are not supported yet.
 
+## Finding objects and changing owners
+
+`WRKOBJ`, `WRKOBJOWN` and `CHGOBJOWN`, from IBM's 7.5 pages.
+
+- `WRKOBJ OBJ(lib/name) OBJTYPE(...)`: the name can be generic (`PAY*`) or `*ALL`, the library a name or `*LIBL`, `*CURLIB`, `*USRLIBL`, `*ALLUSR` or `*ALL`. Only libraries you have `*USE` to are searched, and only objects you have some authority to are listed. So a wide open file in a locked library never shows, and a file you are excluded from does not show in a library you can use. A library named outright that does not exist is CPF9810, one you cannot use CPF9820. That is a quiet way to map a system, which is why it is in the range.
+- `WRKOBJOWN USRPRF(name)`: objects owned by a profile, needing `*READ` to the profile (CPF2217).
+- `CHGOBJOWN OBJ(lib/name) OBJTYPE(type) NEWOWN(user) CUROWNAUT(*REVOKE|*SAME)`: needs `*OBJEXIST` on the object (and `*OBJOPR` for a library or file), `*ADD` to the new owner's profile and `*DLT` to the present owner's, or `*ALLOBJ`. `*REVOKE` removes the old owner's authority, `*SAME` keeps it as a private entry. Ownership is the one authority nobody can revoke from the owner, so moving it is a real privilege.
+
+The pages do not list the options on the Work with Objects displays, so none are offered yet and the lists are view only. `*AUTL` objects are not in the object table, so they never appear. `QIBM_DB_SECADM` does not exist here.
+
 ## Libraries and object authority from the command line
 
 | Command | What it does here |
