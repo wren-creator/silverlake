@@ -41,6 +41,22 @@
 - [ ] Phase 5: vulnerable and secure modes, seeded weak configs, exposed services, scenarios, flag checker, instructor and trainee docs
 - [ ] Silverlake 101 EPUB, same format as the Mainframe 10x series
 
+## Needs verification on a real system
+
+Things Silverlake does from IBM's pages, memory or inference and has not seen on a real IBM i. Tick one when it has been checked, and fix the docs if the real system disagrees. "Write" means it changes something on a shared system, so it needs a human decision and fresh approval first (PUB400 rules: read only, human paced).
+
+- [ ] CRTMSGQ, CHGMSGQ, DLTMSGQ: the completion messages (IDs and text), what authority a new queue gets under *LIBCRTAUT, whether *ADD to the library is what CRTMSGQ needs, and that *CHANGE cannot delete a queue. Write: one throwaway queue in the test account's own library, DSPOBJAUT on it, change its text, delete it
+- [ ] Message queue reads: that DSPMSG needs only *USE (inferred, the page has no authority section), and that a user queue gets the library's create authority so QUSRSYS makes every queue world readable
+- [ ] DSPJOBLOG and WRKJOB: CPF2441 and CPF1071 wording, CPF2443 for an ended job (inferred), CPF2523 for a system job, and the QIBM_ACCESS_ALLOBJ_JOBLOG function usage that can also grant reading an *ALLOBJ job's log (not modeled)
+- [ ] CHGJOB: that RUNPTY, TIMESLICE, PURGE, DFTWAIT, CPUTIME and MAXTMPSTG need *JOBCTL even on your own job, and CPF1337 as the refusal (inferred). Write
+- [ ] Spool rules: the parts of CRTOUTQ's page that only came through as a summary, and the inferred OPRCTL, DSPDTA and AUTCHK behavior for other people's files
+- [ ] Job log filing: that passwords are masked is Silverlake's choice, not something seen. Check what a real QPJOBLOG holds for a typed password
+- [ ] Confirm CPF1107, CPF1118, CPF1394 (needs a deliberate wrong-password attempt, so a human decides, with a made-up user)
+- [ ] Profile command message IDs and which condition raises each (CPF2204, CPF2217, CPF2228 and the rest are documented, not seen); safe read-only checks are an unknown command and DSPUSRPRF on your own profile
+- [ ] The ID of "Not authorized to command" and what a limited user sees at a command line; the LMTCPB message wording
+- [ ] The library gate rule for *ALLOBJ, what authority a new library gets, and whether QSYS authority matters to CRTLIB once the command is allowed (needs a profile that may run CRTLIB)
+- [ ] Captures still missing for screens: WRKOUTQ, the real SNDMSG prompt (no host answer last time, retry with a longer wait), ENDJOB confirm, CHGJOB prompt, option 3 copy (CRTDUPOBJ), WRKAUTL 2, F10 and F11 on the edit screen
+
 ## v2 and beyond
 
 - Subfiles and windows once rpgle_library supports them
