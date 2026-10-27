@@ -17,7 +17,7 @@ queue and output queue (there is no object model yet), and password rules.
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from . import msgq
 from . import messages
@@ -65,7 +65,9 @@ def _check_groups(store: ProfileStore, actor: Profile, groups: list[str]) -> mes
         if target is None:
             return messages.group_not_found(g)
         need = CHANGE | Auth.OBJMGT
-        if need not in store.authority_to_profile(actor, target):
+        # Adopted authority does not count here: IBM says a group assignment needs the user's own
+        # *CHANGE and *OBJMGT to the group (CPF9802 on a real system, which has its own wording).
+        if need not in store.authority_to_profile(replace(actor, adopted=()), target):
             return messages.not_authorized_to_profile(g)
     return None
 

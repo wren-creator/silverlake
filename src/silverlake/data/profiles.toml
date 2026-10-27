@@ -293,6 +293,34 @@ source_file = "salesrpt.rpgle"
 dspf_file = "salesrpt.dspf"
 
 [[object]]
+library = "APPLIB"
+name = "RUNCMD"
+type = "*PGM"
+owner = "QSECOFR"
+public = "*USE"
+text = "Command helper for support staff. Adopts its owner."
+[object.data]
+attr = "RPGLE"
+usrprf = "*OWNER"
+useadpaut = "*YES"
+source_file = "runcmd.rpgle"
+dspf_file = "runcmd.dspf"
+
+[[object]]
+library = "APPLIB"
+name = "RUNCMDX"
+type = "*PGM"
+owner = "QDFTOWN"
+public = "*USE"
+text = "Command helper, fixed: a short list of commands and an owner with no authority."
+[object.data]
+attr = "RPGLE"
+usrprf = "*OWNER"
+useadpaut = "*NO"
+source_file = "runcmdx.rpgle"
+dspf_file = "runcmdx.dspf"
+
+[[object]]
 name = "SRCLIB"
 owner = "DEVELOPER"
 public = "*EXCLUDE"

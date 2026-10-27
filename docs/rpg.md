@@ -19,7 +19,7 @@ Source and attributes are saved in the state file like any object, so a student'
 
 ## What IBM's pages say about adopted authority
 
-From two IBM support pages, [Adopted Authority](https://www.ibm.com/support/pages/adopted-authority) and [Using Adopted Authority for the CRTUSRPRF without *SECADM](https://www.ibm.com/support/pages/using-adopted-authority-crtusrprf-without-secadm-special-authority). The next milestone follows them.
+From two IBM support pages, [Adopted Authority](https://www.ibm.com/support/pages/adopted-authority) and [Using Adopted Authority for the CRTUSRPRF without *SECADM](https://www.ibm.com/support/pages/using-adopted-authority-crtusrprf-without-secadm-special-authority). The adopted authority milestone follows them.
 
 - `USRPRF(*OWNER)` makes the program run "combining the authorities of the Owner of the program with those of the User Profile running the program". The user keeps their own.
 - `USEADPAUT(*YES)` means adopt from the *prior program in the call stack*, not from the owner. If B is `USEADPAUT(*YES)` and `USRPRF(*USER)`, whatever A adopted flows to B. `USEADPAUT(*NO)` cuts that off.
@@ -28,10 +28,21 @@ From two IBM support pages, [Adopted Authority](https://www.ibm.com/support/page
 - When a program adopts to run `CRTUSRPRF` and assigns a group profile, the user still needs `*CHANGE` and `*OBJMGT` to that group profile by their own authority. Adoption does not supply it (a refusal shows as `CPF9802`).
 - IBM's advice is to adopt an application owner's authority, not QSECOFR's or any `*ALLOBJ` profile's.
 
+## Adopted authority and QCMDEXC
+
+A `*PGM` with `USRPRF(*OWNER)` adds its owner to whoever called it, for as long as it is on the call stack.
+
+- **What is added.** The owner's object authority and special authorities. The user keeps their own, so the result is the two combined. That the special authorities count is inferred from IBM's pages, not stated, and sits on the verification list.
+- **What passes down.** `adopted_owners` in `system/rpg.py` walks the stack outermost first. `USEADPAUT(*YES)` lets a program keep what the one before it held, `*NO` cuts that off, and a program with `USRPRF(*OWNER)` adds its own owner on top.
+- **Nothing sticks.** The profile is copied for the duration of the call (`ProfileStore.adopting`) and the copy keeps the user's name. Objects it creates are the user's, as on IBM i. The job log says which owner a program ran as.
+- **The one place it does not apply.** Assigning a group profile in `CRTUSRPRF` still needs the user's own `*CHANGE` and `*OBJMGT` to the group (IBM). Silverlake uses the existing "not authorized to user profile" message where a real system shows CPF9802.
+- **`CALL 'QCMDEXC'`** is answered inside Silverlake. The command string goes to the same dispatcher the command line uses, as the profile the stack holds right now, and never to a shell. Parameter two is the length and only that many characters are read. An unknown command says "Command X in library *LIBL not found." (captured). A length that cuts a command mid-parenthesis says "A matching parenthesis not found." (captured). A command that works says nothing. A failure ends the program with that message, which is a guess at how a real program sees it, and a command that needs a whole screen (WRKACTJOB, DSPLIBL) is refused, because a program has no screen to give it.
+- **The seeded hole.** `APPLIB/RUNCMD` is a support helper owned by QSECOFR, compiled to adopt its owner, that hands whatever is typed to QCMDEXC. STUDENT types `CRTUSRPRF USRPRF(EVIL) PASSWORD(EVIL) USRCLS(*SECOFR)` and the helper makes it. `APPLIB/RUNCMDX` is the fix: a short allow-list, and an owner (QDFTOWN) that holds no special authority, so a hole in the list gives away nothing. Read the source with `DSPPGM` and the `data` of the object, edit it, and watch the difference.
+
 ## What it is not (yet)
 
 - **No compile step.** Source is parsed when the program is called, not by `CRTBNDRPG`. A syntax error shows as "ended abnormally" at call time instead of a compile listing. Nothing can create a program yet except the seed.
-- **No adopted authority and no `QCMDEXC`.** The `usrprf` and `useadpaut` attributes are stored and shown, and not acted on. A program runs with the caller's authority. This is the next milestone, and the teaching value of the whole phase: an `*OWNER` program owned by someone powerful that hands a string to `QCMDEXC` is the classic privilege escalation.
+- **Adopted authority and `QCMDEXC` are built** (next section). Not covered: system request, the attention key, break handling programs and debug (nothing here starts one), and `TFRGRPJOB` (not built). The IFS does not support adoption either, and the simulated PASE will have to keep that true.
 - **No files.** DISK files, printer files and the spool are not connected to Silverlake's object store, so a program can show screens and calculate and cannot read or write a `*FILE`.
 - **One input per row.** The runtime keys input by screen row, so a second input field on the same row shows as text. Real DDS often has several per row.
 - **One display file per program.** The DDS in the object is the program's display file, whatever name the program gives it.

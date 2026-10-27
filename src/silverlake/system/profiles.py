@@ -8,7 +8,7 @@ golden state; nothing here writes back to it.
 import hmac
 import tomllib
 from datetime import date, timedelta
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .jobs import JobTable
@@ -51,6 +51,9 @@ class Profile:
     owner: str = "QSECOFR"
     public_authority: Auth = EXCLUDE
     private_authority: dict[str, Auth] = field(default_factory=dict)
+    # Profiles whose authority this one holds right now through programs that adopt it. Never stored: a
+    # copy of the profile made for the duration of a call (see ProfileStore.adopting).
+    adopted: tuple[str, ...] = ()
 
 
 @dataclass
@@ -91,18 +94,40 @@ class ProfileStore:
     def get(self, name: str) -> Profile | None:
         return self.profiles.get(name.upper())
 
-    def special_authorities(self, profile: Profile) -> frozenset[SpecialAuthority]:
+    def _own_special(self, profile: Profile) -> frozenset[SpecialAuthority]:
         if profile.special_authorities is not None:
             return profile.special_authorities
         return class_authorities(profile.user_class, self.system.qsecurity)
+
+    def special_authorities(self, profile: Profile) -> frozenset[SpecialAuthority]:
+        """Own special authorities plus those of any profile adopted. The adopted ones are inferred from
+        IBM's how-to pages (QSECOFR's authority "flows down the stack"), not stated outright."""
+        held = self._own_special(profile)
+        for name in profile.adopted:
+            owner = self.profiles.get(name)
+            if owner is not None:
+                held = held | self._own_special(owner)
+        return held
+
+    def adopting(self, profile: Profile, owners: list[str]) -> Profile:
+        """The profile as it is while programs adopt `owners`: the same name (objects it creates are still
+        its own, as on IBM i), with the owners' authority added to its own. A copy, so nothing sticks."""
+        names = tuple(dict.fromkeys(o for o in owners if o and o != profile.name))
+        return replace(profile, adopted=names) if names else profile
 
     def groups_of(self, profile: Profile) -> list[str]:
         groups = ([profile.group_profile] if profile.group_profile else []) + profile.supplemental_groups
         return [g for g in groups if g in self.profiles]
 
     def object_authority(self, profile: Profile, obj: SecuredObject) -> Auth:
-        return resolve_object_authority(
+        got = resolve_object_authority(
             profile.name, self.special_authorities(profile), self.groups_of(profile), obj, self.autls)
+        for name in profile.adopted:          # the user keeps their own, the owner's is added (IBM)
+            owner = self.profiles.get(name)
+            if owner is not None:
+                got = got | resolve_object_authority(
+                    owner.name, self._own_special(owner), self.groups_of(owner), obj, self.autls)
+        return got
 
     def find_library(self, name: str) -> SecuredObject | None:
         return self.objects.get(("QSYS", name.upper(), "*LIB"))

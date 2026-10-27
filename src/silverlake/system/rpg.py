@@ -13,6 +13,7 @@ capped on how many instructions run between screens, so one trainee's `DOW` cann
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,8 @@ except ImportError:                       # the RPG runtime is optional: Silverl
     AVAILABLE = False
 
 MAX_STEPS = 200_000      # instructions between screens before a program is stopped
+_FAILED = ("not found", "not authorized", "not valid", "does not exist", "already exists", "not correct",
+           "cannot", "not allowed", "parenthesis", "not available", "not modeled")
 
 
 def not_installed() -> messages.Message:
@@ -115,6 +118,61 @@ class StoreLoader(ProgramLoader if AVAILABLE else object):
         return cached
 
 
+def adopted_owners(store, stack: list[str]) -> list[str]:
+    """Whose authority the programs on the stack hold, outermost program first. A program that adopts
+    (USRPRF *OWNER) adds its owner. USEADPAUT(*YES) lets it keep what the program that called it held,
+    USEADPAUT(*NO) cuts that off (IBM, "Adopted Authority"). The user's own authority is never lost."""
+    held: list[str] = []
+    for key in stack:
+        lib, _, name = key.partition("/")
+        prog = store.objects.get((lib, name, "*PGM"))
+        if prog is None:
+            continue
+        if prog.data.get("useadpaut", "*YES") != "*YES":
+            held = []
+        if prog.data.get("usrprf", "*USER") == "*OWNER":
+            held = held + [prog.owner]
+    return held
+
+
+def make_qcmdexc(store, actor, session, loader):
+    """What CALL 'QCMDEXC' does here: the CL string goes to Silverlake's own command dispatcher, in this
+    process, as the profile the stack holds right now. It never reaches a shell. Parameters are the
+    command string and its length, and only that many characters are read (a short length cuts the
+    command, as on a real system)."""
+    from ..cl import commands                                   # imported late: commands imports this module
+
+    def hook(args: list) -> None:
+        text = str(args[0]) if args else ""
+        if len(args) > 1:
+            try:
+                text = text[:max(0, int(float(args[1])))]
+            except (TypeError, ValueError):
+                pass
+        line = text.strip()
+        owners = adopted_owners(store, loader.active)
+        who = store.adopting(actor, owners)
+        now = datetime.now()
+        if who is not actor:
+            session.joblog.append((now, "message", f"Program {loader.active[-1]} running with the authority of "
+                                                   f"{', '.join(who.adopted)} (adopted)."))
+        outcome = commands.execute(store, who, line, session)
+        session.joblog.append((now, "command", f"QCMDEXC: {line}"))
+        if outcome.message and outcome.message.text:
+            session.joblog.append((now, "message", outcome.message.text))
+        if outcome.view or outcome.go or outcome.cmdentry or outcome.signoff:
+            raise CallError(f"Command {line.split('(')[0].split()[0] if line else ''} needs a screen and cannot run "
+                            "from a program here.")
+        if outcome.message and (outcome.message.id or any(w in outcome.message.text.lower() for w in _FAILED)):
+            said = outcome.message.text
+            if "parenthesis not found" in said:        # QCMDEXC's own wording, captured on PUB400
+                said = "A matching parenthesis not found."
+                session.joblog.append((now, "message", said))
+            raise CallError(said)
+
+    return hook
+
+
 def start(store, actor, obj, session) -> tuple[Run | None, messages.Message | None]:
     """Begin a program. Returns the run (which may already be finished) or the reason it cannot start."""
     if not AVAILABLE:
@@ -128,7 +186,8 @@ def start(store, actor, obj, session) -> tuple[Run | None, messages.Message | No
         return None, messages.info(f"Program {obj.name} did not load: {exc}")
     loader = StoreLoader(store, actor, session.search_order())
     loader.main_name = f"{obj.library}/{obj.name}"
-    gen = run_program(prog, dds, None, None, loader, None, max_steps=MAX_STEPS)
+    gen = run_program(prog, dds, None, None, loader, None, max_steps=MAX_STEPS,
+                      system_programs={"QCMDEXC": make_qcmdexc(store, actor, session, loader)})
     return Run(obj, gen).start(), None
 
 
