@@ -8,7 +8,7 @@ are named in IGNORED so a copied command from a real system still runs."""
 import fnmatch
 from dataclasses import dataclass
 
-from ..system import admin, autls, jobctl, messages, msgq, objects, objlist, rpg, source, spool
+from ..system import admin, autls, jobctl, messages, msgq, objects, objlist, overrides, rpg, source, spool
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -196,6 +196,10 @@ def _crt_dds_params(first_default: str) -> list[Param]:
             Param("FLAG", "ignored", "0"), Param("TEXT", "text", "*SRCMBRTXT")]
 
 
+OVRDBF_PARAMS = [Param("FILE", "name", "", required=True), Param("TOFILE", "qname*", "*FILE"),
+                 Param("MBR", "name*", "*FILE"), Param("OVRSCOPE", "name*", "*ACTGRPDFN"), Param("SECURE", "yesno", "*NO")]
+DLTOVR_PARAMS = [Param("FILE", "name*", "", required=True), Param("LVL", "ignored", "*")]
+
 STRPDM_PARAMS: list[Param] = []
 WRKMBRPDM_PARAMS = [Param("FILE", "qname", "QRPGLESRC"), Param("MBR", "wrkname", "*ALL")]
 WRKOBJPDM_PARAMS = [Param("LIB", "name*", "*CURLIB"), Param("OBJ", "wrkname", "*ALL")]
@@ -208,6 +212,7 @@ DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU
                    "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ")}
 
 COMMANDS = {
+    "OVRDBF": OVRDBF_PARAMS, "DLTOVR": DLTOVR_PARAMS,
     "STRPDM": STRPDM_PARAMS, "WRKMBRPDM": WRKMBRPDM_PARAMS, "WRKOBJPDM": WRKOBJPDM_PARAMS, "STRSEU": STRSEU_PARAMS,
     "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTPF": CRTPF_PARAMS,
     "CRTDSPF": CRTDSPF_PARAMS, "CRTPRTF": CRTPRTF_PARAMS,
@@ -775,6 +780,14 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "EDTOBJAUT":
         obj, err = objlist.edit_authority(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
         return Outcome(err) if err else Outcome(view=("edtobjaut", obj))
+    if name == "OVRDBF":
+        if b["OVRSCOPE"] not in ("*ACTGRPDFN", "*CALLLVL", "*JOB"):
+            return Outcome(messages.syntax("Value for parameter OVRSCOPE not valid. Use *ACTGRPDFN, *CALLLVL or *JOB."))
+        overrides.apply(session, b["FILE"], b["TOFILE"].upper(), b["SECURE"])
+        return Outcome()
+    if name == "DLTOVR":
+        overrides.delete(session, b["FILE"])
+        return Outcome()
     if name == "STRPDM":
         return Outcome(view=("strpdm",))
     if name == "WRKMBRPDM":

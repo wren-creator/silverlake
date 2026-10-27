@@ -24,6 +24,7 @@ from datetime import datetime
 
 from . import messages, spool as spoolmod
 from .authority import USE, Auth, SecuredObject, SpecialAuthority
+from . import objects
 from .objects import NAME, Done, _no, _ok, authority_to_library, locate
 from .profiles import Profile, ProfileStore
 
@@ -151,6 +152,7 @@ def create_source_file(store: ProfileStore, actor: Profile, session, spec: str, 
     obj = SecuredObject(name, actor.name, public=_create_authority(store, lib_name), library=lib_name, type="*FILE",
                         text=text, data={"attr": SRC_ATTR, "rcdlen": rcdlen, "members": {},
                                          "created": datetime.now().isoformat(timespec="seconds")})
+    objects.tag_temp(obj, session)
     store.objects[obj.key] = obj
     if mbr not in ("*NONE", ""):
         put_member(store, obj, mbr.upper(), [], text="")
@@ -206,6 +208,7 @@ def _place(store: ProfileStore, actor: Profile, session, lib_name: str, name: st
     obj = SecuredObject(name, actor.name, public=old.public if old else _create_authority(store, lib_name),
                         library=lib_name, type=typ, text=text, data=data,
                         private=dict(old.private) if old else {}, autl=old.autl if old else None)
+    objects.tag_temp(obj, session)
     store.objects[obj.key] = obj
     store.on_change()
     return obj, None

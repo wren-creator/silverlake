@@ -64,6 +64,26 @@ def authority_to_library(store: ProfileStore, actor: Profile, lib: SecuredObject
 
 # -- finding objects ---------------------------------------------------------------------
 
+def tag_temp(obj: SecuredObject, session) -> None:
+    """Whatever is made in QTEMP belongs to the job that made it."""
+    if obj.library == "QTEMP":
+        obj.data["job"] = session.job.qualified if session.job is not None else None
+
+
+def visible(obj: SecuredObject | None, search) -> bool:
+    """An object in QTEMP is only there for its own job."""
+    if obj is None or obj.library != "QTEMP":
+        return obj is not None
+    return obj.data.get("job") == getattr(search, "job", None)
+
+
+def drop_temp(store: ProfileStore, job: str | None) -> None:
+    """QTEMP goes away with the job."""
+    for key in [k for k, o in store.objects.items() if o.library == "QTEMP" and o.data.get("job") == job]:
+        del store.objects[key]
+
+
+
 def locate(store: ProfileStore, actor: Profile, qualified: str, typ: str,
            search: list[str]) -> tuple[SecuredObject | None, messages.Message | None]:
     """Resolve `LIB/NAME` or an unqualified name against the library list, then
@@ -75,7 +95,7 @@ def locate(store: ProfileStore, actor: Profile, qualified: str, typ: str,
     if typ == "*LIB":
         lib_name = "QSYS"
     if lib_name in ("*LIBL", None):
-        found = next((lib for lib in search if (lib, name, typ) in store.objects), None)
+        found = next((lib for lib in search if visible(store.objects.get((lib, name, typ)), search)), None)
         if found is None:
             return None, messages.object_not_found(name, "*LIBL", typ)
         lib_name = found
@@ -88,7 +108,7 @@ def locate(store: ProfileStore, actor: Profile, qualified: str, typ: str,
         if Auth.EXECUTE not in authority_to_library(store, actor, lib):
             return None, messages.not_authorized_to_use_library(lib_name)
     obj = store.objects.get((lib_name, name, typ))
-    if obj is None:
+    if not visible(obj, search):
         return None, messages.object_not_found(name, lib_name, typ)
     return obj, None
 

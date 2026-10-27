@@ -1,0 +1,10 @@
+     A* STAFF.PF -- the staff directory. Same layout as PAYROLL, which is how it got
+     A* copied; the SALARY column is kept at zero here.
+
+     A                                      UNIQUE
+     A          R PAYREC
+     A            EMPNO          5S 0
+     A            NAME          20
+     A            DEPT           4
+     A            SALARY         7S 0
+     A          K EMPNO

@@ -4,7 +4,8 @@ The default list follows a real IBM i (DSPLIBL on PUB400): QSYS, QSYS2, QUSRSYS
 and QHLPSYS in the system portion, then the current library, then QGPL and QTEMP
 in the user portion. A real list is built from system values we do not model, and
 a real site adds its own libraries. QTEMP is one library per job on a real
-system and one shared library here."""
+system. Here the library is shared but each object in it is tagged with the job that made it and only
+that job can see it (`system.objects.in_temp`)."""
 
 from dataclasses import dataclass, field
 
@@ -12,6 +13,14 @@ SYSTEM_PORTION = ("QSYS", "QSYS2", "QUSRSYS", "QHLPSYS")
 DEFAULT_USER_PORTION = ("QGPL", "QTEMP")
 MAX_USER_ENTRIES = 250       # IBM: "A maximum of 250 libraries"
 MAX_MENUS = 10               # IBM: "Each menu stack is ten elements (menus) deep"
+
+
+class SearchList(list):
+    """The library names in search order, carrying whose job asked. QTEMP is one library per job on a real
+    system, so an object in it is only there for the job that made it, and whoever looks it up needs to
+    say which job they are."""
+
+    job: str | None = None
 
 
 @dataclass
@@ -26,6 +35,7 @@ class Session:
     history: list[str] = field(default_factory=list)   # command entry, newest last
     joblog: list = field(default_factory=list)   # (time, "command" or "message", text), for the job log
     job: object | None = None           # this session's row in the job table
+    overrides: dict = field(default_factory=dict)   # OVRDBF: file name -> {"to": "LIB/NAME", "secure": bool}
 
     @classmethod
     def for_profile(cls, current_library: str) -> "Session":
@@ -41,8 +51,10 @@ class Session:
             out.append((self.current_library, "CUR"))
         return out + [(lib, "USR") for lib in self.user_libs]
 
-    def search_order(self) -> list[str]:
-        return [lib for lib, _ in self.entries()]
+    def search_order(self) -> SearchList:
+        found = SearchList(lib for lib, _ in self.entries())
+        found.job = self.job.qualified if self.job is not None else None
+        return found
 
     def push_menu(self, key: tuple[str, str], return_point: bool, origin: str = "menu") -> None:
         """GO. With RTNPNT(*YES) the display GO was typed on ("menu" or "cmdentry") becomes

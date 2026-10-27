@@ -165,6 +165,8 @@ class SignonController:
         self._release_widgets()                    # and so does an editor, which holds its member
         if self.profile is not None:
             self.store.sign_off(self.profile)
+            if self.session.job is not None:
+                objects.drop_temp(self.store, self.session.job.qualified)      # QTEMP goes with the job
             spool.write_joblog(self.store, self.session.job, self.session.joblog)
             self.store.jobs.end(self.session.job)
         self.profile = None

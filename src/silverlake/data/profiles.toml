@@ -337,6 +337,90 @@ source_file = "payadj.rpgle"
 
 [[object]]
 library = "APPLIB"
+name = "STAFF"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*USE"
+text = "Staff directory. Same layout as PAYROLL, salary kept at zero."
+[object.data]
+attr = "PF"
+dds_file = "staff.pf"
+records = [
+  { EMPNO = 10001, NAME = "Alvarez, Marta", DEPT = "ENG", SALARY = 0 },
+  { EMPNO = 10002, NAME = "Bishop, Tom", DEPT = "ENG", SALARY = 0 },
+  { EMPNO = 10003, NAME = "Chen, Priya", DEPT = "OPS", SALARY = 0 },
+  { EMPNO = 10004, NAME = "Dunn, Kevin", DEPT = "OPS", SALARY = 0 },
+  { EMPNO = 10005, NAME = "Ellis, Rosa", DEPT = "HR", SALARY = 0 },
+  { EMPNO = 10006, NAME = "Ford, Gil", DEPT = "EXEC", SALARY = 0 },
+]
+
+[[object]]
+library = "APPLIB"
+name = "EMPDIR"
+type = "*PGM"
+owner = "OPERATOR"
+public = "*USE"
+text = "Staff directory. Adopts OPERATOR and opens STAFF by name."
+[object.data]
+attr = "RPGLE"
+usrprf = "*OWNER"
+useadpaut = "*NO"
+source_file = "empdir.rpgle"
+
+[[object]]
+library = "APPLIB"
+name = "EMPDIRX"
+type = "*PGM"
+owner = "QDFTOWN"
+public = "*USE"
+text = "Staff directory, fixed: owned by a profile with no authority to PAYROLL."
+[object.data]
+attr = "RPGLE"
+usrprf = "*OWNER"
+useadpaut = "*NO"
+source_file = "empdirx.rpgle"
+
+[[object]]
+library = "APPLIB"
+name = "PAYCALC"
+type = "*PGM"
+owner = "QSECOFR"
+public = "*USE"
+text = "Pay period arithmetic, called by PAYRUN."
+[object.data]
+attr = "RPGLE"
+usrprf = "*USER"
+useadpaut = "*YES"
+source_file = "paycalc.rpgle"
+
+[[object]]
+library = "APPLIB"
+name = "PAYRUN"
+type = "*PGM"
+owner = "SECADMIN"
+public = "*USE"
+text = "Pay run. Adopts SECADMIN, who holds *ALL on PAYROLL, and calls PAYCALC by name alone."
+[object.data]
+attr = "RPGLE"
+usrprf = "*OWNER"
+useadpaut = "*NO"
+source_file = "payrun.rpgle"
+
+[[object]]
+library = "APPLIB"
+name = "PAYRUNX"
+type = "*PGM"
+owner = "SECADMIN"
+public = "*USE"
+text = "Pay run, fixed: calls APPLIB/PAYCALC."
+[object.data]
+attr = "RPGLE"
+usrprf = "*OWNER"
+useadpaut = "*NO"
+source_file = "payrunx.rpgle"
+
+[[object]]
+library = "APPLIB"
 name = "PAYOUTQ"
 type = "*OUTQ"
 owner = "SECADMIN"

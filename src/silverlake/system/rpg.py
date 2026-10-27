@@ -20,7 +20,7 @@ from typing import Any
 
 from ..proto import datastream as ds
 from ..screens.model import COLS, ROWS, Input, Screen, Text
-from . import messages, spool as spoolmod
+from . import messages, overrides, spool as spoolmod
 from .authority import USE, Auth
 
 try:
@@ -122,9 +122,12 @@ class Files:
             if device not in ("DISK", "PRINTER"):
                 continue
             name = fs.name.upper()
-            obj, err = objects.locate(self.store, who, name, "*FILE", self.session.search_order())
+            opened = name if device == "PRINTER" else overrides.target(self.session, name)
+            obj, err = objects.locate(self.store, who, opened, "*FILE", self.session.search_order())
             if err:
                 raise RpgleError(err.text)
+            if opened != name:
+                self.session.joblog.append((datetime.now(), "message", f"File {name} overridden to {obj.library}/{obj.name}."))
             if device == "PRINTER":
                 self._attach_printer(who, obj)
                 continue
