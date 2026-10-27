@@ -29,7 +29,7 @@ from .model import Input, Screen, Text
 from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, wrklib_screen
 from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
                         WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
-from . import jobextra
+from . import jobextra, pdm
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
 
 SYSTEM_NAME = "SILVERLK"
@@ -162,6 +162,7 @@ class SignonController:
     def _sign_off(self) -> None:
         if self.view and self.view[0] == "rpgview":
             self.view[1].close()                   # a program on the screen goes with the session
+        self._release_widgets()                    # and so does an editor, which holds its member
         if self.profile is not None:
             self.store.sign_off(self.profile)
             spool.write_joblog(self.store, self.session.job, self.session.joblog)
@@ -313,6 +314,12 @@ class SignonController:
             self._sign_off()
             return signon_screen(self.display)
         if outcome.view:
+            if outcome.view[0] == "strseu":                 # opening the editor can be refused (in use, no authority)
+                ed, why = pdm.Editor.open(self._ctx(), outcome.view[1], outcome.view[2], browse=outcome.view[3],
+                                          new=True, type_=outcome.view[4])
+                if why:
+                    return self._base(why)
+                outcome.view = ("strseu", ed)
             self.view = self._open_view(outcome.view)
             return self._draw_view()
         if outcome.go:
@@ -364,6 +371,12 @@ class SignonController:
             return ("jobpageview", spec[1], spec[2])
         if kind == "rpgrun":
             return ("rpgview", spec[1])
+        if kind == "strpdm":
+            return ("widget", pdm.PdmMenu(self._ctx()))
+        if kind == "wrkmbrpdm":
+            return ("widget", pdm.MemberList(self._ctx(), spec[1], spec[2]))
+        if kind == "strseu":
+            return ("widget", spec[1])
         if kind == "dsppgm":
             return _plist([0, 1], lambda rows, page: dsppgm_screen(spec[1], page), 1)
         if kind == "wrkactjob":
@@ -397,6 +410,8 @@ class SignonController:
             return dspobjd_screen(obj, detail, SYSTEM_NAME, page)
         if self.view[0] == "rpgview":
             return rpg.to_screen(self.view[1].data, message)
+        if self.view[0] == "widget":
+            return self.view[1].screen(message)
         if self.view[0] == "spoolview":
             return dspsplf_screen(self.view[1], self.view[2], message)
         if self.view[0] == "joblogview":
@@ -465,6 +480,8 @@ class SignonController:
             return self._in_add(aid, values)
         if kind == "rpgview":
             return self._in_rpg(aid, values)
+        if kind == "widget":
+            return self._in_widget(aid, values)
         if kind == "spoolview":
             return self._in_spoolview(aid)
         if kind == "splprompt":
@@ -789,6 +806,39 @@ class SignonController:
             self.parents.clear()
             return self._apply(outcome, line)
         return self._draw_view(outcome.message.text if outcome.message else "")
+
+    def _ctx(self) -> "pdm.Context":
+        return pdm.Context(self.store, self.profile, self.session, self._exec)
+
+    def _exec(self, line: str) -> "commands.Outcome":
+        """Run a command for a widget: logged like the command line does, and nothing drawn."""
+        outcome = commands.execute(self.store, self.profile, line, self.session)
+        self._log(line, outcome)
+        return outcome
+
+    def _release_widgets(self) -> None:
+        for view in [self.view, *self.parents]:
+            if view and view[0] == "widget" and hasattr(view[1], "release"):
+                view[1].release()
+
+    def _in_widget(self, aid: str, values: dict[str, str]) -> Screen:
+        """PDM and the editor answer keys themselves and say where to go next."""
+        step = self.view[1].handle(aid, values)
+        if step.go == "open":
+            self.parents.append(self.view)
+            self.view = ("widget", step.widget)
+            return self._draw_view(step.message)
+        if step.go == "menu":
+            self._release_widgets()
+            self.view = None
+            self.parents.clear()
+            return self._base(step.message)
+        if step.go == "back":
+            self.view = self.parents.pop() if self.parents else None
+            if self.view is not None:
+                return self._draw_view(step.message)
+            return self._base(step.message)
+        return self._draw_view(step.message)
 
     def _in_rpg(self, aid: str, values: dict[str, str]) -> Screen:
         """A running RPG program owns the screen. Enter and any function key its display file names go to

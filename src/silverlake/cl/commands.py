@@ -196,6 +196,11 @@ def _crt_dds_params(first_default: str) -> list[Param]:
             Param("FLAG", "ignored", "0"), Param("TEXT", "text", "*SRCMBRTXT")]
 
 
+STRPDM_PARAMS: list[Param] = []
+WRKMBRPDM_PARAMS = [Param("FILE", "qname", "QRPGLESRC"), Param("MBR", "wrkname", "*ALL")]
+WRKOBJPDM_PARAMS = [Param("LIB", "name*", "*CURLIB"), Param("OBJ", "wrkname", "*ALL")]
+STRSEU_PARAMS = [Param("SRCFILE", "qname", "QTXTSRC"), Param("SRCMBR", "name", "", required=True),
+                 Param("TYPE", "name*", "*SAME"), Param("OPTION", "number", "2")]
 CRTPF_PARAMS = _crt_dds_params("QDDSSRC")
 CRTDSPF_PARAMS = _crt_dds_params("QDDSSRC")
 CRTPRTF_PARAMS = _crt_dds_params("QDDSSRC")
@@ -203,6 +208,7 @@ DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU
                    "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ")}
 
 COMMANDS = {
+    "STRPDM": STRPDM_PARAMS, "WRKMBRPDM": WRKMBRPDM_PARAMS, "WRKOBJPDM": WRKOBJPDM_PARAMS, "STRSEU": STRSEU_PARAMS,
     "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTPF": CRTPF_PARAMS,
     "CRTDSPF": CRTDSPF_PARAMS, "CRTPRTF": CRTPRTF_PARAMS,
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
@@ -769,6 +775,22 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "EDTOBJAUT":
         obj, err = objlist.edit_authority(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
         return Outcome(err) if err else Outcome(view=("edtobjaut", obj))
+    if name == "STRPDM":
+        return Outcome(view=("strpdm",))
+    if name == "WRKMBRPDM":
+        f, err = source.find_file(store, actor, session, b["FILE"])
+        return Outcome(err) if err else Outcome(view=("wrkmbrpdm", f, b["MBR"]))
+    if name == "WRKOBJPDM":
+        lib = b["LIB"] if b["LIB"] != "*CURLIB" else (session.current_library or "QGPL")
+        return execute(store, actor, f"WRKOBJ OBJ({lib}/{b['OBJ']})", session)
+    if name == "STRSEU":
+        f, err = source.find_file(store, actor, session, b["SRCFILE"], seu=True)
+        if err:
+            return Outcome(err)
+        if b["OPTION"] not in (2, 5):
+            return Outcome(messages.syntax("Value for parameter OPTION not valid. Use 2 (edit) or 5 (browse)."))
+        mbr = b["SRCMBR"].upper()
+        return Outcome(view=("strseu", f, mbr, b["OPTION"] == 5, b["TYPE"] if b["TYPE"] != "*SAME" else ""))
     if name == "CRTSRCPF":
         return Outcome(source.create_source_file(store, actor, session, b["FILE"], b["RCDLEN"], b["MBR"],
                                                  b["TEXT"]).message)

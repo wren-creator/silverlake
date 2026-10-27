@@ -86,6 +86,7 @@ class ProfileStore:
         self.spool: list = list(spool or [])      # SpoolFile rows, kept in the state file
         self.jobs = JobTable()                    # live jobs, in memory only
         self.on_change = lambda: None             # persistence hook, set by the state layer
+        self.member_locks: dict[tuple, str] = {}  # (library, file, member) -> job, while an editor has it open; memory only
         self.bad_signons: dict[str, int] = {}     # consecutive bad passwords per profile, memory only
         self.today = lambda: date.today()         # a test swaps this to move the clock
 

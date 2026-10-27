@@ -52,10 +52,10 @@ def _allobj(store: ProfileStore, actor: Profile) -> bool:
 
 # -- finding source ----------------------------------------------------------------------------------
 
-def find_file(store: ProfileStore, actor: Profile, session, spec: str, need: Auth = USE):
+def find_file(store: ProfileStore, actor: Profile, session, spec: str, need: Auth = USE, seu: bool = False):
     """A source file by `LIB/FILE` or `FILE` through the library list, with what PDM and SEU say when it
-    cannot be had (captured: "Library NOSUCH was not found." and "You do not have authority to file
-    QCLSRC in QGPL."). Returns (file, None) or (None, message)."""
+    cannot be had (captured: "Library NOSUCH was not found." from PDM and "Library NOSUCH not found." from
+    SEU, and "You do not have authority to file QCLSRC in QGPL."). Returns (file, None) or (None, message)."""
     name = spec.split("/")[-1].upper()
     lib = spec.split("/")[0].upper() if "/" in spec else "*LIBL"
     if lib in ("*LIBL", "*CURLIB"):
@@ -68,7 +68,7 @@ def find_file(store: ProfileStore, actor: Profile, session, spec: str, need: Aut
         lib = found
     libobj = store.find_library(lib)
     if libobj is None:
-        return None, messages.info(f"Library {lib} was not found.")
+        return None, messages.info(f"Library {lib} not found." if seu else f"Library {lib} was not found.")
     obj = store.objects.get((lib, name, "*FILE"))
     if obj is None:
         return None, messages.info(f"File {name} not found in library {lib}.")
@@ -77,6 +77,13 @@ def find_file(store: ProfileStore, actor: Profile, session, spec: str, need: Aut
     if not is_source(obj):
         return None, messages.info(f"File {name} in library {lib} is not a source file.")
     return obj, None
+
+
+WRITE = Auth.OBJOPR | Auth.READ | Auth.ADD | Auth.UPD | Auth.DLT
+
+
+def can_write(store: ProfileStore, actor: Profile, obj: SecuredObject) -> bool:
+    return _allobj(store, actor) or not (WRITE & ~store.authority_to_object(actor, obj))
 
 
 def member(obj: SecuredObject, name: str) -> dict | None:
