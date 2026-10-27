@@ -11,6 +11,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from .commandobjs import ensure_commands
 from .authority import AuthList, SecuredObject, SpecialAuthority, UserClass, name_auth, parse_auth
 from .profiles import DEFAULT_SEED, Profile, ProfileStore, System, load
 
@@ -33,7 +34,7 @@ def to_dict(store: ProfileStore) -> dict:
             "private_authority": {k: name_auth(v) for k, v in p.private_authority.items()},
         } for p in store.profiles.values()],
         "objects": [{
-            "library": o.library, "name": o.name, "type": o.type, "text": o.text,
+            "library": o.library, "name": o.name, "type": o.type, "text": o.text, "data": o.data,
             "owner": o.owner, "owner_auth": name_auth(o.owner_auth),
             "private": {k: name_auth(v) for k, v in o.private.items()},
             "public": "*AUTL" if o.public is None else name_auth(o.public), "autl": o.autl,
@@ -55,13 +56,16 @@ def from_dict(data: dict) -> ProfileStore:
         private_authority={k: parse_auth(v) for k, v in p["private_authority"].items()},
     ) for p in data["profiles"]]
     objects = [SecuredObject(
-        library=o["library"], name=o["name"], type=o["type"], text=o["text"], owner=o["owner"], owner_auth=parse_auth(o["owner_auth"]),
+        library=o["library"], name=o["name"], type=o["type"], text=o["text"], data=o.get("data", {}),
+        owner=o["owner"], owner_auth=parse_auth(o["owner_auth"]),
         private={k: parse_auth(v) for k, v in o["private"].items()},
         public=None if o["public"] == "*AUTL" else parse_auth(o["public"]), autl=o["autl"],
     ) for o in data["objects"]]
     autls = [AuthList(a["name"], {k: parse_auth(v) for k, v in a["entries"].items()}, parse_auth(a["public"]))
              for a in data["autls"]]
-    return ProfileStore(System(**data["system"]), profiles, objects, autls)
+    store = ProfileStore(System(**data["system"]), profiles, objects, autls)
+    ensure_commands(store)      # a state saved before a command existed gets its object now
+    return store
 
 
 SCHEMA = """
@@ -69,7 +73,7 @@ CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS objects (
     library TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL,
     owner TEXT NOT NULL, owner_auth TEXT NOT NULL, public TEXT NOT NULL,
-    autl TEXT, text TEXT NOT NULL DEFAULT '',
+    autl TEXT, text TEXT NOT NULL DEFAULT '', data TEXT NOT NULL DEFAULT '{}',
     PRIMARY KEY (library, name, type));
 CREATE TABLE IF NOT EXISTS object_auth (
     library TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL,
@@ -86,6 +90,8 @@ class StateDB:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.executescript(SCHEMA)
+        if "data" not in {r[1] for r in self.db.execute("PRAGMA table_info(objects)")}:
+            self.db.execute("ALTER TABLE objects ADD COLUMN data TEXT NOT NULL DEFAULT '{}'")   # older state file
         self.db.commit()
 
     def read(self) -> dict | None:
@@ -98,10 +104,11 @@ class StateDB:
         for lib, name, typ, who, auth in q("SELECT library, name, type, grantee, auth FROM object_auth"):
             private.setdefault((lib, name, typ), {})[who] = auth
         data["objects"] = [
-            {"library": lib, "name": name, "type": typ, "text": text, "owner": owner, "owner_auth": oa,
-             "private": private.get((lib, name, typ), {}), "public": pub, "autl": autl}
-            for lib, name, typ, owner, oa, pub, autl, text in q(
-                "SELECT library, name, type, owner, owner_auth, public, autl, text FROM objects "
+            {"library": lib, "name": name, "type": typ, "text": text, "data": json.loads(data),
+             "owner": owner, "owner_auth": oa, "private": private.get((lib, name, typ), {}),
+             "public": pub, "autl": autl}
+            for lib, name, typ, owner, oa, pub, autl, text, data in q(
+                "SELECT library, name, type, owner, owner_auth, public, autl, text, data FROM objects "
                 "ORDER BY library, name, type")]
         entries: dict[str, dict] = {}
         for autl, who, auth in q("SELECT autl, grantee, auth FROM autl_entries"):
@@ -118,9 +125,9 @@ class StateDB:
             for table in ("objects", "object_auth", "autls", "autl_entries"):
                 self.db.execute(f"DELETE FROM {table}")
             for o in d["objects"]:
-                self.db.execute("INSERT INTO objects VALUES (?,?,?,?,?,?,?,?)",
+                self.db.execute("INSERT INTO objects VALUES (?,?,?,?,?,?,?,?,?)",
                                 (o["library"], o["name"], o["type"], o["owner"], o["owner_auth"],
-                                 o["public"], o["autl"], o["text"]))
+                                 o["public"], o["autl"], o["text"], json.dumps(o["data"])))
                 self.db.executemany("INSERT INTO object_auth VALUES (?,?,?,?,?)",
                                     [(o["library"], o["name"], o["type"], k, v) for k, v in o["private"].items()])
             for a in d["autls"]:

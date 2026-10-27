@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import messages
+from .commandobjs import ensure_commands
 from .authority import (ALL, CHANGE, EXCLUDE, QSECURITY_LEVELS, Auth, AuthList, SecuredObject, SpecialAuthority,
                         UserClass, can_grant, class_authorities, name_auth, parse_auth,
                         resolve_object_authority)
@@ -261,7 +262,7 @@ def load(path: Path | str | None = None) -> ProfileStore:
         objects.append(SecuredObject(
             name=o["name"].upper(), owner=o["owner"].upper(),
             library=o.get("library", "QSYS").upper(), type=o.get("type", "*LIB").upper(),
-            text=o.get("text", ""),
+            text=o.get("text", ""), data=dict(o.get("data", {})),
             owner_auth=parse_auth(o.get("owner_auth", "*ALL")),
             private={k.upper(): parse_auth(v) for k, v in o.get("private", {}).items()},
             public=None if public == "*AUTL" else parse_auth(public),
@@ -285,7 +286,9 @@ def load(path: Path | str | None = None) -> ProfileStore:
             raise SeedError(f"object {o.library}/{o.name}: authorization list {o.autl} does not exist")
         if o.public is None and not o.autl:
             raise SeedError(f"object {o.library}/{o.name}: public *AUTL needs an authorization list")
-    return ProfileStore(system, profiles, objects, autls)
+    store = ProfileStore(system, profiles, objects, autls)
+    ensure_commands(store)
+    return store
 
 
 def _enum_status(value: str, who: str) -> str:

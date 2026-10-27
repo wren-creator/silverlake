@@ -7,6 +7,7 @@ VERIFIED = "seen on a real IBM i"
 RECALLED = "from the earlier web3270 mock, not yet confirmed on a real system"
 DOCUMENTED = "listed in IBM's command reference; which condition raises it is inferred"
 NO_ID = "no message ID checked; the wording is ours"
+VERIFIED_TEXT = "wording seen on a real IBM i; the ID is not shown on the message line, so none is recorded"
 
 
 @dataclass(frozen=True)
@@ -185,6 +186,12 @@ def autl_not_found(name: str) -> Message:
 
 def authority_not_changed(obj: str, lib: str, typ: str, user: str) -> Message:
     return _doc("CPF2273", f"Authority may not have been changed for object {obj} in {lib} type {typ} for user {user}.")
+
+
+def not_authorized_to_command(cmd: str, lib: str = "*LIBL") -> Message:
+    """Seen on a real system when a basic profile ran CRTLIB. The message line shows
+    the text only, so the ID is unknown."""
+    return Message("", f"Not authorized to command {cmd} in library {lib}.", VERIFIED_TEXT)
 
 
 # Command line problems. No ID checked for these yet.

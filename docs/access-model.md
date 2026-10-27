@@ -42,6 +42,21 @@ Accepted but not modeled: `ASTLVL`. The rules come from the IBM i 7.5 command re
 
 Changes are saved to `state/silverlake.sqlite` and survive a restart. `./reset.sh` deletes the state directory, and the next start reads the seed again. The saved state holds profile passwords as typed. That is deliberate for a training range with weak credentials, and the reason this must never hold anything real.
 
+## Commands are objects
+
+Every command is a `*CMD` object in QSYS with an owner and a public authority, and running a command takes `*USE` to that object before its parameters are even looked at. That is how a real site decides who may run `CRTLIB` or `CRTUSRPRF`: it changes one object. A basic profile on PUB400 was refused `CRTLIB` this way, with the wording `Not authorized to command CRTLIB in library *LIBL.` (the message line shows no ID, so Silverlake records none).
+
+The seed is permissive: every command is `*PUBLIC *USE`. Close one off with the commands you already have:
+
+```
+RVKOBJAUT OBJ(QSYS/CRTLIB) OBJTYPE(*CMD) USER(*PUBLIC) AUT(*USE)     # nobody ordinary can create libraries
+GRTOBJAUT OBJ(QSYS/CRTLIB) OBJTYPE(*CMD) USER(DEVELOPER) AUT(*USE)  # except this one
+```
+
+The usual rules apply: `*ALLOBJ` always gets through, a private `*EXCLUDE` beats public `*USE`, groups combine, and the library holding the commands (QSYS) is itself a gate, so revoking the public's `*USE` on QSYS stops every ordinary user from running anything. `DSPOBJAUT OBJ(QSYS/CRTLIB) OBJTYPE(*CMD)` shows the setting.
+
+That a command needs `*USE` is IBM i behavior, but I did not read it on a command page. The refusal wording was seen on a real system. New commands get their object automatically, and a state file saved before a command existed gets one on the next start. After upgrading an old checkout, run `./reset.sh` to pick up new seed objects (an existing state file keeps its old ones).
+
 ## Libraries and object authority from the command line
 
 | Command | What it does here |
@@ -54,7 +69,7 @@ Changes are saved to `state/silverlake.sqlite` and survive a restart. `./reset.s
 | `GRTOBJAUT OBJ(LIB/NAME) OBJTYPE(*LIB) USER(A B *PUBLIC) AUT(...)` | The owner, someone with `*OBJMGT`, or `*ALLOBJ`. Only the owner or `*ALLOBJ` may give `*OBJMGT`. `REPLACE(*NO)` adds to what is there, `*YES` sets it exactly, `*EXCLUDE` always replaces. `AUTL(name)` needs ownership or `*ALL`. |
 | `RVKOBJAUT OBJ(LIB/NAME) OBJTYPE(*FILE) USER(A *ALL *PUBLIC) AUT(...)` | Removes only the named authorities. A user left with nothing loses the entry altogether and falls through to groups and `*PUBLIC`, which is not the same as holding `*EXCLUDE`. |
 
-Only `*LIB` and `*FILE` exist as object types so far, `OBJ` takes one explicit name (no generic names or `*ALL`), `OBJ(NAME)` is found through your library list, and `REFOBJ`, `OUTPUT(*PRINT)` and `OUTFILE` are not modeled. Use `LIB/NAME`, or `OBJ(NAME) OBJTYPE(*LIB)` for a library, which always lives in QSYS.
+Object types so far are `*LIB`, `*FILE`, `*CMD`, `*MENU` and `*PGM`, `OBJ` takes one explicit name (no generic names or `*ALL`), `OBJ(NAME)` is found through your library list, and `REFOBJ`, `OUTPUT(*PRINT)` and `OUTFILE` are not modeled. Use `LIB/NAME`, or `OBJ(NAME) OBJTYPE(*LIB)` for a library, which always lives in QSYS.
 
 Two things to try:
 
@@ -212,4 +227,4 @@ Said plainly, so nobody assumes otherwise:
 - Limited capabilities enforcement, expired passwords and forced change, failed-attempt lockout (`MAXSIGN`), and the `QMAXSIGN` warnings.
 - Adopted authority, and the exceptions to `*ALLOBJ`.
 - Whether special authorities flow from a group profile. Silverlake does not pass them down.
-- Object types other than `*LIB` and `*FILE`, creating objects, generic names and `*ALL` on the object commands, `*PRINT` and `*OUTFILE` output, the `CRTAUT` and `CRTOBJAUD` library settings, and primary groups on objects.
+- Object types beyond those five, creating objects, generic names and `*ALL` on the object commands, `*PRINT` and `*OUTFILE` output, the `CRTAUT` and `CRTOBJAUD` library settings, and primary groups on objects.

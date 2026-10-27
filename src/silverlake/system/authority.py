@@ -129,6 +129,7 @@ class SecuredObject:
     library: str = "QSYS"
     type: str = "*LIB"
     text: str = ""
+    data: dict = field(default_factory=dict)   # type specific content, such as a menu's items
 
     @property
     def key(self) -> tuple[str, str, str]:

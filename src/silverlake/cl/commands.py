@@ -9,7 +9,7 @@ import fnmatch
 from dataclasses import dataclass
 
 from ..system import admin, messages, objects
-from ..system.authority import EXCLUDE, SPECIAL_VALUES, Auth, SpecialAuthority, UserClass, parse_auth
+from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
 from .session import Session
@@ -327,6 +327,10 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
     name = parsed.command
     if name not in COMMANDS:
         return Outcome(messages.syntax(f"Command {name} in library *LIBL not found."))
+    cmd = store.objects.get(("QSYS", name, "*CMD"))
+    if cmd is None or USE not in store.authority_to_object(actor, cmd):
+        # Checked before the parameters, as a real system does. Seen on PUB400.
+        return Outcome(messages.not_authorized_to_command(name))
     try:
         b = bind(store, name, parsed)
     except BindError as exc:
