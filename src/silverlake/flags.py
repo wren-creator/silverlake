@@ -14,11 +14,14 @@ kinds of lesson:
   * `state`: the win is a change (a security officer made, authority granted, a salary moved). The checker reads
     the saved state and nothing is submitted.
 
+  * `fact`: the lesson is recon, so the answer is something the trainee reads off the wire (an OS release, a
+    password level) and submits. The checker compares it with what the saved state holds now.
+
 Secure-state passwords are derived the same way (`secret:<label>` in a scenario value) so they are not in the
 repo either. `python -m silverlake.flags show` prints everything an instructor needs.
 
-A submission is lines like `runcmd-qcmdexc=done` (any text for a `state` lesson) or
-`qsysopr-recon=FLAG{0123456789ab}`. The checker reads the saved state, so it works with the server running."""
+A submission is lines like `runcmd-qcmdexc=done` (any text for a `state` lesson),
+`qsysopr-recon=FLAG{0123456789ab}` or `hostsvr-recon=V7R4M0/0` (a `fact`). The checker reads the saved state, so it works with the server running."""
 
 from __future__ import annotations
 
@@ -104,6 +107,13 @@ def _readable_copy(store):
     return False, "no readable copy of PAYROLL"
 
 
+def _release_and_pwdlevel(store) -> str:
+    from .net import hostsvr
+    return f"{hostsvr.OS_LEVEL}/{store.system.qpwdlvl}"
+
+
+FACTS = {"release_and_pwdlevel": _release_and_pwdlevel}
+
 CHECKS = {"new_privileged_profile": _new_privileged_profile, "salary_raised": _salary_raised,
           "student_reads_payroll": _student_reads_payroll, "readable_copy": _readable_copy}
 
@@ -133,6 +143,10 @@ def score(store, submission: dict[str, str], reg=None) -> list[tuple[str, bool, 
             given = submission.get(s.id, "")
             ok = bool(given) and hmac.compare_digest(given.encode(), flag(s.id).encode())
             rows.append((s.id, ok, "flag correct" if ok else f"wrong or missing (got: {given or '<none>'})"))
+        elif s.flag["kind"] == "fact":
+            given, want = submission.get(s.id, ""), FACTS[s.flag["fact"]](store)
+            ok = bool(given) and hmac.compare_digest(given.upper().encode(), want.upper().encode())
+            rows.append((s.id, ok, "answer correct" if ok else f"wrong or missing (got: {given or '<none>'})"))
         else:
             ok, detail = CHECKS[s.flag["check"]](store)
             rows.append((s.id, ok, detail))
@@ -154,8 +168,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"instance secret is in {os.environ.get('SILVERLAKE_SECRET_FILE', SECRET_FILE)}")
         return 0
     if args.cmd == "show":
+        store_for_show, db = state.open_store(os.environ.get("SILVERLAKE_PROFILES"),
+                                              os.environ.get("SILVERLAKE_STATE_DIR", "state"))
+        db.close()
         for s in lessons(reg):
-            what = flag(s.id) if s.flag["kind"] == "text" else f"state check {s.flag['check']}"
+            what = {"text": lambda: flag(s.id), "fact": lambda: FACTS[s.flag["fact"]](store_for_show)}.get(
+                s.flag["kind"], lambda: f"state check {s.flag['check']}")()
             print(f"{s.id:<26} {what:<22} {s.flag['task']}")
         print("\nsecure state passwords:")
         for label in ("QSECOFR", "SECADMIN", "OPERATOR", "DEVELOPER"):
@@ -163,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     path = Path(args.submission)
     submission = parse_submission(path.read_text()) if path.exists() else {}
-    if not path.exists() and any(s.flag["kind"] == "text" for s in lessons(reg)):
+    if not path.exists() and any(s.flag["kind"] in ("text", "fact") for s in lessons(reg)):
         print(f"no submission file {path}; only the lessons the state can prove are scored", file=sys.stderr)
     store, db = state.open_store(os.environ.get("SILVERLAKE_PROFILES"), os.environ.get("SILVERLAKE_STATE_DIR", "state"))
     try:

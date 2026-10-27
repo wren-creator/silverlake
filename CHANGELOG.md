@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Host servers, the last of the three services. The server mapper on 4449 and the sign-on server on 8476 answer a client's opening exchange before anyone has signed on, in the byte shapes a live IBM i 7.5 sent, with the release, the datastream level and the password level taken from the saved state. Lesson `hostsvr-recon` (QPWDLVL 0 is free to anyone who asks, and at level 0 case does not matter in a password; the secure state is level 3). Its flag is a new kind, `fact`: the answer (`V7R4M0/0`) is read off the wire and submitted, and the checker compares it with the state, so it changes when the level does. Phase 5f's three steps are done. Left for later: TLS ports and the real low port numbers.
+
 - Lesson `ftp-limited-bypass`. CLERK has no command line on the 5250 and a menu with no way out, but CLERK has `*USE` on `APPLIB/DAILYOPS`, and FTP only knows authority, so the clerk's own password over FTP lists and gets it (the flag). The fix registers a request exit program, recorded on `QUSRSYS/FTPEXIT`, that turns away limited capability profiles. Instructor kit gets the lesson in the answer key and the optional network session.
 
 - FTP on 127.0.0.1:2121 with the other services. Sign-on goes through the profile store (clear text, bad attempts count), `RETR` and `LIST` obey the same file authority as DSPPFM, and both naming formats work. Read only: nothing can be written, deleted or made. No lesson on it yet.

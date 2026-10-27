@@ -8,7 +8,7 @@ source ./lib.sh
 usage() {
   echo "usage: ./start.sh [-p PORT | --port PORT] [--services]"
   echo "  Listens on 127.0.0.1, default port 5250. SILVERLAKE_PORT does the same."
-  echo "  --services also starts the network services (HTTP Admin on 2001), loopback only."
+  echo "  --services also starts the network services (HTTP Admin 2001, FTP 2121, host servers 4449 and 8476), loopback only."
   echo "  SILVERLAKE_SERVICES=1 does the same, and ./scenario.sh keeps it across its restart."
 }
 
@@ -54,7 +54,7 @@ if .venv/bin/python -c "import socket; socket.create_connection(('$HOST', $PORT)
   exit 1
 fi
 if [ -n "$SERVICES" ]; then
-  for spec in "HTTP Admin:${SILVERLAKE_HTTPADMIN_PORT:-2001}:SILVERLAKE_HTTPADMIN_PORT" "FTP:${SILVERLAKE_FTP_PORT:-2121}:SILVERLAKE_FTP_PORT"; do
+  for spec in "HTTP Admin:${SILVERLAKE_HTTPADMIN_PORT:-2001}:SILVERLAKE_HTTPADMIN_PORT" "FTP:${SILVERLAKE_FTP_PORT:-2121}:SILVERLAKE_FTP_PORT" "Host server mapper:${SILVERLAKE_MAPPER_PORT:-4449}:SILVERLAKE_MAPPER_PORT" "Sign-on server:${SILVERLAKE_SIGNON_PORT:-8476}:SILVERLAKE_SIGNON_PORT"; do
     IFS=: read -r svc svc_port svc_var <<<"$spec"
     if .venv/bin/python -c "import socket; socket.create_connection(('$HOST', $svc_port), 0.5).close()" 2>/dev/null; then
       bad "port $svc_port ($svc) is already in use. Set $svc_var to another"
@@ -84,6 +84,7 @@ if [ -n "$listening" ]; then
   echo "  5250 sign-on   $HOST:$PORT   (tn5250 $HOST:$PORT)"
   [ -n "$SERVICES" ] && echo "  HTTP Admin     $HOST:${SILVERLAKE_HTTPADMIN_PORT:-2001}   (http://$HOST:${SILVERLAKE_HTTPADMIN_PORT:-2001}/HTTPAdmin)"
   [ -n "$SERVICES" ] && echo "  FTP            $HOST:${SILVERLAKE_FTP_PORT:-2121}   (ftp $HOST ${SILVERLAKE_FTP_PORT:-2121})"
+  [ -n "$SERVICES" ] && echo "  Host servers   $HOST:${SILVERLAKE_MAPPER_PORT:-4449} (mapper), $HOST:${SILVERLAKE_SIGNON_PORT:-8476} (sign-on)"
   echo "  logs:          $LOG_FILE"
   echo "  reset to seed: ./reset.sh"
 else

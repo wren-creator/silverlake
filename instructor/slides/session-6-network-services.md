@@ -20,9 +20,14 @@ Needs `./start.sh --services`. Everything still binds to 127.0.0.1.
 - `cd APPLIB`, `ls`, `get DAILYOPS`. Limited capability only ever applied to the menu.
 - The password crossed the wire in clear text. Say so out loud.
 
-## Slide 5: Fix and re-run
+## Slide 5: hostsvr-recon
+- The mapper on 4449 names the sign-on server (`as-signon`), and the sign-on server on 8476 answers before any password.
+- Read the release and the password level. Level 0 means case does not matter: try `student` in lower case at the 5250.
+- Submit `V7R4M0/0`. Raise QPWDLVL with the lesson's secure state and the answer, and the lower case guess, both change.
+
+## Slide 6: Fix and re-run
 - `./scenario.sh set httpadmin-ssi-injection secure`. The About page shows the PTF and the description is escaped.
 - Ask: what else should limit who can reach the console?
 
-## Slide 6: Debrief
+## Slide 7: Debrief
 - Nothing here needed an exploit kit. A browser, a profile and a field that was trusted.

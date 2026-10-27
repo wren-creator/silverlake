@@ -1,0 +1,30 @@
+id = "hostsvr-recon"
+title = "The sign-on server that says how passwords are checked"
+group = "D"
+summary = "The sign-on server answers an exchange of attributes before anyone signs on, and the answer includes the password level."
+
+[[change]]
+target = "system"
+field = "qpwdlvl"
+vulnerable = 0
+secure = 3
+
+[flag]
+kind = "fact"
+fact = "release_and_pwdlevel"
+task = "Without signing on, read the OS release and the password level from the sign-on server, and submit them as release/level, for example V7R4M0/0."
+
+[doc]
+where = "Host server mapper 127.0.0.1:4449 and sign-on server 127.0.0.1:8476 (start the range with ./start.sh --services)"
+parallel = "The IBM i host servers answer a client's opening exchange before any password is checked, and the answer carries the OS release and the password level (QPWDLVL). Scanners and audit tools read it first. A level of 0 or 1 tells the caller that passwords are 10 characters at most and that case does not matter."
+vulnerability = "QPWDLVL is 0, so passwords are not case sensitive. The sign-on server reports that level to anyone who asks, with no sign-on."
+mitre = ["T1046 Network Service Discovery", "T1592 Gather Victim Host Information", "T1110 Brute Force"]
+steps = [
+  "Ask the server mapper on 4449 where the sign-on server is: send the name as-signon. It answers with the port, 8476.",
+  "Send the sign-on server the exchange of attributes request. It answers with the release, the datastream level, a seed, the password level and the answering job.",
+  "Read the release and the password level from the reply. No profile or password was needed.",
+  "Use what it told you: at level 0 the case of a password does not matter, so sign on to the 5250 as STUDENT with the password student in lower case.",
+]
+consequence = "The caller learns how weak the password rules are before trying a single password, and a guess can ignore case."
+fix = "Move QPWDLVL to 2 or 3 (the secure state uses 3: case sensitive passwords up to 128 characters), which takes an IPL on a real system, and do not expose the host servers beyond the clients that need them. The server will still answer the exchange, so the fix is in the rules, not in hiding the level."
+reference = "IBM i Security Reference, QPWDLVL; CIS controls on password policy; CISA CPG on reducing network exposure."

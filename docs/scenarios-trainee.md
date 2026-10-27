@@ -253,7 +253,28 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Flag:** Use the clerk's own password over FTP to read the daily operations notes in APPLIB.
 
-### 13. A web console that runs commands found in a description
+### 13. The sign-on server that says how passwords are checked
+
+**Where:** Host server mapper 127.0.0.1:4449 and sign-on server 127.0.0.1:8476 (start the range with ./start.sh --services)
+
+**Real-world parallel:** The IBM i host servers answer a client's opening exchange before any password is checked, and the answer carries the OS release and the password level (QPWDLVL). Scanners and audit tools read it first. A level of 0 or 1 tells the caller that passwords are 10 characters at most and that case does not matter.
+
+**Vulnerability:** QPWDLVL is 0, so passwords are not case sensitive. The sign-on server reports that level to anyone who asks, with no sign-on.
+
+**MITRE ATT&CK:** T1046 Network Service Discovery, T1592 Gather Victim Host Information, T1110 Brute Force
+
+**Exploit:**
+
+1. Ask the server mapper on 4449 where the sign-on server is: send the name as-signon. It answers with the port, 8476.
+2. Send the sign-on server the exchange of attributes request. It answers with the release, the datastream level, a seed, the password level and the answering job.
+3. Read the release and the password level from the reply. No profile or password was needed.
+4. Use what it told you: at level 0 the case of a password does not matter, so sign on to the 5250 as STUDENT with the password student in lower case.
+
+**Consequence in the sim:** The caller learns how weak the password rules are before trying a single password, and a guess can ignore case.
+
+**Flag:** Without signing on, read the OS release and the password level from the sign-on server, and submit them as release/level, for example V7R4M0/0.
+
+### 14. A web console that runs commands found in a description
 
 **Where:** HTTP Server Administration console, 127.0.0.1:2001 (start the range with ./start.sh --services)
 

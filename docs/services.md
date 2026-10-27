@@ -6,7 +6,7 @@ Everything in Silverlake is reached through 5250 unless you start it with `./sta
 |---|---|---|---|
 | HTTP Server Administration console | 2001 (`SILVERLAKE_HTTPADMIN_PORT`) | 2001 | built |
 | FTP | 2121 (`SILVERLAKE_FTP_PORT`) | 21 | built |
-| Server mapper and sign-on server | 4449 and 8476 | 449 and 8476 | planned (5f-3) |
+| Server mapper and sign-on server | 4449 and 8476 (`SILVERLAKE_MAPPER_PORT`, `SILVERLAKE_SIGNON_PORT`) | 449 and 8476 | built |
 
 ## FTP
 
@@ -15,6 +15,12 @@ Everything in Silverlake is reached through 5250 unless you start it with `./sta
 The `ftp-limited-bypass` lesson: FTP does not know what limited capability is, so a profile with no command line can still list and get what it may read. The secure state registers a request exit program (a record on `QUSRSYS/FTPEXIT`) that turns away limited capability profiles. That is a simplification of a real exit point, which can refuse any single request.
 
 Read only on purpose: there is no `STOR`, `DELE`, `MKD`, `RMD` or `RNFR`. Not built: members other than the first, IFS directories, `SITE`, active mode (`PORT`), TLS.
+
+## Host servers
+
+The mapper (4449, since 449 is privileged) answers a service name such as `as-signon` with `0x2B` and a four byte port, and `0x2D` for a name it does not know. The sign-on server (8476) answers the exchange of attributes every client opens with, before any sign-on: release, datastream level, a seed, the password level and the answering job. The reply shapes follow what a live IBM i 7.5 sent, as captured for web3270's mock. The values come from the saved state, so changing QPWDLVL changes what the wire says.
+
+Only those two exist. There is no database, file, data queue, central or remote command server, and the mapper names ports for them that nothing listens on. The lesson is `hostsvr-recon`: the password level is free to anyone who asks. Its flag is a fact the trainee reads off the wire and submits (`V7R4M0/0`), checked against the state, so the answer changes once QPWDLVL is raised. Not built: TLS (9476), the signon request that carries a password.
 
 ## The HTTP console
 

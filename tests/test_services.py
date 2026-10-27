@@ -24,8 +24,8 @@ def test_services_are_off_unless_asked_for():
 
 
 def test_ports_default_to_the_real_ones_and_can_move():
-    assert services.ports({}) == {"httpadmin": 2001, "ftp": 2121}
-    assert services.ports({"SILVERLAKE_HTTPADMIN_PORT": "2999"}) == {"httpadmin": 2999, "ftp": 2121}
+    assert services.ports({}) == {"httpadmin": 2001, "ftp": 2121, "mapper": 4449, "signon": 8476}
+    assert services.ports({"SILVERLAKE_HTTPADMIN_PORT": "2999"}) == {"httpadmin": 2999, "ftp": 2121, "mapper": 4449, "signon": 8476}
     with pytest.raises(ValueError):
         services.ports({"SILVERLAKE_HTTPADMIN_PORT": "70000"})
 
@@ -52,7 +52,9 @@ def test_the_console_answers_over_a_real_socket_and_the_exploit_works_end_to_end
 
     async def go():
         servers = await services.start("127.0.0.1", lambda: store, {"SILVERLAKE_HTTPADMIN_PORT": str(port),
-                                                                     "SILVERLAKE_FTP_PORT": str(free_port())})
+                                                                     "SILVERLAKE_FTP_PORT": str(free_port()),
+                                                                     "SILVERLAKE_MAPPER_PORT": str(free_port()),
+                                                                     "SILVERLAKE_SIGNON_PORT": str(free_port())})
         loop = asyncio.get_running_loop()
         try:
             call = lambda raw: loop.run_in_executor(None, request, port, raw)

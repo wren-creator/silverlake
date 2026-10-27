@@ -13,12 +13,13 @@ from collections.abc import Callable
 
 from ..config import check_loopback
 from ..system.profiles import ProfileStore
-from . import ftpd, httpd
+from . import ftpd, hostsvr, httpd
 
 log = logging.getLogger("silverlake.services")
 
-DEFAULT_PORTS = {"httpadmin": 2001, "ftp": 2121}
-ENV_PORTS = {"httpadmin": "SILVERLAKE_HTTPADMIN_PORT", "ftp": "SILVERLAKE_FTP_PORT"}
+DEFAULT_PORTS = {"httpadmin": 2001, "ftp": 2121, "mapper": 4449, "signon": 8476}
+ENV_PORTS = {"httpadmin": "SILVERLAKE_HTTPADMIN_PORT", "ftp": "SILVERLAKE_FTP_PORT",
+             "mapper": "SILVERLAKE_MAPPER_PORT", "signon": "SILVERLAKE_SIGNON_PORT"}
 
 
 def wanted(env: dict[str, str] | None = None) -> bool:
@@ -47,6 +48,8 @@ async def start(host: str, store_of: Callable[[], ProfileStore], env: dict[str, 
         log.info("HTTP Server Administration listening on %s:%d", host, chosen["httpadmin"])
         servers.append(await ftpd.serve(host, chosen["ftp"], store_of))
         log.info("FTP listening on %s:%d", host, chosen["ftp"])
+        servers += await hostsvr.serve(host, chosen["mapper"], chosen["signon"], store_of)
+        log.info("host server mapper on %s:%d, sign-on server on %s:%d", host, chosen["mapper"], host, chosen["signon"])
     except OSError:
         for s in servers:
             s.close()

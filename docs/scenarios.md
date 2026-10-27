@@ -301,7 +301,32 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, limited capability and FTP exit points; CIS controls on network services; CISA CPG on encrypting data in transit.
 
-### 13. A web console that runs commands found in a description
+### 13. The sign-on server that says how passwords are checked
+
+**Where:** Host server mapper 127.0.0.1:4449 and sign-on server 127.0.0.1:8476 (start the range with ./start.sh --services)
+
+**Real-world parallel:** The IBM i host servers answer a client's opening exchange before any password is checked, and the answer carries the OS release and the password level (QPWDLVL). Scanners and audit tools read it first. A level of 0 or 1 tells the caller that passwords are 10 characters at most and that case does not matter.
+
+**Vulnerability:** QPWDLVL is 0, so passwords are not case sensitive. The sign-on server reports that level to anyone who asks, with no sign-on.
+
+**MITRE ATT&CK:** T1046 Network Service Discovery, T1592 Gather Victim Host Information, T1110 Brute Force
+
+**Exploit:**
+
+1. Ask the server mapper on 4449 where the sign-on server is: send the name as-signon. It answers with the port, 8476.
+2. Send the sign-on server the exchange of attributes request. It answers with the release, the datastream level, a seed, the password level and the answering job.
+3. Read the release and the password level from the reply. No profile or password was needed.
+4. Use what it told you: at level 0 the case of a password does not matter, so sign on to the 5250 as STUDENT with the password student in lower case.
+
+**Consequence in the sim:** The caller learns how weak the password rules are before trying a single password, and a guess can ignore case.
+
+**Flag:** Without signing on, read the OS release and the password level from the sign-on server, and submit them as release/level, for example V7R4M0/0.
+
+**Fix:** Move QPWDLVL to 2 or 3 (the secure state uses 3: case sensitive passwords up to 128 characters), which takes an IPL on a real system, and do not expose the host servers beyond the clients that need them. The server will still answer the exchange, so the fix is in the rules, not in hiding the level. (`./scenario.sh set hostsvr-recon secure`)
+
+**Reference:** IBM i Security Reference, QPWDLVL; CIS controls on password policy; CISA CPG on reducing network exposure.
+
+### 14. A web console that runs commands found in a description
 
 **Where:** HTTP Server Administration console, 127.0.0.1:2001 (start the range with ./start.sh --services)
 

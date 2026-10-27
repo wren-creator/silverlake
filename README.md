@@ -45,7 +45,7 @@ Everything binds to `127.0.0.1` and `start.sh` refuses to launch otherwise. A de
 
 The lessons are written up in [docs/scenarios.md](docs/scenarios.md) (instructor, with fixes) and [docs/scenarios-trainee.md](docs/scenarios-trainee.md), both generated from the scenario files by `python -m silverlake.scenario_docs`.
 
-The network services (the HTTP Admin console on 2001, with FTP and the host servers to come) are opt in: `./start.sh --services`. See [docs/services.md](docs/services.md).
+The network services (the HTTP Admin console on 2001, FTP on 2121 and the host servers on 4449 and 8476) are opt in: `./start.sh --services`. See [docs/services.md](docs/services.md).
 
 Teaching it? [instructor/](instructor/) has the agenda, answer key, rubric, setup runbook and session slides.
 

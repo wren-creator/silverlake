@@ -110,7 +110,9 @@ def test_a_real_client_can_sign_on_list_and_get_a_file_over_sockets(store):
 
     async def go():
         servers = await services.start("127.0.0.1", lambda: store, {"SILVERLAKE_HTTPADMIN_PORT": str(free_port()),
-                                                                     "SILVERLAKE_FTP_PORT": str(port)})
+                                                                     "SILVERLAKE_FTP_PORT": str(port),
+                                                                     "SILVERLAKE_MAPPER_PORT": str(free_port()),
+                                                                     "SILVERLAKE_SIGNON_PORT": str(free_port())})
         try:
             return await asyncio.get_running_loop().run_in_executor(None, client)
         finally:

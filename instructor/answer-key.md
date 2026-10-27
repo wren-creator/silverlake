@@ -35,6 +35,7 @@ The full per lesson key is `docs/scenarios.md`, which is generated from the scen
 | payadj-overadopt | adopts an owner with authority on the payroll file | `USRPRF(*USER)`, take public off the program |
 | empdir-override | adopted open honours the caller's override | owner who holds nothing on PAYROLL |
 | payrun-qtemp | calls a program with no library | call it with its library |
+| hostsvr-recon | the sign-on server reports QPWDLVL (0, case does not matter) before sign-on (needs `--services`) | QPWDLVL 2 or 3, limit who reaches the host servers |
 | ftp-limited-bypass | limited capability is a 5250 rule, FTP ignores it (needs `--services`) | register a request exit program, require TLS |
 | httpadmin-ssi-injection | the web console evaluates exec directives in a description, as QTMHHTTP (needs `--services`) | install the console fix, which escapes the field |
 
