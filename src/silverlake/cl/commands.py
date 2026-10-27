@@ -100,6 +100,13 @@ CLRMSGQ_PARAMS = [Param("MSGQ", "msgqname", "", required=True), Param("CLEAR", "
 WRKSPLF_PARAMS = [Param("SELECT", "splsel", "*CURRENT", 6), Param("JOB", "jobq", "*ALL", 3),
                   Param("PERIOD", "ignored", "*AVAIL"), Param("ASPDEV", "ignored", "*"),
                   Param("OUTPUT", "output", "*"), Param("DSPFMT", "ignored", "*INLENV"), Param("ASTLVL", "ignored", "*PRV")]
+CRTOUTQ_PARAMS = [Param("OUTQ", "qname", "", required=True), Param("MAXPAGES", "ignored", "*NONE", 5),
+                  Param("SEQ", "ignored", "*FIFO"), Param("RMTSYS", "ignored", "*NONE"), Param("RMTPRTQ", "ignored", "*USER"),
+                  Param("AUTOSTRWTR", "ignored", "*NONE"), Param("MSGQ", "ignored", "QSYSOPR", 2),
+                  Param("SEPPAGE", "ignored", "*YES"), Param("TEXT", "text", "*BLANK"), Param("DSPDTA", "dspdta", "*NO"),
+                  Param("JOBSEP", "ignored", "0"), Param("OPRCTL", "oprctl", "*YES"), Param("DTAQ", "ignored", "*NONE", 2),
+                  Param("AUTCHK", "autchk", "*OWNER"), Param("AUT", "libaut", "*USE")]
+DLTOUTQ_PARAMS = [Param("OUTQ", "qname", "", required=True)]
 WRKOUTQ_PARAMS = [Param("OUTQ", "outqname", "*ALL"), Param("OUTPUT", "output", "*")]
 DSPSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
@@ -180,7 +187,7 @@ COMMANDS = {
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "CRTMSGQ": CRTMSGQ_PARAMS, "CHGMSGQ": CHGMSGQ_PARAMS,
-    "DLTMSGQ": DLTMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "WRKOUTQ": WRKOUTQ_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
+    "DLTMSGQ": DLTMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "WRKOUTQ": WRKOUTQ_PARAMS, "CRTOUTQ": CRTOUTQ_PARAMS, "DLTOUTQ": DLTOUTQ_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
     "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "DSPJOB": DSPJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
@@ -297,6 +304,9 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
                 raise BindError(f"Value {v} for parameter {p.key} not valid.")
             return v
         return _qualified(p.key, values)
+    if k in ("dspdta", "oprctl", "autchk"):
+        allowed = {"dspdta": ("*NO", "*YES", "*OWNER"), "oprctl": ("*YES", "*NO"), "autchk": ("*OWNER", "*DTAAUT")}[k]
+        return _one(p.key, values, allowed)
     if k == "outqname":
         v = values[0].upper()
         return v if v == "*ALL" else _qualified(p.key, values)
@@ -561,6 +571,11 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         return Outcome(msgq.send(store, actor, session, b["MSG"], targets).message)
     if name == "CLRMSGQ":
         return Outcome(msgq.clear(store, actor, session, b["MSGQ"]).message)
+    if name == "CRTOUTQ":
+        return Outcome(spool.create_queue(store, actor, session, b["OUTQ"], b["TEXT"], b["DSPDTA"], b["OPRCTL"],
+                                          b["AUTCHK"], b["AUT"]).message)
+    if name == "DLTOUTQ":
+        return Outcome(spool.delete_queue(store, actor, session, b["OUTQ"]).message)
     if name == "CRTMSGQ":
         return Outcome(msgq.create(store, actor, session, b["MSGQ"], b["TEXT"], b["AUT"]).message)
     if name == "CHGMSGQ":

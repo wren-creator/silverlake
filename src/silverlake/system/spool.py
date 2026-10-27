@@ -33,7 +33,8 @@ from datetime import datetime
 
 from . import messages
 from .authority import Auth, SpecialAuthority
-from .objects import Done, _no, _ok
+from .authority import SecuredObject
+from .objects import NAME, Done, _no, _ok, authority_to_library, locate
 from .profiles import Profile, ProfileStore
 
 SA = SpecialAuthority
@@ -158,6 +159,61 @@ def queue(store: ProfileStore, actor: Profile, spec: str, search: list[str]):
     if Auth.READ not in store.authority_to_object(actor, q):
         return None, _msg("CPF3330", f"Not authorized to output queue {name}.")
     return q, None
+
+
+def create_queue(store: ProfileStore, actor: Profile, session, spec: str, text: str, dspdta: str,
+                 oprctl: str, autchk: str, aut: Auth | None) -> Done:
+    """CRTOUTQ. The page has no Restrictions section, so what is built is its parameters: DSPDTA,
+    OPRCTL, AUTCHK, AUT (default *USE, not the library's create authority) and TEXT. Needing *ADD to
+    the library is inferred (IBM's general rule for adding an object, as for CRTMSGQ). The other
+    parameters (writers, remote printing, SEQ, MAXPAGES) are accepted and ignored. The page lists
+    no completion message, so ours has no ID."""
+    lib_name, _, name = spec.upper().rpartition("/")
+    if lib_name in ("", "*CURLIB"):
+        lib_name = session.current_library or "QGPL"
+    if lib_name == "*LIBL":
+        return _no(messages.syntax("*LIBL is not valid for a new object, name the library."))
+    if lib_name == "QTEMP":
+        return _no(_msg("CPF3352", f"Temporary library QTEMP invalid for output queue {name}."))
+    if not NAME.match(name):
+        return _no(messages.syntax(f"Object name {name} is not valid."))
+    lib = store.find_library(lib_name)
+    if lib is None:
+        return _no(_msg("CPF2402", f"Library {lib_name} not found."))
+    if SpecialAuthority.ALLOBJ not in store.special_authorities(actor) and \
+            Auth.ADD not in authority_to_library(store, actor, lib):
+        return _no(messages.not_authorized_to_library(lib_name))
+    if (lib_name, name, "*OUTQ") in store.objects:
+        return _no(_msg("CPF3353", f"Output queue {name} in {lib_name} already exists."))
+    public = aut if aut is not None else (lib.public if lib.public is not None else Auth.NONE)
+    q = SecuredObject(name, actor.name, public=public, library=lib_name, type="*OUTQ", text=text,
+                      data={"dspdta": dspdta, "oprctl": oprctl, "autchk": autchk,
+                            "created": datetime.now().isoformat(timespec="seconds")})
+    store.objects[q.key] = q
+    store.on_change()
+    return _ok(f"Output queue {name} created in library {lib_name}.")
+
+
+SYSTEM_QUEUES = {("QGPL", "QPRINT"), ("QUSRSYS", "QEZJOBLOG")}
+
+
+def delete_queue(store: ProfileStore, actor: Profile, session, spec: str) -> Done:
+    """DLTOUTQ. From the page: the queue cannot hold entries ("printed, deleted, or moved to a
+    different output queue"), cannot be in use by a writer, and cannot be one the system made for a
+    printer. The page names no authority, so the general rule stands: *OBJEXIST on the queue and
+    *EXECUTE on the library, which the default AUT(*USE) and even *CHANGE do not give, so only the
+    owner can delete a queue made with the defaults. Which message a queue with entries raises is
+    not on the page: CPF3360 stands in. Treating the two seeded queues as the system's own, and
+    refusing them with CPF3469, is inferred."""
+    from .objlist import delete_object
+    q, err = locate(store, actor, spec.upper(), "*OUTQ", session.search_order())
+    if err:
+        return _no(err)
+    if (q.library, q.name) in SYSTEM_QUEUES:
+        return _no(_msg("CPF3469", "Operation not allowed for output queue."))
+    if Auth.OBJEXIST in store.authority_to_object(actor, q) and in_queue(store, q):
+        return _no(_msg("CPF3360", f"Output queue {q.name} in {q.library} not deleted. Output queue in use."))
+    return delete_object(store, actor, spec, "*OUTQ", session.search_order())
 
 
 def in_queue(store: ProfileStore, q) -> list[SpoolFile]:

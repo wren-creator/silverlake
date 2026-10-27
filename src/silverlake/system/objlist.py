@@ -19,6 +19,7 @@ Rules read from the IBM i 7.5 command pages:
 
   DLTF       *OBJEXIST and *OBJOPR on the file, *EXECUTE on the library.
   DLTMSGQ    *USE, *OBJEXIST and *DLT on the queue, *EXECUTE on the library.
+  DLTOUTQ    the page names no authority: *OBJEXIST on the queue and *EXECUTE on the library (inferred).
   DLTMNU     *OBJEXIST and *OBJOPR on the menu, *EXECUTE on the library.
   DLTPGM     *OBJEXIST on the program, *EXECUTE on the library.
   DLTCMD     *OBJEXIST on the command (the page names no library authority).
@@ -199,7 +200,7 @@ def objects_secured_by(store: ProfileStore, actor: Profile, autl: str) -> list[S
 
 DELETE_NEEDS = {"*FILE": Auth.OBJEXIST | Auth.OBJOPR, "*MENU": Auth.OBJEXIST | Auth.OBJOPR,
                 "*PGM": Auth.OBJEXIST, "*CMD": Auth.OBJEXIST,
-                "*MSGQ": Auth.OBJEXIST | Auth.OBJOPR | Auth.READ | Auth.DLT}
+                "*MSGQ": Auth.OBJEXIST | Auth.OBJOPR | Auth.READ | Auth.DLT, "*OUTQ": Auth.OBJEXIST}
 
 
 def delete_object(store: ProfileStore, actor: Profile, qualified: str, typ: str, search: list[str],

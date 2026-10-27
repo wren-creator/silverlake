@@ -95,6 +95,12 @@ Work with Output Queue, laid out from two PUB400 captures (the default printer q
 
 The rule worth teaching, from the capture: **a profile that may read the queue sees every file on it, with the owner and the job name, whatever DSPDTA says.** The job log queue is DSPDTA(*OWNER), and a basic profile still listed other people's job logs by name. The setting hides the contents (option 5 on someone else's log is refused), not the list. Reading the queue needs *READ to it and *EXECUTE to its library, which is inferred, not read on the page. A queue or library that is not there gets the same message, `Output queue NOQUEUE in library SLNOSUCH not found.`, as captured, so nobody can tell which was missing. Not drawn, because they are not built: F11 (view 2), F20 (writers), F22 (printers) and F24.
 
+## CRTOUTQ and DLTOUTQ (built)
+
+Built from IBM's two pages, and the CRTOUTQ page has no Restrictions section, so the rules are thin and say so. `CRTOUTQ OUTQ(lib/name)` takes TEXT, DSPDTA (`*NO`, `*YES`, `*OWNER`), OPRCTL, AUTCHK and AUT, and accepts and ignores the printer and remote parameters. The creator owns the queue, and **AUT defaults to `*USE`, not the library's create authority**, which is the page's default and differs from CRTMSGQ. A queue in QTEMP is refused (`CPF3352`), a duplicate is `CPF3353`, a missing library `CPF2402`. Needing `*ADD` to the library is inferred, as for CRTMSGQ.
+
+`DLTOUTQ OUTQ(lib/name)` follows the page's restrictions: the queue cannot hold entries ("printed, deleted, or moved to a different output queue"), and cannot be one the system made for a printer. The page names no authority, so the general rule stands: `*OBJEXIST` on the queue and `*EXECUTE` on the library. That is the same lesson as the message queue: `*USE` and even `*CHANGE` have no `*OBJEXIST`, so only the owner can delete a queue made with the defaults. A queue with entries is refused with `CPF3360` (the page does not say which message), and QPRINT and QEZJOBLOG are refused with `CPF3469` as if the system made them (inferred). WRKOBJ option 4 on a queue runs DLTOUTQ. Not built: generic names and `*ALL` on DLTOUTQ, writers (so no "in use by a writer"), SEQ, MAXPAGES and the remote printing parameters.
+
 ## Later
 
 The real confirm and prompt screens for `WRKACTJOB` options 2 and 4 once captured (the oracle will not end or change jobs on a shared system), `DSPJOB`, and `WRKJOB`'s other options.

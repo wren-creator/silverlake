@@ -633,7 +633,7 @@ class SignonController:
 
     DELETE_LINE = {"*LIB": "DLTLIB LIB({name})", "*FILE": "DLTF FILE({lib}/{name})",
                    "*CMD": "DLTCMD CMD({lib}/{name})", "*MENU": "DLTMNU MENU({lib}/{name})",
-                   "*PGM": "DLTPGM PGM({lib}/{name})", "*MSGQ": "DLTMSGQ MSGQ({lib}/{name})", "*AUTL": "DLTAUTL AUTL({name})"}
+                   "*PGM": "DLTPGM PGM({lib}/{name})", "*MSGQ": "DLTMSGQ MSGQ({lib}/{name})", "*OUTQ": "DLTOUTQ OUTQ({lib}/{name})", "*AUTL": "DLTAUTL AUTL({name})"}
 
     def _in_confirm(self, aid: str) -> Screen:
         """F12 returns to the list with the options still typed. Enter deletes."""
