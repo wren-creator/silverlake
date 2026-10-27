@@ -74,6 +74,7 @@ class Auth(Flag):
     UPD = auto()
     DLT = auto()
     EXECUTE = auto()
+    AUTLMGT = auto()     # manage an authorization list; not part of *ALL, as IBM has it
 
 
 ALL = (Auth.OBJOPR | Auth.OBJMGT | Auth.OBJEXIST | Auth.OBJALTER | Auth.OBJREF
@@ -114,6 +115,8 @@ class AuthList:
     name: str
     entries: dict[str, Auth] = field(default_factory=dict)  # profile name -> authority
     public: Auth = EXCLUDE
+    owner: str = "QSECOFR"
+    text: str = ""
 
 
 @dataclass

@@ -40,7 +40,8 @@ def to_dict(store: ProfileStore) -> dict:
             "public": "*AUTL" if o.public is None else name_auth(o.public), "autl": o.autl,
         } for o in sorted(store.objects.values(), key=lambda o: o.key)],
         "autls": [{"name": a.name, "entries": {k: name_auth(v) for k, v in a.entries.items()},
-                   "public": name_auth(a.public)} for a in sorted(store.autls.values(), key=lambda a: a.name)],
+                   "public": name_auth(a.public), "owner": a.owner, "text": a.text}
+                 for a in sorted(store.autls.values(), key=lambda a: a.name)],
     }
 
 
@@ -61,7 +62,8 @@ def from_dict(data: dict) -> ProfileStore:
         private={k: parse_auth(v) for k, v in o["private"].items()},
         public=None if o["public"] == "*AUTL" else parse_auth(o["public"]), autl=o["autl"],
     ) for o in data["objects"]]
-    autls = [AuthList(a["name"], {k: parse_auth(v) for k, v in a["entries"].items()}, parse_auth(a["public"]))
+    autls = [AuthList(a["name"], {k: parse_auth(v) for k, v in a["entries"].items()}, parse_auth(a["public"]),
+                      a.get("owner", "QSECOFR"), a.get("text", ""))
              for a in data["autls"]]
     store = ProfileStore(System(**data["system"]), profiles, objects, autls)
     ensure_commands(store)      # a state saved before a command existed gets its object now
@@ -79,7 +81,8 @@ CREATE TABLE IF NOT EXISTS object_auth (
     library TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL,
     grantee TEXT NOT NULL, auth TEXT NOT NULL,
     PRIMARY KEY (library, name, type, grantee));
-CREATE TABLE IF NOT EXISTS autls (name TEXT PRIMARY KEY, public TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS autls (name TEXT PRIMARY KEY, public TEXT NOT NULL,
+    owner TEXT NOT NULL DEFAULT 'QSECOFR', text TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS autl_entries (
     autl TEXT NOT NULL, grantee TEXT NOT NULL, auth TEXT NOT NULL, PRIMARY KEY (autl, grantee));
 """
@@ -92,6 +95,10 @@ class StateDB:
         self.db.executescript(SCHEMA)
         if "data" not in {r[1] for r in self.db.execute("PRAGMA table_info(objects)")}:
             self.db.execute("ALTER TABLE objects ADD COLUMN data TEXT NOT NULL DEFAULT '{}'")   # older state file
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(autls)")}
+        if "owner" not in cols:                                                         # older state file
+            self.db.execute("ALTER TABLE autls ADD COLUMN owner TEXT NOT NULL DEFAULT 'QSECOFR'")
+            self.db.execute("ALTER TABLE autls ADD COLUMN text TEXT NOT NULL DEFAULT ''")
         self.db.commit()
 
     def read(self) -> dict | None:
@@ -113,8 +120,8 @@ class StateDB:
         entries: dict[str, dict] = {}
         for autl, who, auth in q("SELECT autl, grantee, auth FROM autl_entries"):
             entries.setdefault(autl, {})[who] = auth
-        data["autls"] = [{"name": n, "entries": entries.get(n, {}), "public": pub}
-                         for n, pub in q("SELECT name, public FROM autls ORDER BY name")]
+        data["autls"] = [{"name": n, "entries": entries.get(n, {}), "public": pub, "owner": owner, "text": text}
+                         for n, pub, owner, text in q("SELECT name, public, owner, text FROM autls ORDER BY name")]
         return data
 
     def write(self, store: ProfileStore) -> None:
@@ -131,7 +138,7 @@ class StateDB:
                 self.db.executemany("INSERT INTO object_auth VALUES (?,?,?,?,?)",
                                     [(o["library"], o["name"], o["type"], k, v) for k, v in o["private"].items()])
             for a in d["autls"]:
-                self.db.execute("INSERT INTO autls VALUES (?,?)", (a["name"], a["public"]))
+                self.db.execute("INSERT INTO autls VALUES (?,?,?,?)", (a["name"], a["public"], a["owner"], a["text"]))
                 self.db.executemany("INSERT INTO autl_entries VALUES (?,?,?)",
                                     [(a["name"], k, v) for k, v in a["entries"].items()])
 

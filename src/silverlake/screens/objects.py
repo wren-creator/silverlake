@@ -71,3 +71,34 @@ def dspobjaut_screen(obj, authority_rows: list[tuple[str, str]], page: int = 0) 
         rows += [Text(r, 2, user, ds.ATTR_TURQUOISE), Text(r, 16, auth[:60], ds.ATTR_TURQUOISE)]
     _footer(rows, page, len(authority_rows), "F3=Exit   F12=Cancel   Page Up/Down")
     return Screen(rows)
+
+
+def dspautl_screen(autl, entry_rows: list[tuple[str, str]], page: int = 0) -> Screen:
+    page, shown = _clamp(entry_rows, page)
+    rows: list[Text | Input] = [
+        Text(0, 26, "Display Authorization List", ds.ATTR_WHITE),
+        Text(1, 2, "Authorization list . :", ds.ATTR_GREEN), Text(1, 25, autl.name, ds.ATTR_WHITE),
+        Text(1, 40, "Owner . . . . . . . :", ds.ATTR_GREEN), Text(1, 62, autl.owner, ds.ATTR_WHITE),
+        Text(2, 2, "Text  . . . . . . . :", ds.ATTR_GREEN), Text(2, 25, autl.text[:50], ds.ATTR_WHITE),
+        Text(4, 2, "User", ds.ATTR_WHITE), Text(4, 16, "Authority", ds.ATTR_WHITE),
+    ]
+    for i, (user, auth) in enumerate(shown):
+        r = FIRST_ROW + i
+        rows += [Text(r, 2, user, ds.ATTR_TURQUOISE), Text(r, 16, auth[:60], ds.ATTR_TURQUOISE)]
+    _footer(rows, page, len(entry_rows), "F3=Exit   F12=Cancel   Page Up/Down")
+    return Screen(rows)
+
+
+def wrkautl_screen(lists: list, page: int = 0) -> Screen:
+    page, shown = _clamp(lists, page)
+    rows: list[Text | Input] = [
+        Text(0, 25, "Work with Authorization Lists", ds.ATTR_WHITE),
+        Text(2, 2, "Authorization lists you have some authority to.", ds.ATTR_BLUE),
+        Text(4, 2, "List", ds.ATTR_WHITE), Text(4, 14, "Owner", ds.ATTR_WHITE), Text(4, 26, "Text", ds.ATTR_WHITE),
+    ]
+    for i, autl in enumerate(shown):
+        r = FIRST_ROW + i
+        rows += [Text(r, 2, autl.name, ds.ATTR_TURQUOISE), Text(r, 14, autl.owner, ds.ATTR_TURQUOISE),
+                 Text(r, 26, autl.text[:50], ds.ATTR_TURQUOISE)]
+    _footer(rows, page, len(lists), "F3=Exit   F12=Cancel   Page Up/Down")
+    return Screen(rows)

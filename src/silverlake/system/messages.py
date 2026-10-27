@@ -180,6 +180,57 @@ def not_secured_by_autl(obj: str, lib: str, typ: str, autl: str) -> Message:
     return _doc("CPF22A5", f"Object {obj} in {lib} type {typ} not secured by authorization list {autl}.")
 
 
+def autl_exists(name: str) -> Message:
+    return _doc("CPF2278", f"Authorization list {name} already exists.")
+
+
+def autl_in_use(name: str) -> Message:
+    return _doc("CPF2279", f"Authorization list {name} cannot be deleted.")
+
+
+def public_always_on_autl() -> Message:
+    return _doc("CPF2280", "*PUBLIC is always on authorization list, cannot be added.")
+
+
+def autl_users_not_found() -> Message:
+    return _doc("CPF2281", "The users specified do not exist on the system.")
+
+
+def autl_entry_errors(kind: str, count: int) -> Message:
+    ids = {"adding": ("CPF2282", "adding"), "changing": ("CPF2287", "changing"), "removing": ("CPF2285", "removing")}
+    id_, word = ids[kind]
+    return _doc(id_, f"{count} errors {word} users, 1 authorization lists processed.")
+
+
+def not_authorized_to_change_autl(name: str) -> Message:
+    return _doc("CPF2284", f"Not authorized to change authorization list {name}.")
+
+
+def public_no_autlmgt() -> Message:
+    return _doc("CPF2286", "*PUBLIC cannot be given *AUTLMGT authority.")
+
+
+def public_not_removable() -> Message:
+    return _doc("CPF2288", "*PUBLIC cannot be removed from an authorization list.")
+
+
+def autlmgt_only_with(special: str) -> Message:
+    code = {"*ALL": "CPF22AA", "*CHANGE": "CPF22AB", "*USE": "CPF22AC"}[special]
+    return _doc(code, f"Only *AUTLMGT authority can be specified with {special} authority.")
+
+
+def autl_object_not_found(name: str) -> Message:
+    return _doc("CPF2105", f"Object {name} in QSYS type *AUTL not found.")
+
+
+def not_authorized_to_autl_object(name: str) -> Message:
+    return _doc("CPF2189", f"Not authorized to object {name} in QSYS type *AUTL.")
+
+
+def not_authorized_to_use_autl(name: str) -> Message:
+    return _doc("CPF2207", f"Not authorized to use object {name} in library QSYS type *AUTL.")
+
+
 def autl_not_found(name: str) -> Message:
     return _doc("CPF2283", f"Authorization list {name} does not exist.")
 

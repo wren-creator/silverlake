@@ -254,7 +254,8 @@ def load(path: Path | str | None = None) -> ProfileStore:
 
     autls = [AuthList(a["name"].upper(),
                       {k.upper(): parse_auth(v) for k, v in a.get("entries", {}).items()},
-                      parse_auth(a.get("public", "*EXCLUDE")))
+                      parse_auth(a.get("public", "*EXCLUDE")),
+                      a.get("owner", "QSECOFR").upper(), a.get("text", ""))
              for a in data.get("authorization_list", [])]
     objects = []
     for o in data.get("object", []):

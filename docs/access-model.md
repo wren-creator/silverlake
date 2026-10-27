@@ -77,6 +77,18 @@ Limited capabilities (`LMTCPB`), from IBM's text:
 
 Menu options still run for a `*YES` user, and command entry still runs everything. That is the break-out the range exists for: `CLERK` (`LMTCPB(*YES)`, initial menu `APPLIB/RESTRICT`) cannot type `WRKUSRPRF`, but option 9 on that menu is `CALL QCMD`, and from command entry every command is available. Closing it is one object away: `RVKOBJAUT OBJ(QSYS/QCMD) OBJTYPE(*PGM) USER(*PUBLIC) AUT(*USE)`. The messages the table cites are documented, not seen. What a limited user sees when typing on a command line is not documented, so that text is ours. IBM's `INLMNU` text says `*YES` where its `LMTCPB` text says the menu is changeable under `*PARTIAL`; the `LMTCPB` text is followed. Not read on any page, so inferred: that running a command needs `*USE` to it, and that `*ALLOBJ` skips the library gate.
 
+## Authorization lists
+
+`CRTAUTL`, `DLTAUTL`, `ADDAUTLE`, `CHGAUTLE`, `RMVAUTLE`, `DSPAUTL` and `WRKAUTL` follow IBM's 7.5 command pages. One list can secure many objects, so changing one entry changes access to all of them, which is both the point and the trap.
+
+- `CRTAUTL AUTL(name) AUT(*CHANGE) TEXT('..')`: the creator owns it. `AUT` is the authority for everyone with no entry of their own, no group authority, and not on the list, and it defaults to `*CHANGE`. A list that is easy to create and generous by default is how a lot of real sites end up with wide-open payroll files.
+- `ADDAUTLE`, `CHGAUTLE`, `RMVAUTLE`: the owner, `*ALLOBJ`, or a user holding `*AUTLMGT` on the list. Only the owner or `*ALLOBJ` can give `*AUTLMGT`. `*PUBLIC` is always on the list: it cannot be added or removed, can be changed, and can never hold `*AUTLMGT`. `*AUTLMGT` is not part of `*ALL`.
+- `AUT` takes `*EXCLUDE` alone, or a list of authorities. `*ALL`, `*CHANGE` or `*USE` can only be joined by `*AUTLMGT` (CPF22AA, CPF22AB, CPF22AC), and `*EXCLUDE` cannot join anything (CPF2290).
+- `DLTAUTL`: the owner or `*ALLOBJ`, and never while the list still secures an object (CPF2279). `PAYAUTL` secures `APPLIB/PAYROLL`, so it cannot be deleted until the file is moved off it.
+- `DSPAUTL` and `WRKAUTL` show lists you own or hold an entry on. `*ALLOBJ` sees them all.
+
+Inferred, not read on a page: that a `*AUTLMGT` user may only hand out or remove authorities they hold themselves (the pages say "only to the *AUTLMGT level" and "at least the same specific authorities"), that `DSPAUTL` needs the owner, `*ALLOBJ` or an entry, and that adding someone who is already on the list is an error. IBM also names `QIBM_DB_SECADM` as an alternative to those rights, which does not exist here. A list owned by a deleted profile is not handled yet. The ID wording of the completion messages is ours (the pages list none). Generic list names (`PAY*`) are not supported yet.
+
 ## Libraries and object authority from the command line
 
 | Command | What it does here |

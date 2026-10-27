@@ -16,7 +16,9 @@
 - [ ] Check on a real system: the library-gate rule for *ALLOBJ, what authority a new library gets, and whether QSYS authority matters to CRTLIB once the command is allowed (needs a profile that may run CRTLIB). Done already: QSYS and QGPL authority, the default library list, what DSPOBJAUT shows a basic user, and that a basic PUB400 profile is refused CRTLIB at the command
 - [x] Phase 3c-2: commands as *CMD objects, *MENU objects, GO and the menu stack, INLMNU and INLPGM (QCMD only) at sign-on, LMTCPB enforcement, CHGPRF, CALL QCMD, the real MAIN menu geometry
 - [ ] Phase 3c-2 follow-ups: bring DSPLIBL and DSPOBJAUT to the real layouts (option column, Group column, F11 detail, Top and Bottom keys); F4 prompting; Command Entry fidelity (compare against a real one); programs behind INLPGM and CALL; confirm the LMTCPB message wording and the "Not authorized to command" ID on a real system
-- [ ] Phase 3c-3: the rest of the dispatcher (WRKAUTL, WRKOBJ, jobs, spool, messages)
+- [x] Phase 3c-3a: authorization lists (CRTAUTL, DLTAUTL, ADDAUTLE, CHGAUTLE, RMVAUTLE, DSPAUTL, WRKAUTL), *AUTLMGT, list owner
+- [ ] Phase 3c-3a follow-ups: generic list names, WRKAUTL options, DSPAUTL *PRINT and *OUTFILE, lists owned by a deleted profile, QIBM_DB_SECADM, CHGOBJOWN, *AUTL as an object type for DSPOBJAUT
+- [ ] Phase 3c-3b: the rest of the dispatcher (WRKOBJ, jobs, spool, messages)
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
 - [ ] Phase 5: vulnerable and secure modes, seeded weak configs, exposed services, scenarios, flag checker, instructor and trainee docs

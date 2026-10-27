@@ -8,7 +8,7 @@ are named in IGNORED so a copied command from a real system still runs."""
 import fnmatch
 from dataclasses import dataclass
 
-from ..system import admin, messages, objects
+from ..system import admin, autls, messages, objects
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -88,6 +88,17 @@ GO_PARAMS = [Param("MENU", "qname", "", required=True), Param("RTNPNT", "yesno",
 CALL_PARAMS = [Param("PGM", "qname", "", required=True)]
 CHGPRF_PARAMS = [Param("INLPGM", "qname*", SAME), Param("INLMNU", "qname*", SAME), Param("CURLIB", "name*", SAME)]
 
+CRTAUTL_PARAMS = [Param("AUTL", "autl", "", required=True), Param("AUT", "aut", "*CHANGE"),
+                  Param("TEXT", "text", "*BLANK")]
+DLTAUTL_PARAMS = [Param("AUTL", "autl", "", required=True)]
+ADDAUTLE_PARAMS = [Param("AUTL", "autl", "", required=True), Param("USER", "users", "", 50, True),
+                   Param("AUT", "autlaut", "*CHANGE", 11)]
+CHGAUTLE_PARAMS = [Param("AUTL", "autl", "", required=True), Param("USER", "users", "", 50, True),
+                   Param("AUT", "autlaut", "*CHANGE", 11)]
+RMVAUTLE_PARAMS = [Param("AUTL", "autl", "", required=True), Param("USER", "users", "", 50, True)]
+DSPAUTL_PARAMS = [Param("AUTL", "autl", "", required=True), Param("OUTPUT", "output", "*")]
+WRKAUTL_PARAMS = [Param("AUTL", "wrkname", "*ALL")]
+
 COMMANDS = {
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
     "DLTUSRPRF": DLT_PARAMS, "WRKUSRPRF": WRK_PARAMS, "SIGNOFF": [],
@@ -95,6 +106,9 @@ COMMANDS = {
     "ADDLIBLE": ADDLIBLE_PARAMS, "RMVLIBLE": RMVLIBLE_PARAMS, "WRKLIB": WRKLIB_PARAMS,
     "DSPOBJAUT": DSPOBJAUT_PARAMS, "GRTOBJAUT": GRTOBJAUT_PARAMS, "RVKOBJAUT": RVKOBJAUT_PARAMS,
     "GO": GO_PARAMS, "CALL": CALL_PARAMS, "CHGPRF": CHGPRF_PARAMS,
+    "CRTAUTL": CRTAUTL_PARAMS, "DLTAUTL": DLTAUTL_PARAMS, "ADDAUTLE": ADDAUTLE_PARAMS,
+    "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
+    "WRKAUTL": WRKAUTL_PARAMS,
 }
 
 
@@ -166,6 +180,16 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
     if k == "aut":
         v = _one(p.key, values, ("*EXCLUDE", "*USE", "*CHANGE", "*ALL"))
         return parse_auth(v)
+    if k == "autl":
+        v = values[0]
+        if "*" in v or not objects.NAME.match(v.upper()):
+            raise BindError(f"Authorization list name {v} not valid. Generic names are not supported yet.")
+        return v.upper()
+    if k == "autlaut":
+        for v in values:
+            if v not in SPECIAL_VALUES and v not in _DETAILED and v != "*AUTLMGT":
+                raise BindError(f"Value {v} for parameter AUT not valid.")
+        return list(values)
     if k == "dsptype":
         return _one(p.key, values, ("*BASIC",))
     if k == "output":
@@ -403,6 +427,8 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         if not attrs:
             return Outcome(messages.syntax("Nothing to change: give INLPGM, INLMNU or CURLIB."))
         return Outcome(admin.change_own_profile(store, actor, session.search_order(), attrs).message)
+    if name in AUTL_COMMANDS:
+        return _run_autl_command(store, actor, name, b)
     users = b.get("USER", [])
     if not users and b["AUTL"] == "*NONE":
         return Outcome(messages.syntax("Either USER or AUTL must be specified."))
@@ -415,6 +441,32 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "RVKOBJAUT":
         return Outcome(objects.revoke(store, actor, b["OBJ"], b["OBJTYPE"], session, users, aut, b["AUTL"]).message)
     raise AssertionError(name)
+
+
+AUTL_COMMANDS = ("CRTAUTL", "DLTAUTL", "ADDAUTLE", "CHGAUTLE", "RMVAUTLE", "DSPAUTL", "WRKAUTL")
+
+
+def _run_autl_command(store: ProfileStore, actor: Profile, name: str, b: dict) -> Outcome:
+    if name == "CRTAUTL":
+        return Outcome(autls.create(store, actor, b["AUTL"], b["AUT"], b["TEXT"]).message)
+    if name == "DLTAUTL":
+        return Outcome(autls.delete(store, actor, b["AUTL"]).message)
+    if name == "RMVAUTLE":
+        return Outcome(autls.remove_entry(store, actor, b["AUTL"], b["USER"]).message)
+    if name in ("ADDAUTLE", "CHGAUTLE"):
+        aut = autls.resolve_aut(b["AUT"])
+        if isinstance(aut, messages.Message):
+            return Outcome(aut)
+        run = autls.add_entry if name == "ADDAUTLE" else autls.change_entry
+        return Outcome(run(store, actor, b["AUTL"], b["USER"], aut).message)
+    if name == "DSPAUTL":
+        autl, err = autls.display(store, actor, b["AUTL"])
+        return Outcome(err) if err else Outcome(view=("dspautl", autl, autls.entry_rows(autl)))
+    pattern = b["AUTL"]
+    rows = autls.visible(store, actor, pattern)
+    if not rows:
+        return Outcome(messages.syntax("No authorization lists found, or you are not authorized to any."))
+    return Outcome(view=("wrkautl", rows))
 
 
 def _done(d: objects.Done) -> messages.Message:
