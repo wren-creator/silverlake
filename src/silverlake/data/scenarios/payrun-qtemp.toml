@@ -11,3 +11,8 @@ secure = "file:payrunx.rpgle"
 
 [cleanup]
 restore = ["object:APPLIB/PAYROLL/*FILE"]
+
+[flag]
+kind = "state"
+check = "student_reads_payroll"
+task = "As STUDENT, end up able to read APPLIB/PAYROLL without anyone granting it to you."

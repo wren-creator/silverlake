@@ -336,7 +336,7 @@ def _with_source_files(o: dict) -> dict:
             m = dict(m)
             if "file" in m:
                 try:
-                    text = (RPG_DIR / m.pop("file")).read_text()
+                    text = _flags().fill((RPG_DIR / m.pop("file")).read_text())
                 except OSError as exc:
                     raise SeedError(f"object {o['name']}: member {mname}: {exc}") from exc
                 m["lines"] = text.rstrip("\n").split("\n")
@@ -353,7 +353,7 @@ def _with_source_files(o: dict) -> dict:
         if key in d:
             name = d.pop(key)
             try:
-                d[out] = (RPG_DIR / name).read_text()
+                d[out] = _flags().fill((RPG_DIR / name).read_text())
             except OSError as exc:
                 raise SeedError(f"object {o['name']}: cannot read {name}: {exc}") from exc
     return {**o, "data": d}
@@ -377,10 +377,15 @@ def _special(value, who: str) -> frozenset[SpecialAuthority] | None:
     return frozenset(_enum(SpecialAuthority, v, f"profile {who} special_authorities") for v in value)
 
 
+def _flags():
+    from .. import flags                       # imported late: flags imports this module
+    return flags
+
+
 def load(path: Path | str | None = None) -> ProfileStore:
     path = Path(path or DEFAULT_SEED)
     try:
-        data = tomllib.loads(path.read_text())
+        data = tomllib.loads(_flags().fill(path.read_text()))
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise SeedError(f"cannot read profiles from {path}: {exc}") from exc
 

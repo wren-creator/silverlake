@@ -20,3 +20,7 @@ target = "profile:DEVADMIN"
 field = "special_authorities"
 vulnerable = ["*SECADM"]
 secure = "*NONE"
+
+[flag]
+kind = "text"
+task = "Use a service account that holds more than it needs to read the vault file in APPLIB."

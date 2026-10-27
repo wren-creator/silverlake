@@ -32,7 +32,7 @@ def _run(store, user, line):
 
 def test_qsysopr_is_seeded_and_world_readable(store):
     q = store.objects[("QSYS", "QSYSOPR", "*MSGQ")]
-    assert q.data["dlvry"] == "*HOLD" and q.data["sev"] == "99" and len(q.data["messages"]) == 6
+    assert q.data["dlvry"] == "*HOLD" and q.data["sev"] == "99" and len(q.data["messages"]) == 7
     c = _signed(store, "STUDENT")                                   # no special authority at all
     t = _text(c.handle("ENTER", {"command": "dspmsg msgq(*sysopr)"}))
     assert "004502/OPERATOR/QPADEV0003" in t                         # other people's jobs, by name
@@ -113,7 +113,7 @@ def test_f13_removes_all_for_someone_who_may_and_refuses_otherwise(store):
     c.handle("F12", {})
     c.handle("ENTER", {"command": "dspmsg msgq(*sysopr)"})
     assert "Not authorized to message queue QSYSOPR." in _text(c.handle("F13", {}))
-    assert len(store.objects[("QSYS", "QSYSOPR", "*MSGQ")].data["messages"]) == 6
+    assert len(store.objects[("QSYS", "QSYSOPR", "*MSGQ")].data["messages"]) == 7
 
 
 def test_queue_messages_survive_a_restart(tmp_path):

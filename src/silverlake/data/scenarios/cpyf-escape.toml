@@ -11,3 +11,8 @@ secure = "*EXCLUDE"
 
 [cleanup]
 remove_new = ["object:SCRATCH/*/*FILE"]
+
+[flag]
+kind = "state"
+check = "readable_copy"
+task = "With an account that may only use PAYROLL, make a copy that an ordinary user can read."

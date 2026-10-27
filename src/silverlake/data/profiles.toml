@@ -257,6 +257,7 @@ records = [
   { EMPNO = 10004, NAME = "Dunn, Kevin", DEPT = "OPS", SALARY = 65000 },
   { EMPNO = 10005, NAME = "Ellis, Rosa", DEPT = "HR", SALARY = 91000 },
   { EMPNO = 10006, NAME = "Ford, Gil", DEPT = "EXEC", SALARY = 240000 },
+  { EMPNO = 10099, NAME = "@@FLAG:empdir-override@@", DEPT = "AUDT", SALARY = 1 },
 ]
 
 [[object]]
@@ -418,6 +419,36 @@ attr = "RPGLE"
 usrprf = "*OWNER"
 useadpaut = "*NO"
 source_file = "payrunx.rpgle"
+
+[[object]]
+library = "APPLIB"
+name = "VAULT"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*EXCLUDE"
+text = "Vault. Security officers only."
+[object.data]
+attr = "PF"
+dds_file = "vault.pf"
+records = [
+  { NOTE = "@@FLAG:overprivileged-accounts@@" },
+]
+
+[[object]]
+library = "APPLIB"
+name = "MAINTLOG"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*EXCLUDE"
+text = "Maintenance notes. The clerk may read them, from a command line."
+[object.private]
+CLERK = "*USE"
+[object.data]
+attr = "PF"
+dds_file = "maintlog.pf"
+records = [
+  { NOTE = "@@FLAG:clerk-menu-escape@@" },
+]
 
 [[object]]
 library = "APPLIB"
@@ -762,6 +793,7 @@ lines = """
  1003  D. Lindqvist         IT       6,120.00     ***-**-2208
  1004  J. Tran              HR       5,034.25     ***-**-9915
  TOTAL                                19,239.75
+ AUDIT TAG @@FLAG:qprint-report-leak@@
 """
 
 [[spool_file]]
@@ -784,6 +816,8 @@ lines = """
                                       Message . . . . :   CHGUSRPRF USRPRF(OLDTEMP) PASSWORD(*****) STATUS(*ENABLED)
  *NONE      Command                      26-10-19  08:40:55,000000  QCMD
                                       Message . . . . :   GRTOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE) USER(OLDTEMP) AUT(*ALL)
+ *NONE      Command                      26-10-19  08:44:10,000000  QCMD
+                                      Message . . . . :   SNDMSG MSG('Change ticket @@FLAG:default-passwords@@') TOUSR(OPERATOR)
 """
 
 # ---------------------------------------------------------------------------
@@ -810,4 +844,5 @@ messages = [
   { from = "", when = "2026-10-26T09:41:02", text = "Job 004502/OPERATOR/QPADEV0003 released by user OPERATOR." },
   { from = "", when = "2026-10-26T17:30:00", text = "All jobs at work station QPADEV0003 ended." },
   { from = "QSECOFR", when = "2026-10-27T07:55:20", text = "Backup window tonight. Service account SVCACCT will run the save." },
+  { from = "QSECOFR", when = "2026-10-27T07:58:03", text = "Save passphrase for tonight: @@FLAG:qsysopr-recon@@" },
 ]

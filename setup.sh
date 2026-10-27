@@ -22,4 +22,7 @@ elif .venv/bin/pip install --quiet 'rpgle_library @ git+https://github.com/wren-
 else
   info "rpgle_library not installed (no sibling folder, GitHub not reachable): RPG programs will not run"
 fi
+# The instance secret that flags and secure-state passwords come from. Kept at the repo root, never committed,
+# and not wiped by reset.sh. Made once.
+.venv/bin/python -m silverlake.flags init >/dev/null && ok "instance secret in place (.instance-secret)"
 ok "ready. next: ./start.sh"

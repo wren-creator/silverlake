@@ -8,3 +8,7 @@ target = "object:APPLIB/EMPDIR/*PGM"
 field = "owner"
 vulnerable = "OPERATOR"
 secure = "QDFTOWN"
+
+[flag]
+kind = "text"
+task = "Make the staff directory show you the payroll file, and find the audit employee's name."

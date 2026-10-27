@@ -2,6 +2,7 @@
 
      A          R HEADING                   SKIPB(1) SPACEA(2)
      A                                  1  2'PAYROLL REGISTER'
+     A                                  1 55'@@FLAG:regrpt-outq@@'
      A                                  1 40'PAGE'
      A            PAGE           3S 0O  1 45PAGNBR EDTCDE(Z)
      A                                  2  2'EMP'

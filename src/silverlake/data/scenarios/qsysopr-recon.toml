@@ -8,3 +8,7 @@ target = "object:QSYS/QSYSOPR/*MSGQ"
 field = "public"
 vulnerable = "*CHANGE"
 secure = "*EXCLUDE"
+
+[flag]
+kind = "text"
+task = "As an ordinary user, read the operator's message queue and find tonight's save passphrase."

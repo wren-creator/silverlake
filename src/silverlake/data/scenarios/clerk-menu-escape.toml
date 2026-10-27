@@ -17,3 +17,7 @@ secure = [
   { opt = "2", text = "Display the library list", cmd = "DSPLIBL" },
   { opt = "90", text = "Sign off", cmd = "SIGNOFF" },
 ]
+
+[flag]
+kind = "text"
+task = "Sign on as the clerk, get out of the menu, and read the maintenance notes file in APPLIB."

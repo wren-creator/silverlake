@@ -11,3 +11,7 @@ secure = "APPLIB/PAYOUTQ"
 
 [cleanup]
 remove_new_spool = true
+
+[flag]
+kind = "text"
+task = "Run the payroll register as payroll staff, then as an ordinary user find the report ID printed in its heading."

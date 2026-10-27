@@ -17,3 +17,8 @@ secure = "*EXCLUDE"
 
 [cleanup]
 restore = ["object:APPLIB/PAYROLL/*FILE"]
+
+[flag]
+kind = "state"
+check = "salary_raised"
+task = "As an ordinary user, set employee 10004's salary to 99999."

@@ -30,6 +30,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import flags
 from .system import profiles, state
 from .system.authority import UserClass, parse_auth
 from .system.profiles import ProfileStore
@@ -60,6 +61,7 @@ class Scenario:
     summary: str
     changes: list[Change] = field(default_factory=list)
     cleanup: dict = field(default_factory=dict)
+    flag: dict = field(default_factory=dict)       # {kind: text|state, check: name, task: what to do}
 
 
 def registry(directory: Path | None = None) -> dict[str, Scenario]:
@@ -81,7 +83,7 @@ def registry(directory: Path | None = None) -> dict[str, Scenario]:
                 raise ScenarioError(f"{path.name}: a change needs target, field, vulnerable and secure")
             changes.append(Change(c["target"], c["field"], c["vulnerable"], c["secure"]))
         found[sid] = Scenario(sid, raw.get("title", sid), raw["group"], raw.get("summary", ""), changes,
-                              raw.get("cleanup", {}))
+                              raw.get("cleanup", {}), raw.get("flag", {}))
     return found
 
 
@@ -97,7 +99,9 @@ def _object(store: ProfileStore, target: str):
 
 def _value(raw):
     if isinstance(raw, str) and raw.startswith("file:"):
-        return (DATA / "rpg" / raw[5:]).read_text()
+        return flags.fill((DATA / "rpg" / raw[5:]).read_text())
+    if isinstance(raw, str) and raw.startswith("secret:"):
+        return flags.password(raw[7:])
     return raw
 
 
@@ -136,6 +140,7 @@ def get(store: ProfileStore, change: Change):
 def put(store: ProfileStore, change: Change, raw) -> None:
     """Set the field a change names to `raw`, one of its two values."""
     kind = change.target.split(":", 1)[0]
+    raw = _value(raw)
     if kind == "object":
         obj = _object(store, change.target)
         head, _, rest = change.field.partition(".")
@@ -143,7 +148,7 @@ def put(store: ProfileStore, change: Change, raw) -> None:
             if raw == UNSET:
                 obj.data.pop(rest, None)
             else:
-                obj.data[rest] = _value(raw)
+                obj.data[rest] = raw
         elif head == "private":
             if raw == UNSET:
                 obj.private.pop(rest, None)

@@ -17,3 +17,8 @@ secure = "file:runcmdx.rpgle"
 
 [cleanup]
 remove_new_profiles = true
+
+[flag]
+kind = "state"
+check = "new_privileged_profile"
+task = "From an ordinary user, create a profile that holds *ALLOBJ."

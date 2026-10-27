@@ -31,7 +31,7 @@ def names(store, user, line):
 def test_wrkobj_finds_by_generic_name_and_library(store):
     assert ("APPLIB", "PAYROLL", "*FILE") in names(store, "QSECOFR", "WRKOBJ OBJ(APPLIB/PAY*)")
     assert names(store, "QSECOFR", "WRKOBJ OBJ(APPLIB/PAY*) OBJTYPE(*FILE)") == [("APPLIB", "PAYROLL", "*FILE")]
-    assert {n for _, n, _ in names(store, "QSECOFR", "WRKOBJ APPLIB/*ALL *FILE")} == {"PAYROLL", "CUSTOMERS", "REGRPT", "REGRPTX", "SCREEN", "REPORT", "EMPINQ", "SALADJ", "RUNCMD", "STAFF"}
+    assert {n for _, n, _ in names(store, "QSECOFR", "WRKOBJ APPLIB/*ALL *FILE")} == {"PAYROLL", "CUSTOMERS", "REGRPT", "REGRPTX", "SCREEN", "REPORT", "EMPINQ", "SALADJ", "RUNCMD", "STAFF", "VAULT", "MAINTLOG"}
     assert "No objects found" in run(store, "QSECOFR", "WRKOBJ OBJ(APPLIB/ZZ*)")
 
 

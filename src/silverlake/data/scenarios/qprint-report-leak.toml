@@ -8,3 +8,7 @@ target = "object:QGPL/QPRINT/*OUTQ"
 field = "data.dspdta"
 vulnerable = "*YES"
 secure = "*OWNER"
+
+[flag]
+kind = "text"
+task = "As an ordinary user, read the payroll register on the default output queue and find the audit tag."

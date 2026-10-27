@@ -35,7 +35,7 @@ def test_a_register_run_by_payroll_staff_lands_on_the_queue_as_their_file(store)
     assert (f.user, f.outq_lib, f.outq, f.status) == ("OPERATOR", "QGPL", "QPRINT", "RDY")
     assert f.job_name == c.session.job.name and f.job_number == c.session.job.number
     text = "\n".join(f.lines)
-    assert "PAYROLL REGISTER" in text and "Chen, Priya" in text and "653,000" in text
+    assert "PAYROLL REGISTER" in text and "Chen, Priya" in text and "653,001" in text
 
 
 def test_the_default_queue_lets_a_basic_user_read_the_report(store):

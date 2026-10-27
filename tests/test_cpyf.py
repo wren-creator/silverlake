@@ -44,7 +44,7 @@ def test_a_basic_user_cannot_copy_a_file_they_cannot_use(store):
 def test_use_on_the_source_is_enough_to_copy_it_out_and_the_copy_is_wide_open(store):
     c = signed(store, "OPERATOR")                           # PAYAUTL gives OPERATOR *USE
     s = run(c, "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/MYPAY) CRTFILE(*YES)")
-    assert "6 records copied" in text(s) and "created in library SCRATCH" in text(s)
+    assert "7 records copied" in text(s) and "created in library SCRATCH" in text(s)
     copy = store.objects[("SCRATCH", "MYPAY", "*FILE")]
     assert copy.owner == "OPERATOR" and copy.autl is None             # not on PAYAUTL
     student = store.profiles["STUDENT"]
@@ -71,7 +71,7 @@ def test_an_existing_target_is_not_touched_without_a_member_option(store):
     run(c, "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/MYPAY) CRTFILE(*YES)")
     s = run(c, "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/MYPAY)")
     assert "already has records" in text(s)
-    assert len(recs(store, "SCRATCH", "MYPAY")) == 6
+    assert len(recs(store, "SCRATCH", "MYPAY")) == 7
 
 
 def test_replace_and_add_and_updadd(store):
@@ -79,11 +79,11 @@ def test_replace_and_add_and_updadd(store):
     run(c, "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/MYPAY) CRTFILE(*YES)")
     run(c, "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/MYPAY) MBROPT(*ADD)")
     s = run(c, "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/MYPAY) MBROPT(*ADD)")
-    assert "same key" in text(s) and len(recs(store, "SCRATCH", "MYPAY")) == 6      # a unique key refuses duplicates
+    assert "same key" in text(s) and len(recs(store, "SCRATCH", "MYPAY")) == 7      # a unique key refuses duplicates
     run(c, "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/MYPAY) MBROPT(*REPLACE) NBRRCDS(2)")
     assert len(recs(store, "SCRATCH", "MYPAY")) == 2
     s = run(c, "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/MYPAY) MBROPT(*UPDADD)")
-    assert "6 records copied" in text(s) and len(recs(store, "SCRATCH", "MYPAY")) == 6
+    assert "7 records copied" in text(s) and len(recs(store, "SCRATCH", "MYPAY")) == 7
 
 
 def test_the_target_needs_add_and_replace_needs_delete(store):
@@ -94,7 +94,7 @@ def test_the_target_needs_add_and_replace_needs_delete(store):
     copy.public = Auth.OBJOPR | Auth.READ | Auth.ADD
     s = run(c, "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/MYPAY) MBROPT(*REPLACE)")
     assert "Not authorized" in text(s)
-    assert len(recs(store, "SCRATCH", "MYPAY")) == 6
+    assert len(recs(store, "SCRATCH", "MYPAY")) == 7
 
 
 def test_different_layouts_need_a_format_option(store):
