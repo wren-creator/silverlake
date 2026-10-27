@@ -43,6 +43,11 @@ class Job:
     function: str = ""
     cpu: float = 0.0
     spooled: list = field(default_factory=list)
+    held_from: str = ""          # the status a held job goes back to on release
+    ending: bool = False         # set by ENDJOB; the session notices on its next key
+    attrs: dict = field(default_factory=lambda: {
+        "JOBPTY": "5", "OUTPTY": "5", "RUNPTY": "20", "TIMESLICE": "2000", "PURGE": "*YES",
+        "DFTWAIT": "30", "CPUTIME": "*NOMAX", "MAXTMPSTG": "*NOMAX"})
 
     @property
     def qualified(self) -> str:
@@ -71,6 +76,8 @@ class JobTable:
         return job
 
     def end(self, job: Job | None) -> None:
+        if job is not None:
+            job.ending = True
         if job is not None and job in self.jobs:
             self.jobs.remove(job)
 

@@ -18,7 +18,7 @@ Laid out like the real display captured from PUB400 (title, CPU and elapsed head
 
 What the capture settled, and what is the point of the range: **a basic profile lists every active job on the system, other people's included.** Users, job names and what each job is running (the function column, such as `PGM-ARCPSTDA` or `CMD-STRQSH`) are visible without `*JOBCTL`. That is quiet reconnaissance, and it is on purpose. Your own job shows `CMD-WRKACTJOB` and `RUN` while the list is drawn.
 
-Option 8 (work with spooled files) opens that job's files through `WRKSPLF JOB(...)`. Options 2, 3, 4, 5, 6, 7 and 13 are laid out as on the real display and say "not available yet". F7, F10, F11, F23 and F24 are on the screen and do nothing yet. The elapsed time, CPU % and per job CPU are always zero.
+Options 2, 3, 4, 6 and 8 work (see Job control below), and 5, 7 and 13 are laid out as on the real display and say "not available yet". F7, F10, F11, F23 and F24 are on the screen and do nothing yet. The elapsed time, CPU % and per job CPU are always zero.
 
 ## Step 2: spool files (built)
 
@@ -55,6 +55,16 @@ Option 8 (work with spooled files) opens that job's files through `WRKSPLF JOB(.
 
 **Not modeled.** Delivery and severity are shown and not acted on, so nothing interrupts a session. Inquiry messages and replies, `*ALLACT` and `*REQUESTER` as recipients, the work station queue, `RMVMSG` (the page says compiled CL only), F11 (remove one message, needs a cursor on a message), `WRKMSGQ`, and `CRTMSGQ`/`CHGMSGQ`. The real `*WRKUSR` default showed a device queue in one capture and the user queue in another, so Silverlake always shows the user queue.
 
+## Job control (built)
+
+`HLDJOB`, `RLSJOB`, `ENDJOB` and `CHGJOB`, behind `WRKACTJOB` options 3, 6, 4 and 2. The rules are quoted from IBM's pages: the issuer must run under the job's own user profile or hold `*JOBCTL`, and `ENDJOB` enforces that "even when ending the current job". `*SPLCTL` and `*ALLOBJ` on their own do nothing here, which a test pins. `CHGJOB` changes `JOBPTY`, `OUTPTY`, `RUNPTY`, `TIMESLICE`, `PURGE`, `DFTWAIT`, `CPUTIME` and `MAXTMPSTG`, with the limits the page gives.
+
+In `CHGJOB`, `RUNPTY`, `TIMESLICE`, `PURGE`, `DFTWAIT`, `CPUTIME` and `MAXTMPSTG` need `*JOBCTL`. `JOBPTY` and `OUTPTY` do not. Values are stored and shown and change nothing, because there is no scheduler. A bad value changes nothing at all.
+
+**Ending a session** from another session works: the ended session notices on its next key, files its job log, and lands on the sign-on screen. Ending a seeded system job removes it until the next restart (our choice). A subsystem monitor is refused as "not valid job type" (inferred). Option 4 runs `ENDJOB` straight away: the real display asks first, and that screen was not captured, so Silverlake has no confirm. Option 2 takes its attributes from the command line, as in `JOBPTY(3)`, because the real prompt screen was not captured either.
+
+Message IDs (`CPF1321`, `CPF1342`, `CPF1343`, `CPF1344`, `CPF1346`, `CPF1349`) are from the pages, with the condition for each inferred. A refused `JOBCTL`-only change uses `CPF1337`, which came from a summary of CHGJOB's page.
+
 ## Later
 
-`ENDJOB`, `HLDJOB`, `CHGJOB`, `WRKJOB`, `DSPJOBLOG`, gated on `*JOBCTL` and on owning the job. The confirm screens for these are not captured, and ending a job on a shared system is not something the oracle will do, so they are built from IBM's pages when we get there.
+`WRKJOB` and `DSPJOBLOG`, a live job's attributes and log, and the real confirm and prompt screens for options 2 and 4 once captured (the oracle will not end or change jobs on a shared system).

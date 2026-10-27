@@ -8,7 +8,7 @@ are named in IGNORED so a copied command from a real system still runs."""
 import fnmatch
 from dataclasses import dataclass
 
-from ..system import admin, autls, messages, msgq, objects, objlist, spool
+from ..system import admin, autls, jobctl, messages, msgq, objects, objlist, spool
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -95,6 +95,14 @@ WRKSPLF_PARAMS = [Param("SELECT", "splsel", "*CURRENT", 6), Param("JOB", "jobq",
 DSPSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
                   Param("CRTDATE", "ignored", "*ONLY"), Param("FOLD", "ignored", "*NO")]
+HLDJOB_PARAMS = [Param("JOB", "jobq", "", 3, required=True), Param("SPLFILE", "ignored", "*NO"),
+                 Param("DUPJOBOPT", "ignored", "*SELECT")]
+RLSJOB_PARAMS = [Param("JOB", "jobq", "", 3, required=True), Param("DUPJOBOPT", "ignored", "*SELECT")]
+ENDJOB_PARAMS = [Param("JOB", "jobq", "", 3, required=True), Param("OPTION", "ignored", "*CNTRLD"),
+                 Param("DELAY", "ignored", "30"), Param("SPLFILE", "ignored", "*NO"), Param("LOGLMT", "ignored", "*SAME"),
+                 Param("ADLINTJOBS", "ignored", "*NONE"), Param("DUPJOBOPT", "ignored", "*SELECT")]
+CHGJOB_PARAMS = [Param("JOB", "jobq", "*", 3)] + [
+    Param(k, "jobattr", "*SAME") for k in ("JOBPTY", "OUTPTY", "RUNPTY", "TIMESLICE", "PURGE", "DFTWAIT", "CPUTIME", "MAXTMPSTG")]
 HLDSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
                   Param("CRTDATE", "ignored", "*ONLY"), Param("OPTION", "ignored", "*IMMED")]
@@ -157,7 +165,8 @@ COMMANDS = {
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
-    "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
+    "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
+    "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
     "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS,
 }
@@ -263,6 +272,8 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
             if v not in SPECIAL_VALUES and v not in _DETAILED and v != "*AUTLMGT":
                 raise BindError(f"Value {v} for parameter AUT not valid.")
         return list(values)
+    if k == "jobattr":
+        return values[0].upper()
     if k == "msgqname":
         v = values[0].upper()
         if v.startswith("*"):
@@ -523,6 +534,21 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         return Outcome(msgq.send(store, actor, session, b["MSG"], targets).message)
     if name == "CLRMSGQ":
         return Outcome(msgq.clear(store, actor, session, b["MSGQ"]).message)
+    if name in ("HLDJOB", "RLSJOB", "ENDJOB", "CHGJOB"):
+        job, err = jobctl.find(store, b["JOB"], session.job, name in ("ENDJOB", "CHGJOB"))
+        if err:
+            return Outcome(err)
+        own = job is session.job
+        if name == "ENDJOB":
+            done = jobctl.end(store, actor, job)
+            return Outcome(done.message, signoff=own and done.ok)
+        if name == "CHGJOB":
+            changes = {k: v for k, v in b.items() if k != "JOB" and v != SAME}
+            if not changes:
+                return Outcome(messages.syntax("Give at least one attribute to change."))
+            return Outcome(jobctl.change(store, actor, job, changes, own).message)
+        run = jobctl.hold if name == "HLDJOB" else jobctl.release
+        return Outcome(run(store, actor, job).message)
     if name == "WRKSPLF":
         user, fname = b["SELECT"]
         if user not in ("*CURRENT", "*ALL") and "*" not in user and user not in store.profiles:

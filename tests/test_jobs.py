@@ -93,3 +93,119 @@ def test_wrkactjob_is_a_command_object_so_it_can_be_taken_away(store):
     commands.execute(store, store.get("QSECOFR"), "RVKOBJAUT OBJ(QSYS/WRKACTJOB) OBJTYPE(*CMD) USER(*PUBLIC) AUT(*USE)")
     c = _signed(store, "STUDENT", "QPADEV0003")
     assert "Not authorized to command WRKACTJOB" in _text(c.handle("ENTER", {"command": "wrkactjob"}))
+
+
+# -- job control: HLDJOB, RLSJOB, ENDJOB, CHGJOB --------------------------------------------------------------
+
+from silverlake.cl import commands
+
+
+def _run(store, user, line, session=None):
+    out = commands.execute(store, store.get(user), line, session)
+    return out.message.text if out.message else "", out
+
+
+def _victim(store, user="STUDENT", device="QPADEV0009"):
+    c = _signed(store, user, device)
+    return c, store.jobs.find(device)[0]
+
+
+def test_owner_may_hold_and_release_their_own_job_and_others_may_not(store):
+    c, job = _victim(store)
+    ref = f"JOB({job.qualified})"
+    text, _ = _run(store, "GUEST", f"HLDJOB {ref}")
+    assert text == f"Not authorized to control job {job.qualified}."
+    assert "held" in _run(store, "STUDENT", f"HLDJOB {ref}")[0] and job.status == "HLD"
+    assert "already held" in _run(store, "STUDENT", f"HLDJOB {ref}")[0]
+    assert _run(store, "GUEST", f"RLSJOB {ref}")[0].startswith("Not authorized to control job")
+    assert "released" in _run(store, "JOBMAN", f"RLSJOB {ref}")[0] and job.status == "DSPW"   # *JOBCTL
+    assert "not held" in _run(store, "STUDENT", f"RLSJOB {ref}")[0]
+
+
+def test_jobctl_is_the_only_special_authority_that_counts(store):
+    c, job = _victim(store)
+    ref = f"JOB({job.qualified})"
+    assert _run(store, "SPOOLMAN", f"HLDJOB {ref}")[0].startswith("Not authorized")     # *SPLCTL is not enough
+    assert _run(store, "SVCACCT", f"HLDJOB {ref}")[0].startswith("Not authorized")      # nor is *ALLOBJ on its own
+    assert "held" in _run(store, "LEGACY", f"HLDJOB {ref}")[0]                           # *ALLOBJ plus *JOBCTL
+
+
+def test_hldjob_and_friends_report_what_they_cannot_find_or_do(store):
+    assert _run(store, "QSECOFR", "HLDJOB JOB(NOSUCH)")[0].startswith("Job NOSUCH user * job number * not found")
+    assert _run(store, "QSECOFR", "HLDJOB JOB(*)")[0] == "Current job not allowed as job name on this command."
+    assert "not valid job type" in _run(store, "QSECOFR", "HLDJOB JOB(QINTER)")[0]          # a subsystem monitor
+    text, out = _run(store, "QSECOFR", "HLDJOB JOB(NOSUCH)")
+    assert out.message.id == "CPF1321"
+
+
+def test_a_held_job_shows_hld_on_wrkactjob_and_options_3_and_6_work(store):
+    c = _signed(store, "QSECOFR", "QPADEV0001")
+    other, job = _victim(store, "STUDENT", "QPADEV0009")
+    c.handle("ENTER", {"command": "wrkactjob"})
+    idx = [j.qualified for j in c.view[1].rows].index(job.qualified)
+    page, i = divmod(idx, 9)
+    c.view[1].page = page
+    assert "held" in _text(c.handle("ENTER", {f"opt{i}": "3"}))
+    assert job.status == "HLD" and "HLD" in _text(c._draw_view())
+    assert "released" in _text(c.handle("ENTER", {f"opt{i}": "6"})) and job.status == "DSPW"
+
+
+def test_endjob_ends_another_session_and_it_notices_on_its_next_key(store):
+    victim, job = _victim(store, "STUDENT", "QPADEV0009")
+    assert _run(store, "GUEST", f"ENDJOB JOB({job.qualified})")[0].startswith("Not authorized")
+    assert "ended" in _run(store, "JOBMAN", f"ENDJOB JOB({job.qualified})")[0]
+    assert store.jobs.find("QPADEV0009") == []
+    s = victim.handle("ENTER", {"command": "dsplibl"})
+    assert "Sign On" in _text(s) and victim.profile is None
+    assert any(f.job_name == "QPADEV0009" for f in store.spool)                  # it still leaves its job log
+
+
+def test_endjob_star_ends_your_own_session_and_the_rule_still_applies(store):
+    c = _signed(store, "STUDENT", "QPADEV0010")
+    s = c.handle("ENTER", {"command": "endjob job(*)"})
+    assert "Sign On" in _text(s) and c.profile is None
+
+
+def test_endjob_option_4_from_wrkactjob_and_a_seeded_job_just_goes(store):
+    c = _signed(store, "QSECOFR", "QPADEV0001")
+    c.handle("ENTER", {"command": "wrkactjob"})
+    rows = c.view[1].rows
+    idx = next(i for i, j in enumerate(rows) if j.name == "QSYSSCD")
+    c.view[1].page = idx // 9
+    assert "ended" in _text(c.handle("ENTER", {f"opt{idx % 9}": "4"}))
+    assert store.jobs.find("QSYSSCD") == []
+
+
+def test_chgjob_changes_what_the_pages_allow(store):
+    c, job = _victim(store)
+    assert "changed" in _run(store, "STUDENT", f"CHGJOB JOB({job.qualified}) JOBPTY(3) OUTPTY(4)")[0]
+    assert job.attrs["JOBPTY"] == "3" and job.attrs["OUTPTY"] == "4"
+    assert _run(store, "GUEST", f"CHGJOB JOB({job.qualified}) JOBPTY(1)")[0].startswith("Not authorized to control")
+    assert job.attrs["JOBPTY"] == "3"
+
+
+def test_chgjob_runpty_and_limits_need_jobctl_even_on_your_own_job(store):
+    c, job = _victim(store)
+    ref = f"JOB({job.qualified})"
+    text, out = _run(store, "STUDENT", f"CHGJOB {ref} RUNPTY(10)")
+    assert "not authorized to change parameters" in text and out.message.id == "CPF1337"
+    assert job.attrs["RUNPTY"] == "20"
+    assert "changed" in _run(store, "JOBMAN", f"CHGJOB {ref} RUNPTY(10)")[0] and job.attrs["RUNPTY"] == "10"
+    assert "not valid" in _run(store, "JOBMAN", f"CHGJOB {ref} RUNPTY(500)")[0]
+    assert job.attrs["RUNPTY"] == "10"                                                 # a bad value changes nothing
+    assert "changed" in _run(store, "JOBMAN", f"CHGJOB {ref} CPUTIME(*NOMAX) PURGE(*NO)")[0]
+
+
+def test_chgjob_option_2_takes_its_attributes_from_the_command_line(store):
+    c = _signed(store, "QSECOFR", "QPADEV0001")
+    other, job = _victim(store, "STUDENT", "QPADEV0009")
+    c.handle("ENTER", {"command": "wrkactjob"})
+    idx = [j.qualified for j in c.view[1].rows].index(job.qualified)
+    c.view[1].page = idx // 9
+    assert "Type the attributes" in _text(c.handle("ENTER", {f"opt{idx % 9}": "2"}))
+    assert "changed" in _text(c.handle("ENTER", {f"opt{idx % 9}": "2", "command": "JOBPTY(2)"}))
+    assert job.attrs["JOBPTY"] == "2"
+
+
+def test_job_control_commands_are_command_objects(store):
+    assert all(("QSYS", n, "*CMD") in store.objects for n in ("HLDJOB", "RLSJOB", "ENDJOB", "CHGJOB"))

@@ -134,6 +134,9 @@ class SignonController:
 
     def handle(self, aid: str, values: dict[str, str]) -> Screen:
         if self.profile is not None:
+            if self.session.job is not None and self.session.job.ending:      # ENDJOB, run by someone else
+                self._sign_off()
+                return signon_screen(self.display)
             return self._home(aid, values)
         user = values.get("user", "").strip()
         if not user:
@@ -454,8 +457,19 @@ class SignonController:
                 return None, f"Option {opt} is not available in Silverlake yet."
             return None, f"Option {opt} is not valid."
         if wl.kind == "jobs":
-            if opt == "8" and row.type != "SBS":
-                return f"WRKSPLF SELECT(*ALL) JOB({row.qualified})", ""
+            if row.type != "SBS":
+                ref = f"JOB({row.qualified})"
+                if opt == "8":
+                    return f"WRKSPLF SELECT(*ALL) {ref}", ""
+                if opt == "3":
+                    return f"HLDJOB {ref}", ""
+                if opt == "6":
+                    return f"RLSJOB {ref}", ""
+                if opt == "4":
+                    return f"ENDJOB {ref}", ""
+                if opt == "2":
+                    return (f"CHGJOB {ref} {param}", "") if param else \
+                        (None, "Type the attributes on the command line for option 2, such as JOBPTY(3).")
             if opt in ("2", "3", "4", "5", "6", "7", "8", "13"):
                 return None, f"Option {opt} is not available in Silverlake yet."
             return None, f"Option {opt} is not valid."
