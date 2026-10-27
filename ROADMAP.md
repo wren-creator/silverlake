@@ -45,7 +45,8 @@
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
 - [x] Sign-on lockout (QMAXSIGN, QMAXSGNACN) and password expiry (PWDEXP, QPWDEXPITV) with a Change Password display, built from IBM's descriptions, not a capture
 - [ ] Layout leftovers: DSPLIBL option 5 and Opt column, DSPOBJAUT F11 (detail authorities, no capture yet) and the Group column, WRKLIB and the other list screens with no capture, Top and Bottom on the remaining paged lists
-- [ ] Lockout and expiry follow-ups: device lockout (QMAXSGNACN 1), the warnings before the last attempt, QSECOFR exempt at the console, CHGPWD, password rules (QPWDMINLEN, QPWDRQDDIF), per-profile PWDEXPITV, an expiry warning before the day
+- [x] CHGPWD, password rules (QPWDMINLEN/MAXLEN/RQDDGT/LMTAJC/LMTREP/RQDDIF), per-profile PWDEXPITV, expiry warning (QPWDEXPWRN)
+- [ ] Lockout leftovers: device lockout (QMAXSGNACN 1), QSECOFR exempt at the console, a warning before the last attempt if the real host has one
 - [x] Phase 3c-3c complete: jobs, spool files and message queues, merged to main 2026-10-27
 - [ ] Phase 4: RPG and DDS through rpgle_library (EXFMT programs, seeded samples)
 - [ ] Phase 4b: PASE, a simulated one. No real processes, ever: a Python shell over a virtual IFS, so it cannot touch the host and `reset.sh` stays exact. Stages: (1) an IFS (`/QOpenSys`, `/home`, `/tmp`, `/QSYS.LIB` mapped onto the existing library and object store) with rwx permissions tied to profiles and *ALLOBJ; (2) the shell behind `CALL QP2TERM`, `QSH` and a loopback SSH listener, with a whitelist (ls, cat, cd, pwd, id, whoami, ps, env, echo, export); (3) `system` to run CL from the shell and `db2util` or a small SQL runner for `QSYS2.QCMDEXC`; (4) seeded weaknesses: world writable `.ssh/authorized_keys`, a writable directory early in `$PATH`, writable `/etc/profile` and `~/.profile`, and CL reachable from a PASE shell by a limited-capability profile
@@ -64,6 +65,7 @@ Things Silverlake does from IBM's pages, memory or inference and has not seen on
 - [ ] CHGJOB: that RUNPTY, TIMESLICE, PURGE, DFTWAIT, CPUTIME and MAXTMPSTG need *JOBCTL even on your own job, and CPF1337 as the refusal (inferred). Write
 - [ ] CRTOUTQ and DLTOUTQ: that *ADD to the library is what creating takes, which message a queue with entries raises (CPF3360 stands in), that QPRINT and QEZJOBLOG are undeletable (CPF3469, inferred), and that *OBJEXIST is what deleting takes. Write, so a human decides
 - [ ] CHGSPLFA: moving a file with OUTQ() needing *READ to the target queue, and the control rule matching hold and delete, are inferred; option 4 on a spooled file may ask for confirmation on the real host
+- [ ] Password rules: real message IDs and wording, the QPWDRQDDIF history sizes (from memory), whether CRTUSRPRF and CHGUSRPRF enforce the rules, the expiry warning text and where it appears
 - [ ] WRKOUTQ: the IDs CPF3357 (queue not found) and CPF3330 (not authorized) are from memory of IBM's lists, not seen; that *READ to the queue and *EXECUTE to its library are what listing takes; what a held queue shows in Status; that options 3 and 6 follow the same rule as on WRKSPLF
 - [ ] Spool rules: the parts of CRTOUTQ's page that only came through as a summary, and the inferred OPRCTL, DSPDTA and AUTCHK behavior for other people's files
 - [ ] Job log filing: that passwords are masked is Silverlake's choice, not something seen. Check what a real QPJOBLOG holds for a typed password

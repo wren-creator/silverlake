@@ -230,15 +230,16 @@ class SignonController:
             profile.name, self.display, max((int(f.job_number) for f in self.store.spool), default=0))
         self.session.job.log = self.session.joblog
         self.session.job.info = self.session
+        warning = self.store.expiry_warning(profile)
         if program != "*NONE":
             self.session.mode = "cmdentry"
-            return self._base()
+            return self._base(warning)
         obj, err = objects.use_object(self.store, profile, menu, "*MENU", self.session.search_order())
         if err:
             self.session.mode = "cmdentry"        # nowhere to land: command entry, with the reason
             return self._base(err.text)
         self.session.push_menu((obj.library, obj.name), False)
-        return self._base()
+        return self._base(warning)
 
     # -- the base display: a menu or command entry ------------------------------------------
 

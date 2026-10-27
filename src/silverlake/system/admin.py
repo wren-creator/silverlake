@@ -92,6 +92,8 @@ def create(store: ProfileStore, actor: Profile, name: str, attrs: dict) -> Resul
         return _no(bad)
     if attrs["password"] is None and attrs["password_expired"]:
         return _no(messages.expired_with_no_password())
+    if attrs["password"] is not None and (bad := store.check_password_rules(Profile(name=name), attrs["password"])):
+        return _no(bad)
 
     profile = Profile(
         name=name, user_class=attrs["user_class"], special_authorities=attrs["special"],
@@ -100,6 +102,7 @@ def create(store: ProfileStore, actor: Profile, name: str, attrs: dict) -> Resul
         supplemental_groups=list(attrs["supplemental_groups"]), initial_program=attrs["initial_program"],
         initial_menu=attrs["initial_menu"], current_library=attrs["current_library"], text=attrs["text"],
         owner=actor.name, public_authority=attrs["public_authority"],
+        pwd_expitv=attrs.get("pwd_expitv"),
     )
     store.stamp_password(profile)
     store.profiles[name] = profile
@@ -129,16 +132,22 @@ def change(store: ProfileStore, actor: Profile, name: str, attrs: dict) -> Resul
     new_password = attrs["password"] if "password" in attrs else target.password
     if new_password is None and attrs.get("password_expired", target.password_expired):
         return _no(messages.expired_with_no_password())
+    if attrs.get("password") is not None and (bad := store.check_password_rules(target, attrs["password"])):
+        return _no(bad)
 
     for key, value in attrs.items():
-        if key == "special":
+        if key == "password":
+            store.set_password(target, value)
+            if "password_expired" in attrs:
+                target.password_expired = attrs["password_expired"]
+        elif key == "password_expired" and "password" in attrs:
+            continue
+        elif key == "special":
             target.special_authorities = value
         elif key == "supplemental_groups":
             target.supplemental_groups = list(value)
         else:
             setattr(target, key, value)
-    if "password" in attrs:
-        store.stamp_password(target)
     if attrs.get("status") == "*ENABLED":
         store.bad_signons.pop(name, None)      # re-enabling starts the count again
     store.on_change()

@@ -315,7 +315,7 @@ def no_messages(f: SpoolFile) -> str:
 
 # -- job logs --------------------------------------------------------------------------------------
 
-_PASSWORD = re.compile(r"(PASSWORD|PWD)\(([^)]*)\)", re.IGNORECASE)
+_PASSWORD = re.compile(r"(PASSWORD2?|PWD)\(([^)]*)\)", re.IGNORECASE)
 
 
 def mask(line: str, fold: bool = True) -> str:

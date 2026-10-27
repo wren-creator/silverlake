@@ -221,7 +221,20 @@ A wrong password for a real, enabled profile counts against it. At the limit the
 
 A password is expired when the profile has `PWDEXP(*YES)`, or when it is older than `qpwdexpitv` days since it was last set. The right password then lands on a Change Password display (current, new, verify) instead of a session, and a good change clears the flag and starts the interval over. The seeded profiles have no change date, so they never age until someone sets a password. `CRTUSRPRF` and a `CHGUSRPRF` that sets `PASSWORD` stamp today's date.
 
-The behavior follows IBM's description of these values. The messages on the last attempt, the warnings before it, and the Change Password layout were not seen on a real system, so the layout and wording are ours and are on the verification list in the roadmap. Not built: device lockout, the warnings, `QSECOFR` being exempt at the console, `CHGPWD`, and the other password rules (`QPWDMINLEN`, `QPWDRQDDIF` and friends).
+The behavior follows IBM's description of these values. The messages on the last attempt, the warnings before it, and the Change Password layout were not seen on a real system, so the layout and wording are ours and are on the verification list in the roadmap. Not built: device lockout and `QSECOFR` being exempt at the console. No warning before the last bad attempt is drawn, because none is known to exist on the real host and an invented one would teach the wrong thing.
+
+### Password rules, CHGPWD and the expiry warning
+
+| System value (seed key) | What it does | Seed |
+|---|---|---|
+| `qpwdminlen`, `qpwdmaxlen` | length range (IBM ships 6 and 8) | 1 and 10 |
+| `qpwdrqddgt` | `1`: at least one digit | 0 |
+| `qpwdlmtajc` | `1`: no two digits side by side | 0 |
+| `qpwdlmtrep` | `1`: no repeated character, `2`: none twice in a row | 0 |
+| `qpwdrqddif` | `0` off, `1` to `8` remember 32, 24, 18, 12, 10, 8, 6 or 4 old passwords (the table is from memory) | 0 |
+| `qpwdexpwrn` | days before expiry the first screen warns | 7 |
+
+The seed is looser than IBM's defaults on purpose, so a trainee can tighten it and watch what changes. The rules bind the Change Password display, `CHGPWD PASSWORD() NEWPASSWORD() NEWPASSWORD2()`, `CRTUSRPRF` and `CHGUSRPRF` alike. The wording of each refusal is ours, not IBM's, and no message IDs are claimed. Old passwords are kept in plain text in the state file, in keeping with the rest of the range. `CHGPWD` is masked in job logs like any other password parameter. `PWDEXPITV(*SYSVAL | *NOMAX | 1 to 366)` on `CRTUSRPRF` and `CHGUSRPRF` overrides `qpwdexpitv` for one profile, and shows on `DSPUSRPRF`. Within `qpwdexpwrn` days of expiry, sign-on lands with "Password will expire in N days." on the message line (our wording).
 
 ## Profile administration messages
 

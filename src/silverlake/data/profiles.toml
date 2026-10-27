@@ -12,6 +12,13 @@ mode      = "vulnerable"
 qmaxsign   = 3         # bad passwords in a row before the profile is disabled. 0 is *NOMAX: guess forever.
 qmaxsgnacn = 3         # 1 device only (not simulated, so no lockout), 2 or 3 disable the profile
 qpwdexpitv = 0         # days a password lasts. 0 is *NOMAX. Seeded profiles have no change date, so they never age.
+qpwdexpwrn = 7         # days of warning on the first screen before a password expires
+qpwdminlen = 1         # password rules. IBM ships 6 and 8 and the rest off, this seed is looser on purpose.
+qpwdmaxlen = 10
+qpwdrqddgt = 0         # 1 means at least one digit
+qpwdlmtajc = 0         # 1 means no two digits side by side
+qpwdlmtrep = 0         # 1 no repeated character, 2 none twice in a row
+qpwdrqddif = 0         # 0 off, 1 to 8 remember 32, 24, 18, 12, 10, 8, 6 or 4 old passwords
 default_profile_owner = "SECADMIN"   # the security administrator created the accounts below
 
 # ---------------------------------------------------------------------------

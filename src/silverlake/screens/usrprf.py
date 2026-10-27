@@ -30,6 +30,8 @@ def dspusrprf_screen(store: ProfileStore, p: Profile) -> Screen:
         ("User profile", p.name),
         ("Status", p.status),
         ("Password", info["password"] + (", expired" if p.password_expired else "")),
+        ("Password expiration interval", "*SYSVAL" if p.pwd_expitv is None else (
+            "*NOMAX" if p.pwd_expitv == 0 else str(p.pwd_expitv))),
         ("User class", p.user_class.value),
         ("Special authority from", info["special_source"]),
         ("Special authorities", info["special"]),

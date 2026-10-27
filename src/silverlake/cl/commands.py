@@ -51,7 +51,7 @@ CRT_PARAMS = [
     Param("INLMNU", "qname*", "MAIN"), Param("LMTCPB", "lmtcpb", "*NO"),
     Param("TEXT", "text", "*BLANK"), Param("SPCAUT", "spcaut", "*USRCLS", 8),
     Param("GRPPRF", "name*", "*NONE"), Param("SUPGRPPRF", "names", "*NONE", 15),
-    Param("AUT", "aut", "*EXCLUDE"),
+    Param("AUT", "aut", "*EXCLUDE"), Param("PWDEXPITV", "pwdintv", "*SYSVAL"),
 ]
 CHG_PARAMS = [Param(p.key, p.kind, SAME, p.maxn) for p in CRT_PARAMS]
 CHG_PARAMS[0] = CRT_PARAMS[0]
@@ -142,6 +142,8 @@ DLTSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq",
 WRKACTJOB_PARAMS = [Param("SBS", "name*", "*ALL"), Param("CPUPCTLMT", "ignored", "*NONE"), Param("JOB", "ignored", "*ALL")]
 GO_PARAMS = [Param("MENU", "qname", "", required=True), Param("RTNPNT", "yesno", "*YES")]
 CALL_PARAMS = [Param("PGM", "qname", "", required=True)]
+CHGPWD_PARAMS = [Param("PASSWORD", "plain", "", required=True), Param("NEWPASSWORD", "plain", "", required=True),
+                 Param("NEWPASSWORD2", "plain", "", required=True)]
 CHGPRF_PARAMS = [Param("INLPGM", "qname*", SAME), Param("INLMNU", "qname*", SAME), Param("CURLIB", "name*", SAME)]
 
 CRTAUTL_PARAMS = [Param("AUTL", "autl", "", required=True), Param("AUT", "aut", "*CHANGE"),
@@ -187,7 +189,7 @@ COMMANDS = {
     "CRTLIB": CRTLIB_PARAMS, "DLTLIB": DLTLIB_PARAMS, "DSPLIBL": DSPLIBL_PARAMS,
     "ADDLIBLE": ADDLIBLE_PARAMS, "RMVLIBLE": RMVLIBLE_PARAMS, "WRKLIB": WRKLIB_PARAMS,
     "DSPOBJAUT": DSPOBJAUT_PARAMS, "GRTOBJAUT": GRTOBJAUT_PARAMS, "RVKOBJAUT": RVKOBJAUT_PARAMS,
-    "GO": GO_PARAMS, "CALL": CALL_PARAMS, "CHGPRF": CHGPRF_PARAMS,
+    "GO": GO_PARAMS, "CALL": CALL_PARAMS, "CHGPRF": CHGPRF_PARAMS, "CHGPWD": CHGPWD_PARAMS,
     "CRTAUTL": CRTAUTL_PARAMS, "DLTAUTL": DLTAUTL_PARAMS, "ADDAUTLE": ADDAUTLE_PARAMS,
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
@@ -234,6 +236,17 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
         if len(v) > limit:
             raise BindError(f"Password longer than {limit} characters.")
         return v
+    if k == "plain":
+        return values[0]
+    if k == "pwdintv":
+        v = _one(p.key, values, ("*SYSVAL", "*NOMAX")) if values[0].startswith("*") else values[0]
+        if v == "*SYSVAL":
+            return None
+        if v == "*NOMAX":
+            return 0
+        if not v.isdigit() or not 1 <= int(v) <= 366:
+            raise BindError("PWDEXPITV must be *SYSVAL, *NOMAX or 1 to 366.")
+        return int(v)
     if k == "yesno":
         return _one(p.key, values, ("*NO", "*YES")) == "*YES"
     if k == "status":
@@ -497,7 +510,7 @@ def _crt_attrs(b: dict) -> dict:
         "group_profile": None if b["GRPPRF"] == "*NONE" else b["GRPPRF"],
         "supplemental_groups": b["SUPGRPPRF"], "initial_program": b["INLPGM"],
         "initial_menu": b["INLMNU"], "current_library": b["CURLIB"], "text": b["TEXT"],
-        "public_authority": b["AUT"],
+        "public_authority": b["AUT"], "pwd_expitv": b["PWDEXPITV"],
     }
 
 
@@ -505,7 +518,7 @@ _CHG_FIELDS = {
     "PASSWORD": "password", "PWDEXP": "password_expired", "STATUS": "status", "USRCLS": "user_class",
     "CURLIB": "current_library", "INLPGM": "initial_program", "INLMNU": "initial_menu",
     "LMTCPB": "limited_capabilities", "TEXT": "text", "SPCAUT": "special", "GRPPRF": "group_profile",
-    "SUPGRPPRF": "supplemental_groups", "AUT": "public_authority",
+    "SUPGRPPRF": "supplemental_groups", "AUT": "public_authority", "PWDEXPITV": "pwd_expitv",
 }
 
 
@@ -694,6 +707,9 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         if (prog.library, prog.name) == ("QSYS", "QCMD"):
             return Outcome(cmdentry=True)
         return Outcome(messages.syntax(f"Program {prog.name} cannot be run: programs are not modeled yet."))
+    if name == "CHGPWD":
+        err = store.change_password(actor, b["PASSWORD"], b["NEWPASSWORD"], b["NEWPASSWORD2"])
+        return Outcome(err or messages.info("Password changed."))
     if name == "CHGPRF":
         attrs = {k: v for k, v in (("initial_program", b.get("INLPGM", SAME)), ("initial_menu", b.get("INLMNU", SAME)),
                                    ("current_library", b.get("CURLIB", SAME))) if v != SAME}

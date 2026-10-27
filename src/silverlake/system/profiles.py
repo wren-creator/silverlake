@@ -37,6 +37,8 @@ class Profile:
     status: str = "*ENABLED"          # or *DISABLED
     password_expired: bool = False    # PWDEXP(*YES)
     password_changed: str | None = None   # ISO date the password was last set; None = unknown
+    password_history: list[str] = field(default_factory=list)   # earlier passwords, newest last (QPWDRQDDIF)
+    pwd_expitv: int | None = None         # PWDEXPITV: days, 0 is *NOMAX, None is *SYSVAL
     limited_capabilities: str = "*NO"  # LMTCPB: *NO, *PARTIAL, *YES. Recorded, not enforced yet.
     group_profile: str | None = None
     supplemental_groups: list[str] = field(default_factory=list)
@@ -60,6 +62,13 @@ class System:
     qmaxsign: int = 3        # QMAXSIGN: bad sign-on attempts allowed in a row, 0 is *NOMAX
     qmaxsgnacn: int = 3      # QMAXSGNACN: 1 disable device, 2 disable profile, 3 both (devices are not simulated)
     qpwdexpitv: int = 0      # QPWDEXPITV: days a password lasts, 0 is *NOMAX
+    qpwdexpwrn: int = 7      # QPWDEXPWRN: days of warning before a password expires
+    qpwdminlen: int = 1      # QPWDMINLEN / QPWDMAXLEN: the length range (IBM ships 6 and 8, the seed is looser)
+    qpwdmaxlen: int = 10
+    qpwdrqddgt: int = 0      # QPWDRQDDGT: 1 means at least one digit
+    qpwdlmtajc: int = 0      # QPWDLMTAJC: 1 means no two adjacent digits
+    qpwdlmtrep: int = 0      # QPWDLMTREP: 1 no repeated character at all, 2 not twice in a row
+    qpwdrqddif: int = 0      # QPWDRQDDIF: 0 off, 1 to 8 are the IBM steps (32 down to 4 remembered passwords)
 
 
 class ProfileStore:
@@ -152,13 +161,65 @@ class ProfileStore:
         """PWDEXP(*YES), or older than QPWDEXPITV days (IBM: the interval is counted from the last change)."""
         if profile.password_expired:
             return True
-        days = self.system.qpwdexpitv
+        days = self.expiry_days(profile)
         if not days or not profile.password_changed:
             return False
         return self.today() > date.fromisoformat(profile.password_changed) + timedelta(days=days)
 
     def stamp_password(self, profile: Profile) -> None:
         profile.password_changed = self.today().isoformat()
+
+    HISTORY = {0: 0, 1: 32, 2: 24, 3: 18, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4}   # QPWDRQDDIF, from memory of IBM's table
+
+    def expiry_days(self, profile: Profile) -> int:
+        """Days a password lasts for this profile: its own PWDEXPITV, else QPWDEXPITV. 0 is *NOMAX."""
+        return self.system.qpwdexpitv if profile.pwd_expitv is None else profile.pwd_expitv
+
+    def days_left(self, profile: Profile) -> int | None:
+        """Days until the password expires, or None when it never will (or no change date is kept)."""
+        days = self.expiry_days(profile)
+        if not days or not profile.password_changed:
+            return None
+        return (date.fromisoformat(profile.password_changed) + timedelta(days=days) - self.today()).days
+
+    def expiry_warning(self, profile: Profile) -> str:
+        left = self.days_left(profile)
+        if left is None or left < 0 or left > self.system.qpwdexpwrn:
+            return ""
+        return "Password will expire today." if left == 0 else (
+            f"Password will expire in {left} day{'s' if left != 1 else ''}.")
+
+    def check_password_rules(self, profile: Profile, new: str) -> messages.Message | None:
+        """The QPWD* rules. Same-length rules are checked against the typed text, case folded below
+        QPWDLVL 2 as the match is. The wording is ours and the real message IDs are not used."""
+        s = self.system
+        if len(new) < s.qpwdminlen:
+            return messages.info(f"Password must be at least {s.qpwdminlen} characters long.")
+        if len(new) > s.qpwdmaxlen:
+            return messages.info(f"Password must be no longer than {s.qpwdmaxlen} characters.")
+        if s.qpwdrqddgt and not any(c.isdigit() for c in new):
+            return messages.info("Password must contain at least one digit.")
+        if s.qpwdlmtajc and any(a.isdigit() and b.isdigit() for a, b in zip(new, new[1:])):
+            return messages.info("Password cannot have two digits next to each other.")
+        folded = new if s.qpwdlvl >= 2 else new.upper()
+        if s.qpwdlmtrep == 1 and len(set(folded)) != len(folded):
+            return messages.info("Password cannot repeat a character.")
+        if s.qpwdlmtrep == 2 and any(a == b for a, b in zip(folded, folded[1:])):
+            return messages.info("Password cannot repeat a character twice in a row.")
+        keep = self.HISTORY.get(s.qpwdrqddif, 0)
+        if keep:
+            used = ([profile.password] if profile.password else []) + profile.password_history[-keep:]
+            if any((u if s.qpwdlvl >= 2 else u.upper()) == folded for u in used):
+                return messages.info("Password was used before and is not allowed again.")
+        return None
+
+    def set_password(self, profile: Profile, new: str | None) -> None:
+        """Replace a password: remember the old one, clear the expired flag, stamp the date."""
+        if profile.password:
+            profile.password_history = (profile.password_history + [profile.password])[-32:]
+        profile.password = new
+        profile.password_expired = False
+        self.stamp_password(profile)
 
     def _bad_password(self, profile: Profile) -> None:
         """Count a wrong password. At QMAXSIGN in a row the profile is disabled (QMAXSGNACN 2 or 3).
@@ -188,7 +249,7 @@ class ProfileStore:
 
     def change_password(self, profile: Profile, current: str, new: str, verify: str) -> messages.Message | None:
         """The Change Password display at sign-on. None means it worked. Rules are the minimum
-        that mean anything here; QPWDMINLEN, QPWDRQDDIF and the rest of the rules are not built."""
+        that mean anything here, then the QPWD* rules."""
         if not self._password_matches(profile, current):
             return messages.password_not_correct(profile.name)
         if not new:
@@ -200,9 +261,9 @@ class ProfileStore:
             return messages.info("New password and verify password do not match.")
         if self._password_matches(profile, new):
             return messages.info("New password must be different from the current password.")
-        profile.password = new
-        profile.password_expired = False
-        self.stamp_password(profile)
+        if (bad := self.check_password_rules(profile, new)):
+            return bad
+        self.set_password(profile, new)
         self.on_change()
         return None
 
@@ -266,11 +327,22 @@ def load(path: Path | str | None = None) -> ProfileStore:
         qmaxsign=int(sysdata.get("qmaxsign", 3)),
         qmaxsgnacn=int(sysdata.get("qmaxsgnacn", 3)),
         qpwdexpitv=int(sysdata.get("qpwdexpitv", 0)),
+        qpwdexpwrn=int(sysdata.get("qpwdexpwrn", 7)),
+        qpwdminlen=int(sysdata.get("qpwdminlen", 1)),
+        qpwdmaxlen=int(sysdata.get("qpwdmaxlen", 10)),
+        qpwdrqddgt=int(sysdata.get("qpwdrqddgt", 0)),
+        qpwdlmtajc=int(sysdata.get("qpwdlmtajc", 0)),
+        qpwdlmtrep=int(sysdata.get("qpwdlmtrep", 0)),
+        qpwdrqddif=int(sysdata.get("qpwdrqddif", 0)),
     )
     if system.qsecurity not in QSECURITY_LEVELS:
         raise SeedError(f"qsecurity must be one of {QSECURITY_LEVELS}, not {system.qsecurity}")
     if system.qpwdlvl not in (0, 1, 2, 3):
         raise SeedError(f"qpwdlvl must be 0 to 3, not {system.qpwdlvl}")
+    if system.qpwdrqddif not in ProfileStore.HISTORY:
+        raise SeedError(f"qpwdrqddif must be 0 to 8, not {system.qpwdrqddif}")
+    if system.qpwdminlen > system.qpwdmaxlen:
+        raise SeedError("qpwdminlen cannot be more than qpwdmaxlen")
 
     profiles: list[Profile] = []
     for raw in data.get("profile", []):
@@ -287,6 +359,7 @@ def load(path: Path | str | None = None) -> ProfileStore:
             password=None if pw == "*NONE" else str(pw),
             status=_enum_status(raw.get("status", "*ENABLED"), name),
             password_expired=bool(raw.get("password_expired", False)),
+            pwd_expitv=raw.get("pwdexpitv"),
             password_changed=raw.get("password_changed"),
             limited_capabilities=raw.get("limited_capabilities", "*NO"),
             group_profile=(raw.get("group_profile") or None) and str(raw["group_profile"]).upper(),
