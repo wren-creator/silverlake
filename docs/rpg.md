@@ -17,6 +17,17 @@ This is the first milestone of the RPG phase. It is a runner, not a compiler.
 
 Source and attributes are saved in the state file like any object, so a student's edits would survive a restart, and `reset.sh` puts the seeds back.
 
+## What IBM's pages say about adopted authority
+
+From two IBM support pages, [Adopted Authority](https://www.ibm.com/support/pages/adopted-authority) and [Using Adopted Authority for the CRTUSRPRF without *SECADM](https://www.ibm.com/support/pages/using-adopted-authority-crtusrprf-without-secadm-special-authority). The next milestone follows them.
+
+- `USRPRF(*OWNER)` makes the program run "combining the authorities of the Owner of the program with those of the User Profile running the program". The user keeps their own.
+- `USEADPAUT(*YES)` means adopt from the *prior program in the call stack*, not from the owner. If B is `USEADPAUT(*YES)` and `USRPRF(*USER)`, whatever A adopted flows to B. `USEADPAUT(*NO)` cuts that off.
+- Adopted authority is only there while the program is active, and is suspended if it is interrupted.
+- Not covered by adopted authority: system request, the attention key, break handling programs, and debug functions. `TFRGRPJOB` does not pass it to the group job. The IFS does not support it at all.
+- When a program adopts to run `CRTUSRPRF` and assigns a group profile, the user still needs `*CHANGE` and `*OBJMGT` to that group profile by their own authority. Adoption does not supply it (a refusal shows as `CPF9802`).
+- IBM's advice is to adopt an application owner's authority, not QSECOFR's or any `*ALLOBJ` profile's.
+
 ## What it is not (yet)
 
 - **No compile step.** Source is parsed when the program is called, not by `CRTBNDRPG`. A syntax error shows as "ended abnormally" at call time instead of a compile listing. Nothing can create a program yet except the seed.
@@ -40,5 +51,5 @@ Writes, so each needs a human decision first (PUB400 rules: read only):
 
 - Whether a function key the display file never named is refused with a message, or ignored, or raises an error. "Function key not allowed." is ours.
 - What a compile error looks like (`CRTBNDRPG` listing, message IDs) and what the compiler produces for a source member.
-- Whether adopted authority passes the owner's **special** authorities as well as object authority, which decides what a program owned by a powerful profile can do through `QCMDEXC`. IBM's page is the first place to check, and a real test needs a program owned by a profile that holds the authority.
+- Whether adopted authority passes the owner's **special** authorities as well as object authority. IBM's two support pages (read 2026-10-27) do not say it in one sentence. One describes the program as combining the owner's authorities with the user's, and its QSECOFR example says the owner's authority "flows down the stack giving the user the same All Object authority". The other is a how-to that wraps `CRTUSRPRF` (which needs `*SECADM`) in a `USRPRF(*OWNER)` program so users without it can run the command, which only works if the owner's special authority counts. Silverlake will treat the owner's special authorities as effective while an `*OWNER` program is on the stack, and this entry stays open until a real test confirms it. The Security Reference chapter 5, "Objects that adopt the owner's authority", is the primary source and was not read.
 - Whether `CALL` needs `*USE` or `*EXECUTE` to the program (Silverlake uses `*USE`, as it does for menus).
