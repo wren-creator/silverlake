@@ -1,0 +1,9 @@
+     A* PAYROLL.PF -- payroll master, one record per employee.
+
+     A                                      UNIQUE
+     A          R PAYREC
+     A            EMPNO          5S 0
+     A            NAME          20
+     A            DEPT           4
+     A            SALARY         7S 0
+     A          K EMPNO

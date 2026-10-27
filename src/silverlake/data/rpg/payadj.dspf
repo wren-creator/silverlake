@@ -1,0 +1,16 @@
+     A* PAYADJ.DSPF -- change one employee's salary.
+
+     A                                      DSPSIZ(24 80 *DS3)
+
+     A          R PAYADJ                      CF03(03)
+     A                                  1 28'PAYROLL SALARY ADJUST'
+     A                                  3  3'Employee number:'
+     A            EMPNO          5S 0B  3 20
+     A                                  4  3'New salary:'
+     A            NEWSAL         7S 0B  4 20
+     A                                  6  3'Name:'
+     A            NAME          20A  O  6 20
+     A                                  7  3'Salary now:'
+     A            SALARY         7S 0O  7 20
+     A            MSG           40A  O 22  3
+     A                                 23  3'F3=Exit'

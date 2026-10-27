@@ -323,13 +323,14 @@ RPG_DIR = Path(__file__).resolve().parent.parent / "data" / "rpg"
 
 
 def _with_source_files(o: dict) -> dict:
-    """A seeded program names its source and display file by file name (`source_file`, `dspf_file`) in
-    data/rpg, and the text goes into the object, where a student can read and change it."""
+    """A seeded program names its source and display file by file name (`source_file`, `dspf_file`), and a
+    seeded file its record layout (`dds_file`), in data/rpg. The text goes into the object, where a student
+    can read and change it."""
     d = o.get("data")
-    if not d or not ({"source_file", "dspf_file"} & d.keys()):
+    if not d or not ({"source_file", "dspf_file", "dds_file"} & d.keys()):
         return o
     d = dict(d)
-    for key, out in (("source_file", "source"), ("dspf_file", "dspf")):
+    for key, out in (("source_file", "source"), ("dspf_file", "dspf"), ("dds_file", "dds")):
         if key in d:
             name = d.pop(key)
             try:

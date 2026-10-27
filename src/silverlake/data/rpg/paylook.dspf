@@ -1,0 +1,16 @@
+     A* PAYLOOK.DSPF -- one-employee payroll lookup.
+
+     A                                      DSPSIZ(24 80 *DS3)
+
+     A          R PAYLOOK                      CF03(03)
+     A                                  1 30'PAYROLL LOOKUP'
+     A                                  3  3'Employee number:'
+     A            EMPNO          5S 0B  3 20
+     A                                  5  3'Name:'
+     A            NAME          20A  O  5 20
+     A                                  6  3'Department:'
+     A            DEPT           4A  O  6 20
+     A                                  7  3'Salary:'
+     A            SALARY         7S 0O  7 20
+     A            MSG           40A  O 22  3
+     A                                 23  3'F3=Exit'

@@ -20,10 +20,11 @@ from typing import Any
 from ..proto import datastream as ds
 from ..screens.model import COLS, ROWS, Input, Screen, Text
 from . import messages
+from .authority import Auth
 
 try:
-    from rpgle import (CallError, LoadedProgram, ProgramLoader, Resume, RpgleError, parse_dds, parse_rpgle,
-                       run_program)
+    from rpgle import (CallError, Database, LoadedProgram, ProgramLoader, Resume, RpgleError, parse_dds,
+                       parse_pf, parse_rpgle, run_program)
     AVAILABLE = True
 except ImportError:                       # the RPG runtime is optional: Silverlake runs without it
     AVAILABLE = False
@@ -44,9 +45,10 @@ def is_rpg(obj) -> bool:
 class Run:
     """One running program: its generator, the screen it is showing, and how it ended."""
 
-    def __init__(self, obj, gen) -> None:
+    def __init__(self, obj, gen, files: "Files | None" = None) -> None:
         self.obj = obj
         self.gen = gen
+        self.files = files
         self.data = None            # the ScreenData being shown
         self.done = False
         self.error = ""
@@ -64,6 +66,8 @@ class Run:
             self.data, self.done, self.error = None, True, str(exc)
         except RecursionError:
             self.data, self.done, self.error = None, True, "calls nested too deeply"
+        if self.files:
+            self.files.save()          # what the program has written so far is kept, even if it stops here
 
     def start(self) -> "Run":
         self._advance(None)
@@ -75,15 +79,90 @@ class Run:
     def close(self) -> None:
         self.gen.close()
         self.done = True
+        if self.files:
+            self.files.save()
+
+
+# What opening a file for each usage needs, and each operation after that (IBM: object operational
+# plus the data rights the mode and the operation use).
+OPEN_NEEDS = {"I": Auth.OBJOPR | Auth.READ, "U": Auth.OBJOPR | Auth.READ | Auth.UPD,
+              "C": Auth.OBJOPR | Auth.READ | Auth.UPD | Auth.ADD, "O": Auth.OBJOPR | Auth.ADD}
+OP_NEEDS = {"read": Auth.READ, "add": Auth.ADD, "update": Auth.UPD, "delete": Auth.DLT}
+
+
+def effective(store, actor, stack: list[str]):
+    """The profile as it is with these programs on the stack: its own authority plus whoever they adopt."""
+    return store.adopting(actor, adopted_owners(store, stack))
+
+
+class Files:
+    """The DISK files a run opens: `*FILE` objects found through the library list, loaded into a private
+    SQLite database for the run and written back to the objects as the program goes. Every open and every
+    read, add, update and delete is checked against the profile the stack holds at that moment, so a
+    program that adopts its owner reaches a file the user cannot, and only while it is running."""
+
+    def __init__(self, store, actor, session) -> None:
+        self.store, self.actor, self.session = store, actor, session
+        self.loader = None                              # set by start(): its stack says who is running
+        self.db = Database(authorize=self._authorize)
+        self.objs: dict[str, Any] = {}
+
+    def attach(self, prog, stack: list[str]) -> dict:
+        """The record layouts for the DISK files a program declares, loading each file's records."""
+        from . import objects
+        who = effective(self.store, self.actor, stack)
+        pfs = {}
+        for fs in prog.files:
+            if (fs.device or "").upper() != "DISK":
+                continue
+            name = fs.name.upper()
+            obj, err = objects.locate(self.store, who, name, "*FILE", self.session.search_order())
+            if err:
+                raise RpgleError(err.text)
+            if obj.data.get("attr", "PF") != "PF" or not obj.data.get("dds"):
+                raise RpgleError(f"File {obj.name} in library {obj.library} is not a physical file with a record layout.")
+            prev = self.objs.get(obj.name)
+            if prev is not None and prev is not obj:
+                raise RpgleError(f"File {obj.name} is in two libraries ({prev.library} and {obj.library}) and only one "
+                                 "can be open in a job here.")
+            pf = parse_pf(obj.name, obj.data["dds"])
+            if prev is None:
+                self.objs[obj.name] = obj
+                self.db.load_rows(pf, obj.data.get("records", []))
+            pfs[name] = pf
+        return pfs
+
+    def _authorize(self, name: str, op: str) -> None:
+        obj = self.objs.get(name.upper())
+        if obj is None:
+            return
+        stack = list(self.loader.active) if self.loader is not None else []
+        who = effective(self.store, self.actor, stack)
+        need = OPEN_NEEDS.get(op[5:], OPEN_NEEDS["I"]) if op.startswith("open:") else OP_NEEDS[op]
+        if need not in self.store.authority_to_object(who, obj):
+            self.session.joblog.append((datetime.now(), "message",
+                                        f"{op.replace('open:', 'open ')} refused on {obj.library}/{obj.name}"))
+            raise RpgleError(messages.not_authorized_to_object(obj.name, obj.library, "*FILE").text)
+
+    def save(self) -> None:
+        changed = False
+        for name, obj in self.objs.items():
+            rows = self.db.dump_rows(name)
+            if rows != obj.data.get("records"):
+                obj.data["records"] = rows
+                changed = True
+        if changed:
+            self.store.on_change()
 
 
 class StoreLoader(ProgramLoader if AVAILABLE else object):
     """Finds the programs a program CALLs among the session's objects instead of in folders, and only
     those the profile may use: a program you cannot call cannot be reached through one you can."""
 
-    def __init__(self, store, actor, search: list[str]) -> None:
+    def __init__(self, store, actor, search: list[str], files: Files | None = None) -> None:
         super().__init__(dirs=[], main=None)
         self.store, self.actor, self.search = store, actor, search
+        self.files = files
         self._loaded: dict[tuple, Any] = {}
 
     def _find(self, target: str):
@@ -92,7 +171,8 @@ class StoreLoader(ProgramLoader if AVAILABLE else object):
         if not all(p and p.replace("_", "").replace("$", "").replace("#", "").replace("@", "").isalnum()
                    for p in name.split("/")) or name.count("/") > 1:
             raise CallError(f"{target.strip()!r} is not a program name")
-        obj, err = objects.use_object(self.store, self.actor, name, "*PGM", self.search)
+        who = effective(self.store, self.actor, self.active or ([self.main_name] if self.main_name else []))
+        obj, err = objects.use_object(self.store, who, name, "*PGM", self.search)
         if err:
             raise CallError(err.text)
         return obj
@@ -112,8 +192,9 @@ class StoreLoader(ProgramLoader if AVAILABLE else object):
                 prog = parse_rpgle(obj.data["source"])
             except RpgleError as exc:
                 raise RpgleError(f"{obj.name}: {exc}") from None
+            pfs = self.files.attach(prog, [*self.active, f"{obj.library}/{obj.name}"]) if self.files else {}
             cached = LoadedProgram(key=key, path=Path(f"/QSYS.LIB/{obj.library}.LIB/{obj.name}.PGM"), prog=prog,
-                                   dds=parse_dds(obj.data.get("dspf", "")), pfs={})
+                                   dds=parse_dds(obj.data.get("dspf", "")), pfs=pfs)
             self._loaded[obj.key] = cached
         return cached
 
@@ -184,11 +265,17 @@ def start(store, actor, obj, session) -> tuple[Run | None, messages.Message | No
         dds = parse_dds(obj.data.get("dspf", ""))
     except RpgleError as exc:
         return None, messages.info(f"Program {obj.name} did not load: {exc}")
-    loader = StoreLoader(store, actor, session.search_order())
+    files = Files(store, actor, session)
+    loader = StoreLoader(store, actor, session.search_order(), files)
     loader.main_name = f"{obj.library}/{obj.name}"
-    gen = run_program(prog, dds, None, None, loader, None, max_steps=MAX_STEPS,
+    files.loader = loader
+    try:
+        pfs = files.attach(prog, [loader.main_name])
+    except RpgleError as exc:
+        return None, messages.info(str(exc))
+    gen = run_program(prog, dds, files.db, pfs, loader, None, max_steps=MAX_STEPS,
                       system_programs={"QCMDEXC": make_qcmdexc(store, actor, session, loader)})
-    return Run(obj, gen).start(), None
+    return Run(obj, gen, files).start(), None
 
 
 # -- the screen a program shows -----------------------------------------------------------------------

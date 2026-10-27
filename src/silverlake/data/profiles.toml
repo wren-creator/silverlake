@@ -247,6 +247,17 @@ owner = "QSECOFR"
 public = "*AUTL"
 autl = "PAYAUTL"
 text = "Payroll master. Secured by an authorization list."
+[object.data]
+attr = "PF"
+dds_file = "payroll.pf"
+records = [
+  { EMPNO = 10001, NAME = "Alvarez, Marta", DEPT = "ENG", SALARY = 98000 },
+  { EMPNO = 10002, NAME = "Bishop, Tom", DEPT = "ENG", SALARY = 87000 },
+  { EMPNO = 10003, NAME = "Chen, Priya", DEPT = "OPS", SALARY = 72000 },
+  { EMPNO = 10004, NAME = "Dunn, Kevin", DEPT = "OPS", SALARY = 65000 },
+  { EMPNO = 10005, NAME = "Ellis, Rosa", DEPT = "HR", SALARY = 91000 },
+  { EMPNO = 10006, NAME = "Ford, Gil", DEPT = "EXEC", SALARY = 240000 },
+]
 
 [[object]]
 library = "APPLIB"
@@ -258,6 +269,14 @@ text = "Customer master."
 [object.private]
 DEVELOPER = "*CHANGE"
 GUEST = "*EXCLUDE"
+[object.data]
+attr = "PF"
+dds_file = "customers.pf"
+records = [
+  { CUSTNO = 20001, CNAME = "Harbor Hardware", CITY = "Charleston", BAL = 1250.50 },
+  { CUSTNO = 20002, CNAME = "Low Country Feed", CITY = "Beaufort", BAL = 0 },
+  { CUSTNO = 20003, CNAME = "Palmetto Marine", CITY = "Mount Pleasant", BAL = 8814.25 },
+]
 
 # ---------------------------------------------------------------------------
 # Programs that actually run: RPG IV source and its display file DDS, kept in the object. CALL APPLIB/ADVENTURE.
@@ -291,6 +310,34 @@ usrprf = "*USER"
 useadpaut = "*YES"
 source_file = "salesrpt.rpgle"
 dspf_file = "salesrpt.dspf"
+
+[[object]]
+library = "APPLIB"
+name = "PAYLOOK"
+type = "*PGM"
+owner = "OPERATOR"
+public = "*USE"
+text = "Payroll lookup for one employee. Adopts OPERATOR, who may read PAYROLL."
+[object.data]
+attr = "RPGLE"
+usrprf = "*OWNER"
+useadpaut = "*NO"
+source_file = "paylook.rpgle"
+dspf_file = "paylook.dspf"
+
+[[object]]
+library = "APPLIB"
+name = "PAYADJ"
+type = "*PGM"
+owner = "SECADMIN"
+public = "*USE"
+text = "Salary adjust for HR. Adopts SECADMIN, who holds *ALL on PAYROLL."
+[object.data]
+attr = "RPGLE"
+usrprf = "*OWNER"
+useadpaut = "*NO"
+source_file = "payadj.rpgle"
+dspf_file = "payadj.dspf"
 
 [[object]]
 library = "APPLIB"

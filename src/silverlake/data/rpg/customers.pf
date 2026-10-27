@@ -1,0 +1,9 @@
+     A* CUSTOMERS.PF -- customer master.
+
+     A                                      UNIQUE
+     A          R CUSTREC
+     A            CUSTNO         5S 0
+     A            CNAME         20
+     A            CITY          15
+     A            BAL            9S 2
+     A          K CUSTNO
