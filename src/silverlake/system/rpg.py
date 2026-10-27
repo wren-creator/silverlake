@@ -19,16 +19,17 @@ from typing import Any
 
 from ..proto import datastream as ds
 from ..screens.model import COLS, ROWS, Input, Screen, Text
-from . import messages
-from .authority import Auth
+from . import messages, spool as spoolmod
+from .authority import USE, Auth
 
 try:
     from rpgle import (CallError, Database, LoadedProgram, ProgramLoader, Resume, RpgleError, parse_dds,
-                       parse_pf, parse_rpgle, run_program)
+                       parse_pf, parse_prtf, parse_rpgle, run_program, Spool)
     AVAILABLE = True
 except ImportError:                       # the RPG runtime is optional: Silverlake runs without it
     AVAILABLE = False
 
+DEFAULT_OUTQ = "QGPL/QPRINT"      # where a printer file with no queue of its own prints
 MAX_STEPS = 200_000      # instructions between screens before a program is stopped
 _FAILED = ("not found", "not authorized", "not valid", "does not exist", "already exists", "not correct",
            "cannot", "not allowed", "parenthesis", "not available", "not modeled")
@@ -106,6 +107,9 @@ class Files:
         self.loader = None                              # set by start(): its stack says who is running
         self.db = Database(authorize=self._authorize)
         self.objs: dict[str, Any] = {}
+        self.spool = Spool()
+        self.printers: dict[str, Any] = {}               # PRTF name -> its *FILE object
+        self._spooled: dict[int, Any] = {}               # id of an open printer file -> the SpoolFile it fills
 
     def attach(self, prog, stack: list[str]) -> dict:
         """The record layouts for the DISK files a program declares, loading each file's records."""
@@ -113,12 +117,16 @@ class Files:
         who = effective(self.store, self.actor, stack)
         pfs = {}
         for fs in prog.files:
-            if (fs.device or "").upper() != "DISK":
+            device = (fs.device or "").upper()
+            if device not in ("DISK", "PRINTER"):
                 continue
             name = fs.name.upper()
             obj, err = objects.locate(self.store, who, name, "*FILE", self.session.search_order())
             if err:
                 raise RpgleError(err.text)
+            if device == "PRINTER":
+                self._attach_printer(who, obj)
+                continue
             if obj.data.get("attr", "PF") != "PF" or not obj.data.get("dds"):
                 raise RpgleError(f"File {obj.name} in library {obj.library} is not a physical file with a record layout.")
             prev = self.objs.get(obj.name)
@@ -131,6 +139,53 @@ class Files:
                 self.db.load_rows(pf, obj.data.get("records", []))
             pfs[name] = pf
         return pfs
+
+    def _attach_printer(self, who, obj) -> None:
+        """A printer file needs *USE, and so does the queue its output goes to. The queue and the file are
+        checked now, as whoever the stack holds when the program is loaded. The spool file is the job's
+        own, so it belongs to the user and not to an owner the program adopts."""
+        if obj.data.get("attr") != "PRTF" or not obj.data.get("dds"):
+            raise RpgleError(f"File {obj.name} in library {obj.library} is not a printer file.")
+        if USE not in self.store.authority_to_object(who, obj):
+            raise RpgleError(messages.not_authorized_to_object(obj.name, obj.library, "*FILE").text)
+        q = self.queue_of(obj)
+        if q is None:
+            raise RpgleError(f"Output queue {obj.data.get('outq', DEFAULT_OUTQ)} for {obj.name} not found.")
+        if Auth.READ not in self.store.authority_to_object(who, q):
+            raise RpgleError(messages.not_authorized_to_object(q.name, q.library, "*OUTQ").text)
+        self.printers[obj.name] = obj
+        self.spool.defs[obj.name] = parse_prtf(obj.name, obj.data["dds"])
+
+    def queue_of(self, obj):
+        lib, _, name = obj.data.get("outq", DEFAULT_OUTQ).partition("/")
+        return self.store.objects.get((lib.upper(), name.upper(), "*OUTQ"))
+
+    def _spool_out(self) -> bool:
+        """Put what the program has printed on its output queue as spooled files of the job."""
+        job = self.session.job
+        changed = False
+        for pf in self.spool.files:
+            text = pf.text()
+            if not text:
+                continue
+            lines = [ln.rstrip() for ln in text.replace("\f", "").split("\n")]
+            sf = self._spooled.get(id(pf))
+            if sf is None:
+                obj = self.printers[pf.name.upper()]
+                qlib, _, qname = obj.data.get("outq", DEFAULT_OUTQ).partition("/")
+                name = job.name if job else self.actor.name
+                number = job.number if job else "000000"
+                nos = [f.file_no for f in self.store.spool if f.job_number == number and f.job_name == name]
+                sf = spoolmod.SpoolFile(obj.name, self.actor.name, name, number, (max(nos) + 1) if nos else 1,
+                                        qname.upper(), qlib.upper(), obj.data.get("usrdta", ""), "RDY", lines,
+                                        datetime.now().isoformat(timespec="seconds"))
+                self.store.spool.append(sf)
+                self._spooled[id(pf)] = sf
+                changed = True
+            elif sf.lines != lines:
+                sf.lines = lines
+                changed = True
+        return changed
 
     def _authorize(self, name: str, op: str) -> None:
         obj = self.objs.get(name.upper())
@@ -151,6 +206,8 @@ class Files:
             if rows != obj.data.get("records"):
                 obj.data["records"] = rows
                 changed = True
+        if self._spool_out():
+            changed = True
         if changed:
             self.store.on_change()
 
@@ -273,7 +330,7 @@ def start(store, actor, obj, session) -> tuple[Run | None, messages.Message | No
         pfs = files.attach(prog, [loader.main_name])
     except RpgleError as exc:
         return None, messages.info(str(exc))
-    gen = run_program(prog, dds, files.db, pfs, loader, None, max_steps=MAX_STEPS,
+    gen = run_program(prog, dds, files.db, pfs, loader, files.spool, max_steps=MAX_STEPS,
                       system_programs={"QCMDEXC": make_qcmdexc(store, actor, session, loader)})
     return Run(obj, gen, files).start(), None
 

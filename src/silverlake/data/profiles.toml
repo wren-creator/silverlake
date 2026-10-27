@@ -341,6 +341,68 @@ dspf_file = "payadj.dspf"
 
 [[object]]
 library = "APPLIB"
+name = "PAYOUTQ"
+type = "*OUTQ"
+owner = "SECADMIN"
+public = "*USE"
+text = "Payroll reports. Contents show only to the file's owner."
+[object.data]
+dspdta = "*NO"
+oprctl = "*YES"
+autchk = "*OWNER"
+
+[[object]]
+library = "APPLIB"
+name = "REGRPT"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*USE"
+text = "Payroll register printer file. Prints to the default queue."
+[object.data]
+attr = "PRTF"
+dds_file = "regrpt.prtf"
+outq = "QGPL/QPRINT"
+
+[[object]]
+library = "APPLIB"
+name = "REGRPTX"
+type = "*FILE"
+owner = "QSECOFR"
+public = "*USE"
+text = "Payroll register printer file. Prints to PAYOUTQ."
+[object.data]
+attr = "PRTF"
+dds_file = "regrptx.prtf"
+outq = "APPLIB/PAYOUTQ"
+
+[[object]]
+library = "APPLIB"
+name = "REGRPT"
+type = "*PGM"
+owner = "QSECOFR"
+public = "*USE"
+text = "Payroll register. Prints to QPRINT, which anyone can read."
+[object.data]
+attr = "RPGLE"
+usrprf = "*USER"
+useadpaut = "*YES"
+source_file = "regrpt.rpgle"
+
+[[object]]
+library = "APPLIB"
+name = "REGRPTX"
+type = "*PGM"
+owner = "QSECOFR"
+public = "*USE"
+text = "Payroll register, fixed: prints to a queue that hides the contents."
+[object.data]
+attr = "RPGLE"
+usrprf = "*USER"
+useadpaut = "*YES"
+source_file = "regrptx.rpgle"
+
+[[object]]
+library = "APPLIB"
 name = "RUNCMD"
 type = "*PGM"
 owner = "QSECOFR"

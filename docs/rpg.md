@@ -48,6 +48,15 @@ An RPG program's externally described `DISK` files are `*FILE` objects (attribut
 - **Where the data lives.** A run copies the records into a private SQLite database, and what the program writes goes back into the object after each screen and when the program ends, so it survives `./stop.sh` and goes away with `./reset.sh`. Only one file of a given name can be open in a job, because the library keys its tables by name.
 - **The seeded lesson.** `PAYLOOK` is owned by OPERATOR, who holds `*USE` on PAYROLL through the list, and adopts its owner: anyone can look an employee up and nobody can change one through it. `PAYADJ` is owned by SECADMIN, who holds `*ALL`, adopts its owner, and checks nothing about who is calling. A basic user who may call it can set anyone's salary. The fix is not in the program: take `*PUBLIC` off the program (`RVKOBJAUT OBJ(APPLIB/PAYADJ) OBJTYPE(*PGM) USER(*PUBLIC) AUT(*USE)`) and grant it to who should have it.
 
+## Printer files
+
+A program that declares a `PRINTER` file in its F-spec prints through a `*FILE` object with attribute PRTF, which carries the printer DDS (`dds`) and the queue its output goes to (`outq`, `LIB/NAME`, default `QGPL/QPRINT`).
+
+- **Authority.** The printer file needs `*USE`, and the queue needs `*READ` (inferred from IBM's output queue pages, not a captured refusal). Both are checked when the program is loaded, as whoever the call stack holds then. A missing queue stops the program before it prints.
+- **The spooled file.** What the program writes becomes a spooled file named for the printer file, on the queue, in the job that ran the program, with the next file number in that job. It belongs to the **user**, never to an owner the program adopts, because the job is the user's. It is updated after every screen and when the program ends, so output survives a program that stops half way, and then WRKSPLF, WRKOUTQ, DSPSPLF and the hold, delete and change options work on it like any other.
+- **Who can read it** is the queue's business, which is the lesson. `REGRPT` prints the payroll register to QPRINT, which is `DSPDTA(*YES)`, so a basic user can open the file payroll staff just printed. `REGRPTX` is the same program with a printer file that names `APPLIB/PAYOUTQ`, `DSPDTA(*NO)`: the entry is still listed, the contents are not shown to anyone but the file's owner and users with `*SPLCTL`.
+- Page length is 66 lines and overflow is at line 60, the CRTPRTF defaults. Not modeled: printer file attributes beyond the queue (copies, form type, page size), CHGPRTF and OVRPRTF.
+
 ## What it is not (yet)
 
 - **No compile step.** Source is parsed when the program is called, not by `CRTBNDRPG`. A syntax error shows as "ended abnormally" at call time instead of a compile listing. Nothing can create a program yet except the seed.
