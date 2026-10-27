@@ -12,3 +12,17 @@ secure = "QDFTOWN"
 [flag]
 kind = "text"
 task = "Make the staff directory show you the payroll file, and find the audit employee's name."
+
+[doc]
+where = "Program APPLIB/EMPDIR and the OVRDBF command"
+parallel = "An adopting program that opens a file by name trusts the name. An override from the caller can change what the name means."
+vulnerability = "EMPDIR adopts its owner OPERATOR and opens STAFF by name. OVRDBF needs no authority, and the open of whatever file the override names is checked as the adopted owner, who may read PAYROLL."
+mitre = ["T1548 Abuse Elevation Control Mechanism", "T1574 Hijack Execution Flow"]
+steps = [
+  "Sign on as STUDENT and ADDLIBLE APPLIB.",
+  "OVRDBF FILE(STAFF) TOFILE(APPLIB/PAYROLL)",
+  "CALL PGM(APPLIB/EMPDIR) and look up employee 10099 and read the name.",
+]
+consequence = "The payroll file, with salaries, shown through a directory program to a user who cannot open it."
+fix = "Give an adopting program an owner who holds only what the program needs (the secure state makes QDFTOWN the owner, who holds nothing on PAYROLL, so the redirected open is refused)."
+reference = "IBM i Security Reference, adopted authority; Db2 for i OVRDBF."

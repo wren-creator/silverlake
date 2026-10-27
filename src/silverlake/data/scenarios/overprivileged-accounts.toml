@@ -24,3 +24,17 @@ secure = "*NONE"
 [flag]
 kind = "text"
 task = "Use a service account that holds more than it needs to read the vault file in APPLIB."
+
+[doc]
+where = "5250 sign-on, service and legacy profiles"
+parallel = "Service accounts and long-forgotten project profiles holding *ALLOBJ are a staple of IBM i audits. They are rarely used and rarely reviewed, so their passwords stay at defaults."
+vulnerability = "SVCACCT holds *ALLOBJ, LEGACY holds *ALLOBJ and *JOBCTL, and DEVADMIN holds *SECADM, none of which they need. Their passwords are weak."
+mitre = ["T1078.003 Valid Accounts: Local Accounts", "T1548 Abuse Elevation Control Mechanism"]
+steps = [
+  "WRKUSRPRF shows the profiles; DSPUSRPRF SVCACCT shows the special authority.",
+  "Sign on as SVCACCT (the password is the profile name).",
+  "DSPPFM FILE(APPLIB/VAULT) reads a file that excludes everyone else.",
+]
+consequence = "*ALLOBJ skips every object authority check, so one weak password opens everything."
+fix = "Remove the special authorities the accounts do not need (CHGUSRPRF SPCAUT(*NONE)), review who holds *ALLOBJ and *SECADM, and disable what is unused."
+reference = "IBM i Security Reference, special authorities; least privilege."

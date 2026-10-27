@@ -12,3 +12,17 @@ secure = "*OWNER"
 [flag]
 kind = "text"
 task = "As an ordinary user, read the payroll register on the default output queue and find the audit tag."
+
+[doc]
+where = "Output queue QGPL/QPRINT"
+parallel = "Reports sent to the default printer queue are readable by anyone when the queue shows data to everyone, which is the shipped behaviour of QPRINT."
+vulnerability = "QPRINT has DSPDTA(*YES), so any user who can reach the queue can open another user's spooled file on it. A payroll register is sitting there."
+mitre = ["T1005 Data from Local System", "T1083 File and Directory Discovery"]
+steps = [
+  "Sign on as STUDENT.",
+  "WRKOUTQ OUTQ(QGPL/QPRINT) lists the files with their owners.",
+  "Option 5 on PAYRPT displays the register and its audit tag.",
+]
+consequence = "Payroll data read by someone with no business reason to see it."
+fix = "Set DSPDTA(*OWNER) (what the secure state does) on queues that hold sensitive output, or print such reports to a queue only the right people can read."
+reference = "IBM i Security Reference, output queue security (DSPDTA, AUTCHK)."

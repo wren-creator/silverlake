@@ -15,3 +15,17 @@ remove_new_spool = true
 [flag]
 kind = "text"
 task = "Run the payroll register as payroll staff, then as an ordinary user find the report ID printed in its heading."
+
+[doc]
+where = "Program APPLIB/REGRPT and its printer file"
+parallel = "A report job writes to whatever queue its printer file names. A sensitive report that lands on the default queue is as exposed as the queue is."
+vulnerability = "The printer file REGRPT sends the payroll register to QGPL/QPRINT, where anyone may display it. REGRPTX, which prints to a protected queue, shows the fix."
+mitre = ["T1005 Data from Local System"]
+steps = [
+  "Sign on as OPERATOR and CALL PGM(APPLIB/REGRPT). The register is printed.",
+  "Sign on as STUDENT.",
+  "WRKOUTQ OUTQ(QGPL/QPRINT), option 5 on the register, and read the report ID in its heading.",
+]
+consequence = "The whole payroll register readable by an ordinary user."
+fix = "Point the printer file at a queue with DSPDTA(*NO) or *OWNER and restricted authority (APPLIB/PAYOUTQ here), with CHGPRTF or by creating the printer file with OUTQ named."
+reference = "IBM i Security Reference, output queues; printer file OUTQ parameter."

@@ -12,3 +12,16 @@ secure = "*EXCLUDE"
 [flag]
 kind = "text"
 task = "As an ordinary user, read the operator's message queue and find tonight's save passphrase."
+
+[doc]
+where = "Message queue QSYS/QSYSOPR"
+parallel = "The operator's queue collects events about everyone's jobs. Left readable by all, it tells an attacker who is running what and sometimes more."
+vulnerability = "QSYSOPR is *PUBLIC *CHANGE. A plain profile can read it, learns job names and users, and finds a message with the save passphrase in it."
+mitre = ["T1057 Process Discovery", "T1087 Account Discovery", "T1552 Unsecured Credentials"]
+steps = [
+  "Sign on as STUDENT.",
+  "DSPMSG MSGQ(QSYSOPR) shows every message on the queue.",
+]
+consequence = "Reconnaissance on accounts and jobs, and a secret that should never have been typed into a message."
+fix = "Remove *PUBLIC authority to QSYSOPR (*EXCLUDE) and give operators access through a group. Never put secrets in messages."
+reference = "IBM i Security Reference, message queue authority."

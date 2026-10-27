@@ -16,3 +16,17 @@ remove_new = ["object:SCRATCH/*/*FILE"]
 kind = "state"
 check = "readable_copy"
 task = "With an account that may only use PAYROLL, make a copy that an ordinary user can read."
+
+[doc]
+where = "Command CPYF, library SCRATCH"
+parallel = "Authority to read a file is authority to copy it, and the copy does not carry the original's protection. Data leaves through a copy that nobody locked."
+vulnerability = "*USE on PAYROLL (a member of PAYAUTL such as OPERATOR) is enough for CPYF to create a copy in a library whose new files get *CHANGE for everyone. The copy belongs to the copier and is not on the authorization list."
+mitre = ["T1074.001 Data Staged: Local Data Staging", "T1005 Data from Local System"]
+steps = [
+  "Sign on as OPERATOR.",
+  "CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/LOOT) CRTFILE(*YES)",
+  "Sign on as STUDENT and DSPPFM FILE(SCRATCH/LOOT).",
+]
+consequence = "A readable copy of the payroll data in a library anyone can use. In QTEMP the copy would leave no trace at sign-off."
+fix = "Give the library a create authority that does not open new files to everyone (CRTAUT(*EXCLUDE)), restrict who may add to shared libraries, and treat *USE on sensitive data as a data-loss risk."
+reference = "IBM i Security Reference, library CRTAUT; CPYF authority requirements."

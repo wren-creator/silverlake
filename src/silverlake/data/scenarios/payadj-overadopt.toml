@@ -1,7 +1,7 @@
 id = "payadj-overadopt"
 title = "A salary screen that adopts an owner who can change everything"
 group = "C"
-summary = "PAYADJ adopts SECADMIN, who holds *ALL on PAYROLL, and checks nothing, so anyone who may call it can set any salary."
+summary = "PAYADJ adopts its owner, who holds authority on PAYROLL, and checks nothing, so anyone who may call it can set any salary."
 
 [[change]]
 target = "object:APPLIB/PAYADJ/*PGM"
@@ -22,3 +22,17 @@ restore = ["object:APPLIB/PAYROLL/*FILE"]
 kind = "state"
 check = "salary_raised"
 task = "As an ordinary user, set employee 10004's salary to 99999."
+
+[doc]
+where = "Program APPLIB/PAYADJ"
+parallel = "A program that adopts an owner with more authority than its job needs, and checks nothing about its caller, lets anyone who can run it do all the owner can."
+vulnerability = "PAYADJ adopts its owner, who holds authority on PAYROLL, and updates a salary for whoever asks. Any user may call it, because *PUBLIC has *USE on the program."
+mitre = ["T1548 Abuse Elevation Control Mechanism", "T1565.001 Data Manipulation: Stored Data Manipulation"]
+steps = [
+  "Sign on as STUDENT and ADDLIBLE APPLIB.",
+  "CALL PGM(APPLIB/PAYADJ).",
+  "Enter employee number 10004 and a new salary of 99999.",
+]
+consequence = "Anyone's salary changed by someone with no authority to the payroll file."
+fix = "Run the program with the caller's authority (USRPRF(*USER)) so the file's own authority decides, and take *PUBLIC off the program so only the people who do payroll can call it."
+reference = "IBM i Security Reference, adopted authority and authority to run programs."

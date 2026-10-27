@@ -62,6 +62,7 @@ class Scenario:
     changes: list[Change] = field(default_factory=list)
     cleanup: dict = field(default_factory=dict)
     flag: dict = field(default_factory=dict)       # {kind: text|state, check: name, task: what to do}
+    doc: dict = field(default_factory=dict)        # the prose of docs/scenarios.md, see scenario_docs.py
 
 
 def registry(directory: Path | None = None) -> dict[str, Scenario]:
@@ -83,7 +84,7 @@ def registry(directory: Path | None = None) -> dict[str, Scenario]:
                 raise ScenarioError(f"{path.name}: a change needs target, field, vulnerable and secure")
             changes.append(Change(c["target"], c["field"], c["vulnerable"], c["secure"]))
         found[sid] = Scenario(sid, raw.get("title", sid), raw["group"], raw.get("summary", ""), changes,
-                              raw.get("cleanup", {}), raw.get("flag", {}))
+                              raw.get("cleanup", {}), raw.get("flag", {}), raw.get("doc", {}))
     return found
 
 

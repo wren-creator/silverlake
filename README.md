@@ -43,6 +43,8 @@ Everything binds to `127.0.0.1` and `start.sh` refuses to launch otherwise. A de
 ./check-flags.sh submission.txt          # score a trainee (--show for the instructor's answers)
 ```
 
+The lessons are written up in [docs/scenarios.md](docs/scenarios.md) (instructor, with fixes) and [docs/scenarios-trainee.md](docs/scenarios-trainee.md), both generated from the scenario files by `python -m silverlake.scenario_docs`.
+
 Connect with any 5250 client, for example `tn5250 127.0.0.1:5250`. `start.sh` refuses a port that is already in use and tells you the next one to try, and it only says "up" once the server reports it is listening, so a crash during startup shows up as a failure with the log tail instead of a false "up". It always binds to 127.0.0.1. `SILVERLAKE_PORT` does the same as `--port`.
 
 ## License

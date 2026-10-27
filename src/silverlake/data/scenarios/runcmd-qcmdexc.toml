@@ -22,3 +22,17 @@ remove_new_profiles = true
 kind = "state"
 check = "new_privileged_profile"
 task = "From an ordinary user, create a profile that holds *ALLOBJ."
+
+[doc]
+where = "Program APPLIB/RUNCMD"
+parallel = "A helper that passes text to QCMDEXC while adopting a powerful owner turns every user who can call it into that owner. The classic way a normal user becomes a security officer."
+vulnerability = "RUNCMD is owned by QSECOFR, adopts its owner (USRPRF(*OWNER)) and runs whatever is typed through QCMDEXC with that authority."
+mitre = ["T1548 Abuse Elevation Control Mechanism", "T1136 Create Account"]
+steps = [
+  "Sign on as STUDENT and ADDLIBLE APPLIB.",
+  "CALL PGM(APPLIB/RUNCMD).",
+  "Type CRTUSRPRF USRPRF(EVIL) PASSWORD(EVIL) USRCLS(*SECOFR) and press Enter.",
+]
+consequence = "A new profile with every special authority, made by a user who could not make any profile."
+fix = "Do not adopt a powerful owner in a program that runs user-supplied commands. Use an allow-list of commands and an owner with no special authority (the secure state makes QDFTOWN the owner and limits the commands)."
+reference = "IBM i Security Reference, adopted authority; QCMDEXC."

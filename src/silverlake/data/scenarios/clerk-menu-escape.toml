@@ -21,3 +21,17 @@ secure = [
 [flag]
 kind = "text"
 task = "Sign on as the clerk, get out of the menu, and read the maintenance notes file in APPLIB."
+
+[doc]
+where = "5250 session of the CLERK profile"
+parallel = "A profile locked to a menu with limited capabilities is only as strong as the menu. A maintenance option left behind, or one that calls command entry, undoes it."
+vulnerability = "CLERK has no command line (LMTCPB(*YES)), but the Clerk Menu option 9 runs CALL QCMD, which opens command entry."
+mitre = ["T1059 Command and Scripting Interpreter", "T1078 Valid Accounts"]
+steps = [
+  "Sign on as CLERK with the password CLERK. There is no command line.",
+  "Choose option 9, Maintenance. Command entry opens.",
+  "DSPPFM FILE(APPLIB/MAINTLOG) reads the notes the clerk is allowed to see.",
+]
+consequence = "The restriction on the profile is gone: any command the profile's authority allows can now be run."
+fix = "Take option 9 off the menu, keep every menu option to a command the clerk needs, and do not rely on limited capabilities alone."
+reference = "IBM i Security Reference, limited capability and menu security."
