@@ -1,0 +1,19 @@
+id = "payadj-overadopt"
+title = "A salary screen that adopts an owner who can change everything"
+group = "C"
+summary = "PAYADJ adopts SECADMIN, who holds *ALL on PAYROLL, and checks nothing, so anyone who may call it can set any salary."
+
+[[change]]
+target = "object:APPLIB/PAYADJ/*PGM"
+field = "data.usrprf"
+vulnerable = "*OWNER"
+secure = "*USER"
+
+[[change]]
+target = "object:APPLIB/PAYADJ/*PGM"
+field = "public"
+vulnerable = "*USE"
+secure = "*EXCLUDE"
+
+[cleanup]
+restore = ["object:APPLIB/PAYROLL/*FILE"]

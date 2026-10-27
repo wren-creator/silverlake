@@ -1,0 +1,13 @@
+id = "payrun-qtemp"
+title = "Your own program ahead of the one a privileged program calls"
+group = "C"
+summary = "PAYRUN adopts SECADMIN and calls PAYCALC by name alone, so a PAYCALC in QTEMP runs first."
+
+[[change]]
+target = "object:APPLIB/PAYRUN/*PGM"
+field = "data.source"
+vulnerable = "file:payrun.rpgle"
+secure = "file:payrunx.rpgle"
+
+[cleanup]
+restore = ["object:APPLIB/PAYROLL/*FILE"]

@@ -1,0 +1,22 @@
+id = "overprivileged-accounts"
+title = "Service and legacy accounts hold power they do not need"
+group = "A"
+summary = "SVCACCT and LEGACY hold *ALLOBJ and DEVADMIN holds *SECADM for no reason, so a guessed password is a whole system."
+
+[[change]]
+target = "profile:SVCACCT"
+field = "special_authorities"
+vulnerable = ["*ALLOBJ"]
+secure = "*NONE"
+
+[[change]]
+target = "profile:LEGACY"
+field = "special_authorities"
+vulnerable = ["*ALLOBJ", "*JOBCTL"]
+secure = "*NONE"
+
+[[change]]
+target = "profile:DEVADMIN"
+field = "special_authorities"
+vulnerable = ["*SECADM"]
+secure = "*NONE"

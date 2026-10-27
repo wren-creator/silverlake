@@ -26,7 +26,7 @@ Silverlake is a behavioral simulator. It does not emulate hardware, SLIC, or TIM
 - **Screens are data.** A screen is a description (rows, fields, attributes, function keys). The encoder turns it into bytes. Screen content is never hand-assembled into bytes.
 - **CL is table driven.** One table maps a command name to its parameters and handler, so prompting (F4) and error messages come from the same source.
 - **State lives in SQLite.** Objects, libraries, profiles, jobs, spool. That is what makes `reset.sh` a file copy.
-- **Two modes.** `vulnerable` seeds weak configuration on purpose. `secure` applies the fixes. Same code, different seed.
+- **Two modes, one lesson at a time.** The base seed is the vulnerable range. Each lesson is a file in `data/scenarios/` that lists what its fix changes, with both the vulnerable and the secure value of every field, so a lesson flips either way, a test can check the vulnerable values still match the seed, and a trainee can fix one thing and run the exploit again. State per lesson is saved with the rest (`store.scenarios`). `./scenario.sh` changes it with the server stopped, because a running server holds its own copy in memory and would overwrite the change. See `src/silverlake/scenarios.py` for the file format.
 
 ## Fidelity oracle
 

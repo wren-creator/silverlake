@@ -1,0 +1,13 @@
+id = "regrpt-outq"
+title = "A sensitive report printed to the default queue"
+group = "B"
+summary = "The payroll register prints to QPRINT, where anyone can open it."
+
+[[change]]
+target = "object:APPLIB/REGRPT/*FILE"
+field = "data.outq"
+vulnerable = "QGPL/QPRINT"
+secure = "APPLIB/PAYOUTQ"
+
+[cleanup]
+remove_new_spool = true

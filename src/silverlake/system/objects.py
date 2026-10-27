@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass
 
 from . import messages
-from .authority import ALL, CHANGE, EXCLUDE, USE, Auth, SecuredObject, SpecialAuthority, name_auth
+from .authority import ALL, CHANGE, EXCLUDE, USE, Auth, SecuredObject, SpecialAuthority, name_auth, parse_auth
 from .profiles import Profile, ProfileStore
 
 SA = SpecialAuthority
@@ -63,6 +63,17 @@ def authority_to_library(store: ProfileStore, actor: Profile, lib: SecuredObject
 
 
 # -- finding objects ---------------------------------------------------------------------
+
+def create_authority(store: ProfileStore, lib_name: str) -> Auth:
+    """What a new object in a library gets for *PUBLIC: the library's CRTAUT when it has one (data `crtaut`),
+    else its own public authority, which is what *SYSVAL and *LIBCRTAUT come to here."""
+    lib = store.find_library(lib_name)
+    if lib is None:
+        return Auth.NONE
+    if lib.data.get("crtaut"):
+        return parse_auth(lib.data["crtaut"])
+    return lib.public if lib.public is not None else Auth.NONE
+
 
 def tag_temp(obj: SecuredObject, session) -> None:
     """Whatever is made in QTEMP belongs to the job that made it."""

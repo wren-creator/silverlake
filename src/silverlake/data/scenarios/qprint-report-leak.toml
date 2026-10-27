@@ -1,0 +1,10 @@
+id = "qprint-report-leak"
+title = "Anyone can read what is on the default printer queue"
+group = "B"
+summary = "QPRINT lets anyone display other people's reports, and a payroll register is sitting on it."
+
+[[change]]
+target = "object:QGPL/QPRINT/*OUTQ"
+field = "data.dspdta"
+vulnerable = "*YES"
+secure = "*OWNER"

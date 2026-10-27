@@ -1,0 +1,19 @@
+id = "runcmd-qcmdexc"
+title = "A helper that hands any command to QCMDEXC as QSECOFR"
+group = "C"
+summary = "RUNCMD adopts QSECOFR and runs whatever is typed, so a basic user can make a security officer."
+
+[[change]]
+target = "object:APPLIB/RUNCMD/*PGM"
+field = "owner"
+vulnerable = "QSECOFR"
+secure = "QDFTOWN"
+
+[[change]]
+target = "object:APPLIB/RUNCMD/*PGM"
+field = "data.source"
+vulnerable = "file:runcmd.rpgle"
+secure = "file:runcmdx.rpgle"
+
+[cleanup]
+remove_new_profiles = true

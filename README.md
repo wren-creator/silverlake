@@ -36,6 +36,10 @@ Everything binds to `127.0.0.1` and `start.sh` refuses to launch otherwise. A de
 ./status.sh     # is it up, is it loopback only
 ./stop.sh
 ./reset.sh      # back to the golden seed state
+./scenario.sh list                       # the lessons and which are fixed
+./scenario.sh set runcmd-qcmdexc secure  # fix one (stops and restarts the server)
+./scenario.sh reset runcmd-qcmdexc       # vulnerable again, exploit leftovers cleared
+./scenario.sh mode secure                # the whole range
 ```
 
 Connect with any 5250 client, for example `tn5250 127.0.0.1:5250`. `start.sh` refuses a port that is already in use and tells you the next one to try, and it only says "up" once the server reports it is listening, so a crash during startup shows up as a failure with the log tail instead of a false "up". It always binds to 127.0.0.1. `SILVERLAKE_PORT` does the same as `--port`.

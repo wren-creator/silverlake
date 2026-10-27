@@ -92,7 +92,7 @@ def copy_file(store: ProfileStore, actor: Profile, session, frm: str, to: str, m
         if not _allobj(store, actor) and Auth.ADD not in authority_to_library(store, actor, lib):
             return _no(messages.not_authorized_to_library(lib_name))
         name = to.split("/")[-1].upper()
-        to_obj = SecuredObject(name, actor.name, public=lib.public if lib.public is not None else Auth.NONE,
+        to_obj = SecuredObject(name, actor.name, public=objects.create_authority(store, lib_name),
                                library=lib_name, type="*FILE", text=src.text,
                                data={"attr": "PF", "dds": src.data["dds"], "records": [],
                                      "created": datetime.now().isoformat(timespec="seconds")})

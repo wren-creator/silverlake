@@ -136,8 +136,7 @@ def _target(store: ProfileStore, actor: Profile, session, spec: str):
 
 
 def _create_authority(store: ProfileStore, lib_name: str) -> Auth:
-    lib = store.find_library(lib_name)
-    return lib.public if lib is not None and lib.public is not None else Auth.NONE
+    return objects.create_authority(store, lib_name)
 
 
 def create_source_file(store: ProfileStore, actor: Profile, session, spec: str, rcdlen: int, mbr: str,

@@ -1,0 +1,10 @@
+id = "qsysopr-recon"
+title = "The operator's message queue tells everyone who is running what"
+group = "A"
+summary = "QSYSOPR is readable by everyone and names jobs, users and a backup account."
+
+[[change]]
+target = "object:QSYS/QSYSOPR/*MSGQ"
+field = "public"
+vulnerable = "*CHANGE"
+secure = "*EXCLUDE"

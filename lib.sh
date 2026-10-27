@@ -12,7 +12,7 @@ ok()   { printf '%s[+]%s %s\n' "$C_GRN" "$C_RST" "$*"; }
 warn() { printf '%s[!]%s %s\n' "$C_YEL" "$C_RST" "$*"; }
 bad()  { printf '%s[x]%s %s\n' "$C_RED" "$C_RST" "$*" >&2; }
 
-STATE_DIR="state"
+STATE_DIR="${SILVERLAKE_STATE_DIR:-state}"
 PID_FILE="$STATE_DIR/silverlake.pid"
 LOG_FILE="$STATE_DIR/silverlake.log"
 HOST="${SILVERLAKE_HOST:-127.0.0.1}"

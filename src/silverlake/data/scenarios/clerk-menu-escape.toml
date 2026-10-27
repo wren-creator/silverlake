@@ -1,0 +1,19 @@
+id = "clerk-menu-escape"
+title = "The locked-down menu with a way out"
+group = "B"
+summary = "CLERK has no command line, but menu option 9 calls command entry."
+
+[[change]]
+target = "object:APPLIB/RESTRICT/*MENU"
+field = "data.items"
+vulnerable = [
+  { opt = "1", text = "Who can use the customer file", cmd = "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE)" },
+  { opt = "2", text = "Display the library list", cmd = "DSPLIBL" },
+  { opt = "9", text = "Maintenance", cmd = "CALL QCMD" },
+  { opt = "90", text = "Sign off", cmd = "SIGNOFF" },
+]
+secure = [
+  { opt = "1", text = "Who can use the customer file", cmd = "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE)" },
+  { opt = "2", text = "Display the library list", cmd = "DSPLIBL" },
+  { opt = "90", text = "Sign off", cmd = "SIGNOFF" },
+]

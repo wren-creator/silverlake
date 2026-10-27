@@ -1,0 +1,10 @@
+id = "empdir-override"
+title = "Redirecting the file a trusting program opens"
+group = "C"
+summary = "EMPDIR adopts OPERATOR and opens STAFF by name, so OVRDBF can point it at PAYROLL."
+
+[[change]]
+target = "object:APPLIB/EMPDIR/*PGM"
+field = "owner"
+vulnerable = "OPERATOR"
+secure = "QDFTOWN"

@@ -1,0 +1,13 @@
+id = "cpyf-escape"
+title = "A copy of a locked file is not locked"
+group = "B"
+summary = "*USE on PAYROLL is enough to copy it into a library whose new files are open to all."
+
+[[change]]
+target = "object:QSYS/SCRATCH/*LIB"
+field = "data.crtaut"
+vulnerable = "*UNSET"
+secure = "*EXCLUDE"
+
+[cleanup]
+remove_new = ["object:SCRATCH/*/*FILE"]
