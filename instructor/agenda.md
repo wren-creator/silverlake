@@ -22,7 +22,7 @@ Two days, about six contact hours each, or four half days for a part time cohort
 | Time | Block | Notes |
 |---|---|---|
 | 0:00 | Recap, then `./scenario.sh mode secure` | It restarts the server and signs everyone off. Say so first. |
-| 0:20 | Session 5: fix and re-run | Students re-run each Day 1 exploit and record exactly where it dies. They fix one lesson at a time with `./scenario.sh set <id> secure` and `./scenario.sh reset <id>` to go back. |
+| 0:20 | Session 5: fix and re-run | Students re-run each Day 1 exploit and record exactly where it dies. They fix one lesson at a time with `./scenario.sh set <id> secure` and `./scenario.sh reset <id>` to go back. To apply a fix mid-class without signing anyone off, sign on as QSECOFR and run `SLSCENARIO ID(<id>) STATE(*SECURE)`. |
 | 2:30 | Lunch | |
 | 3:15 | Session 5 continued: the write-up | Hand out `rubric.md`. Start it here, finish as homework. |
 | 4:30 | Tabletop: "an auditor finds RUNCMD in production" | No keyboards. Who owns it, who can call it, what would you check on a real system first? |

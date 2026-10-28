@@ -8,7 +8,7 @@ The rule (*USE to the command object) is IBM i behavior but was not read on a
 command page; the refusal wording was seen on a real system. The seed policy is
 permissive: every command is public *USE. Take one away with RVKOBJAUT."""
 
-from .authority import USE, SecuredObject
+from .authority import EXCLUDE, USE, SecuredObject
 
 # Kept in step with the dispatcher in cl/commands.py; a test checks they match.
 COMMAND_NAMES = (
@@ -20,7 +20,12 @@ COMMAND_NAMES = (
     "WRKOBJ", "WRKOBJOWN", "CHGOBJOWN", "RNMOBJ", "CHGOBJD",
     "WRKACTJOB", "DSPMSG", "SNDMSG", "CLRMSGQ", "CRTMSGQ", "CHGMSGQ", "DLTMSGQ", "WRKSPLF", "WRKOUTQ", "CRTOUTQ", "DLTOUTQ", "DSPSPLF", "DLTSPLF", "HLDSPLF", "RLSSPLF", "CHGSPLFA", "DSPJOBLOG", "WRKJOB", "DSPJOB", "HLDJOB", "RLSJOB", "ENDJOB", "CHGJOB", "DLTF", "DLTCMD", "DLTMNU", "DLTPGM", "EDTOBJAUT", "DSPOBJD", "DSPPGM",
     "CRTSRCPF", "CRTBNDRPG", "CRTPF", "CRTDSPF", "CRTPRTF", "STRPDM", "WRKMBRPDM", "WRKOBJPDM", "STRSEU", "OVRDBF", "DLTOVR", "CPYF", "DSPPFM",
+    "SLSCENARIO",
 )
+
+# Commands that are not open to the public. SLSCENARIO is the instructor's: it flips a lesson on the running range,
+# and the command itself also insists on QSECOFR, so granting *USE to another profile does not open it.
+CLOSED = frozenset({"SLSCENARIO"})
 
 
 def ensure_commands(store, names=COMMAND_NAMES) -> None:
@@ -29,5 +34,5 @@ def ensure_commands(store, names=COMMAND_NAMES) -> None:
     for name in names:
         key = ("QSYS", name, "*CMD")
         if key not in store.objects:
-            store.objects[key] = SecuredObject(name, "QSYS", public=USE, library="QSYS", type="*CMD",
-                                               text="Command")
+            store.objects[key] = SecuredObject(name, "QSYS", public=EXCLUDE if name in CLOSED else USE, library="QSYS",
+                                               type="*CMD", text="Command")

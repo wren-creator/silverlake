@@ -41,6 +41,7 @@ The submission file is one `lesson-id = FLAG{...}` per line. State lessons (a ne
 | A tool finds nothing on the standard port | Silverlake is on 5250, 2121 and 4449, not 23, 21 and 449 | give the tool the port, or see the table in `docs/services.md` |
 | A lesson behaves oddly after a few tries | exploit leftovers (a copy, a profile, a changed salary) | `./scenario.sh reset <id>`, or `./reset.sh` for everything |
 | Sign-on as OPERATOR or DEVELOPER fails in secure mode | `default-passwords` rotated them | passwords are in `./check-flags.sh --show`, derived from the instance secret |
+| You need to flip a lesson with students signed on | `scenario.sh` restarts the server and ends their sessions | as QSECOFR, `SLSCENARIO ID(<id>) STATE(*SECURE)` (or `*VULNERABLE`, `*RESET`, `ID(*ALL)`). Nobody is signed off, and the change is live at once and saved. Only QSECOFR may run it, so a student who becomes QSECOFR can too |
 | `scenario.sh` refuses | the server is running and would overwrite the change | use `scenario.sh`, not `python -m silverlake.scenarios`, it stops and restarts the server |
 | New seeded objects are missing after an update | the saved state is older than the seed | `./reset.sh` |
 | Students see flags that do not match your `--show` | they are on a different machine | score on the student's own machine |

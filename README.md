@@ -40,6 +40,8 @@ Everything binds to `127.0.0.1` and `start.sh` refuses to launch otherwise. A de
 ./scenario.sh set runcmd-qcmdexc secure  # fix one (stops and restarts the server)
 ./scenario.sh reset runcmd-qcmdexc       # vulnerable again, exploit leftovers cleared
 ./scenario.sh mode secure                # the whole range
+# or, with the range running and no restart, as QSECOFR on a command line:
+#   SLSCENARIO ID(runcmd-qcmdexc) STATE(*SECURE)    (also *VULNERABLE, *RESET, and ID(*ALL))
 ./check-flags.sh submission.txt          # score a trainee (--show for the instructor's answers)
 ```
 

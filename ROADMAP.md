@@ -83,7 +83,8 @@
 - [x] Phase 5c: scenario docs generated from the registry so they cannot drift: instructor `docs/scenarios.md` (Where, Real-world parallel, Vulnerability, MITRE ATT&CK, Exploit, Consequence, Fix) and `docs/scenarios-trainee.md` with Fix stripped
 - [x] Phase 5d: a test per scenario that runs the exploit against the vulnerable state and asserts it fails against the secure one, so a code change cannot quietly break a lesson
 - [x] Phase 5e: instructor kit (agenda, answer key, rubric, setup runbook, session slides) in the format of Cross Creek
-- [ ] Phase 5a later: a live toggle, a QSECOFR-only command in the simulator that flips a scenario without a restart, so an instructor can apply a fix mid-class
+- [x] Phase 5a live toggle: `SLSCENARIO ID(lesson|*ALL) STATE(*SECURE|*VULNERABLE|*RESET)` from a 5250 command line, QSECOFR only, no restart and no one signed off
+- [ ] Phase 5a live toggle later: a list form (`STATE(*LIST)`, today use `./scenario.sh list`), a prompt (F4) and a menu option for it, and an audit line in QSYSOPR so students can see the instructor flipped a lesson
 - [ ] Phase 5f: exposed services on loopback only, opt in with `./start.sh --services`, all in the one server process so they share the store and the lesson toggles. Services answer from the same profiles and authority as the 5250 side, and nothing ever reaches a shell. Broken into steps:
   - [x] 5f-1: service plumbing plus the HTTP Admin console on 2001 (Basic auth against the profile store, a Create HTTP Server form whose description evaluates `exec` directives against the simulator's own commands as QTMHHTTP, and a fix flag), lesson `httpadmin-ssi-injection`, new lesson group D
   - [x] 5f-2: FTP on 2121 (cleartext sign-on, naming formats, file get through the normal authority checks), lesson `ftp-limited-bypass` (limited capability does not stop FTP); RCMD added afterwards

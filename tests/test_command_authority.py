@@ -33,7 +33,7 @@ def test_the_dispatcher_and_the_command_objects_stay_in_step():
 
 
 def test_every_command_is_a_qsys_object_open_to_the_public_by_default(store):
-    for name in commands.COMMANDS:
+    for name in set(commands.COMMANDS) - commandobjs.CLOSED:
         o = store.objects[("QSYS", name, "*CMD")]
         assert (o.owner, o.public, o.library) == ("QSYS", USE, "QSYS"), name
 
