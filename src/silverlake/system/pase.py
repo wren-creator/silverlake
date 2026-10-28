@@ -44,6 +44,7 @@ class Shell:
     env: dict[str, str] = field(default_factory=dict)
     done: bool = False
     depth: int = 0
+    job: object = None
 
     def __post_init__(self) -> None:
         home = ifs.home_of(self.actor)
@@ -86,7 +87,7 @@ class Shell:
             return []
         name, args = words[0], [self.expand(w) for w in words[1:]]
         script = None if name in BUILTINS else self.find_script(name)
-        fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[a-z]+", name) else None
+        fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[a-z][a-z0-9]*", name) else None
         if script is not None:
             out = self.run_script(script, name)
         elif "/" in name or fn is None:
@@ -333,11 +334,22 @@ class Shell:
     def cmd_system(self, args: list[str]) -> list[str]:
         """Run a CL command as the signed on profile, as the real `system` utility does, and print what it said."""
         from ..cl import commands
-        from ..cl.session import Session
         from ..net import textview
         if not args:
             return ["system: 0653-401 usage: system 'CL command'"]
         line = " ".join(args)
-        self.job = getattr(self, "job", None) or Session.for_profile(self.actor.current_library)
-        text = textview.outcome_text(self.store, commands.execute(self.store, self.actor, line, self.job), line)
+        text = textview.outcome_text(self.store, commands.execute(self.store, self.actor, line, self._job()), line)
         return text.splitlines()
+
+    def _job(self):
+        from ..cl.session import Session
+        if self.job is None:
+            self.job = Session.for_profile(self.actor.current_library)
+        return self.job
+
+    def cmd_db2(self, args: list[str]) -> list[str]:
+        """Run one SQL statement as the signed on profile, over the physical files (system/sql.py)."""
+        from . import sql
+        if not args:
+            return ["db2: usage: db2 \"SQL statement\""]
+        return sql.render(sql.run(self.store, self.actor, self._job(), " ".join(args)))
