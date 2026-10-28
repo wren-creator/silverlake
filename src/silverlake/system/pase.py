@@ -10,14 +10,16 @@ over `id`, which is the point of the PATH lessons. A script is a stream file wit
 line runs as that profile through this same shell (no interpreter, no shebang meaning, five levels deep at
 most). `login()` reads /QOpenSys/etc/profile and then ~/.profile, as a login shell does.
 
-Built: pwd, cd, ls (-l -a), cat, id, whoami, echo ($VAR), env, export, exit, and the writing set: mkdir (-p),
+Built: pwd, cd, ls (-l -a), cat, id, echo ($VAR), env, export, exit, and the writing set: mkdir (-p),
 touch, rm (-r -f), cp, mv, chmod, `> file` and `>> file` at the end of a command, and `system 'CL command'`,
 which runs through the CL dispatcher as the signed on profile. Not built: pipes, input redirection, `;`, `&`,
 command substitution, globbing, scripts, and every other command.
 
-The wording of the refusals follows the AIX style PASE inherits (`ls: 0653-341 The file X does not exist.`,
-`cat: 0652-050 Cannot open X.`), written from how those tools are known to speak and not captured from a real
-system, so docs/pase.md lists it as unverified. The same goes for what `id` prints."""
+The shell is bsh, as PUB400 showed over ssh on 2026-10-27, and what it said is copied: a missing path in `ls`
+is `X not found`, `cat` says `cat: cannot open X`, `cd` says `X: No such file or directory`, an unknown command
+says `bsh: name: not found`, and `id` prints `uid=N(name) gid=0` with the name in lower case. There is no
+`whoami`, because there is none there. Other wording (permission denied in `ls`, the write commands) was not
+captured and is still a guess, see docs/pase.md."""
 
 from __future__ import annotations
 
@@ -50,7 +52,7 @@ class Shell:
         home = ifs.home_of(self.actor)
         self.cwd = self.cwd or home
         base = {"HOME": home, "USER": self.actor.name, "LOGNAME": self.actor.name, "PATH": SYSTEM_PATH,
-                "SHELL": "/QOpenSys/usr/bin/ksh", "LANG": "EN_US", "TERM": "xterm"}
+                "SHELL": "/QOpenSys/usr/bin/bsh", "LANG": "EN_US", "TERM": "xterm"}
         self.env = {**base, **self.env}
         if self.cwd not in self.store.ifs and not self.cwd.startswith(ifs.QSYS):
             self.cwd = "/"
@@ -69,38 +71,38 @@ class Shell:
         if not line or line.startswith("#"):
             return []
         if UNSUPPORTED.search(line):
-            return ["ksh: that syntax is not available in the simulator (no pipes, redirection, ; & or substitution)."]
+            return ["bsh: that syntax is not available in the simulator (no pipes, redirection, ; & or substitution)."]
         try:
-            words = shlex.split(line)
+            words = shlex.split(self.expand_line(line))
         except ValueError:
-            return ["ksh: a quote was not closed."]
+            return ["bsh: a quote was not closed."]
         redirect = None
         if len(words) >= 2 and re.fullmatch(r">>?", words[-2]):
             redirect, words = (words[-2], words[-1]), words[:-2]
         elif any(re.fullmatch(r">>?", w) for w in words) or any(w.endswith(">") for w in words):
-            return ["ksh: the redirection must be the last thing on the line: command > file."]
+            return ["bsh: the redirection must be the last thing on the line: command > file."]
         if not words:
             return []
         if re.fullmatch(r"[A-Za-z_]\w*=.*", words[0]) and len(words) == 1:
             name, _, value = words[0].partition("=")
             self.env[name] = self.expand(value)
             return []
-        name, args = words[0], [self.expand(w) for w in words[1:]]
+        name, args = words[0], words[1:]
         script = None if name in BUILTINS else self.find_script(name)
         fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[a-z][a-z0-9]*", name) else None
         if script is not None:
             out = self.run_script(script, name)
         elif "/" in name or fn is None:
-            return [f"ksh: {name}: not found."]
+            return [f"bsh: {name}: not found"]
         else:
             out = fn(args)
         if redirect is None:
             return out
-        target = self.path(self.expand(redirect[1]))
+        target = self.path(redirect[1])
         try:
             ifs.write(self.store, self.actor, target, "".join(l + "\n" for l in out), append=redirect[0] == ">>")
         except ifs.IfsError as exc:
-            return [self._write_error("ksh", exc, redirect[1])]
+            return [self._write_error("bsh", exc, redirect[1])]
         return []
 
     def find_script(self, name: str) -> str | None:
@@ -122,11 +124,11 @@ class Shell:
 
     def run_script(self, path: str, name: str) -> list[str]:
         if self.depth >= MAX_DEPTH:
-            return [f"ksh: {name}: 0403-016 Cannot execute: too many nested scripts."]
+            return [f"bsh: {name}: 0403-016 Cannot execute: too many nested scripts."]
         try:
             text = ifs.read(self.store, self.actor, path)
         except ifs.IfsError:
-            return [f"ksh: {name}: 0403-006 Execute permission denied."]
+            return [f"bsh: {name}: 0403-006 Execute permission denied."]
         out: list[str] = []
         self.depth += 1
         try:
@@ -154,6 +156,17 @@ class Shell:
                 self.depth -= 1
         return out
 
+    def expand_line(self, line: str) -> str:
+        """$VAR and ${VAR} replaced everywhere except inside single quotes, as a shell does it."""
+        out, quoted, start = [], False, 0
+        for i, ch in enumerate(line + "'"):
+            if ch == "'":
+                piece = line[start:i]
+                out.append(piece if quoted else self.expand(piece))
+                out.append("'" if i < len(line) else "")
+                quoted, start = not quoted, i + 1
+        return "".join(out)
+
     def expand(self, word: str) -> str:
         return re.sub(r"\$(\w+)|\$\{(\w+)\}", lambda m: self.env.get(m.group(1) or m.group(2), ""), word)
 
@@ -169,16 +182,16 @@ class Shell:
         except ifs.IfsError as exc:
             return [self._cd_error(exc, args[0] if args else "~")]
         if not entry.is_dir:
-            return [f"ksh: cd: {args[0]}: [Not a directory]"]
+            return [f"{args[0]}: Not a directory"]
         if "x" not in entry.mode:
-            return [f"ksh: cd: {args[0]}: [Permission denied]"]
+            return [f"{args[0]}: Permission denied"]
         self.cwd = target
         return []
 
     @staticmethod
     def _cd_error(exc: ifs.IfsError, given: str) -> str:
         why = {"ENOENT": "No such file or directory", "EACCES": "Permission denied", "ENOTDIR": "Not a directory"}
-        return f"ksh: cd: {given}: [{why.get(exc.kind, exc.kind)}]"
+        return f"{given}: {why.get(exc.kind, exc.kind)}"
 
     def cmd_ls(self, args: list[str]) -> list[str]:
         flags = "".join(a[1:] for a in args if a.startswith("-") and len(a) > 1)
@@ -202,30 +215,26 @@ class Shell:
     @staticmethod
     def _ls_error(exc: ifs.IfsError, given: str) -> str:
         if exc.kind == "EACCES":
-            return f"ls: 0653-345 {given}: Permission denied."
-        return f"ls: 0653-341 The file {given} does not exist."
+            return f"ls: 0653-345 {given}: Permission denied."     # not captured: PUB400 only showed the missing case
+        return f"{given} not found"
 
     def _long(self, e: ifs.Entry) -> str:
         return f"{ifs.perms(e)}   1 {e.owner:<10} 0 {e.size:>8} {ifs.STAMP} {e.path.rsplit('/', 1)[-1]}"
 
     def cmd_cat(self, args: list[str]) -> list[str]:
         if not args:
-            return ["cat: 0652-050 Cannot open standard input in the simulator."]
+            return ["cat: cannot open standard input in the simulator"]
         out: list[str] = []
         for given in args:
             try:
                 out += ifs.read(self.store, self.actor, self.path(given)).splitlines()
             except ifs.IfsError as exc:
-                out.append(f"cat: 0652-050 Cannot open {given}." if exc.kind != "EISDIR"
-                           else f"cat: 0652-050 {given} is a directory.")
+                out.append(f"cat: cannot open {given}")
         return out
 
     def cmd_id(self, args: list[str]) -> list[str]:
         uid = ifs.uid_of(self.store, self.actor)
-        return [f"uid={uid}({self.actor.name}) gid={uid}({self.actor.name})"]
-
-    def cmd_whoami(self, args: list[str]) -> list[str]:
-        return [self.actor.name]
+        return [f"uid={uid}({self.actor.name.lower()}) gid=0"]
 
     def cmd_echo(self, args: list[str]) -> list[str]:
         return [" ".join(args)]
@@ -237,7 +246,7 @@ class Shell:
         for a in args:
             name, sep, value = a.partition("=")
             if not re.fullmatch(r"[A-Za-z_]\w*", name):
-                return [f"ksh: export: {a}: not a valid identifier."]
+                return [f"bsh: export: {a}: not a valid identifier."]
             if sep:
                 self.env[name] = value
         return []

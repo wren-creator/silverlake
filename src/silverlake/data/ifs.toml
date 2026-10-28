@@ -91,7 +91,7 @@ kind = "file"
 owner = "DEVELOPER"
 owner_mode = "rwx"
 public = "r-x"
-content = "#!/QOpenSys/usr/bin/ksh\necho building\n"
+content = "#!/QOpenSys/usr/bin/bsh\necho building\n"
 
 [[node]]
 path = "/home/CLERK"

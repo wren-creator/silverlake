@@ -47,7 +47,7 @@ def keypair():
 
 
 def test_a_password_login_runs_a_command_in_the_pase_shell_as_that_profile(store):
-    out, err = session(store, "STUDENT", "whoami", password="STUDENT", client_keys=None)
+    out, err = session(store, "STUDENT", "echo $USER", password="STUDENT", client_keys=None)
     assert (out.strip(), err) == ("STUDENT", "")
     out, _ = session(store, "STUDENT", "pwd", password="STUDENT", client_keys=None)
     assert out.strip() == "/home/STUDENT"
@@ -70,17 +70,17 @@ def test_a_command_runs_after_the_profiles_and_an_interactive_login_shows_what_t
         try:
             async with asyncssh.connect("127.0.0.1", port, username="OPERATOR", password="OPERATOR",
                                         known_hosts=None, client_keys=None) as conn:
-                return (await conn.run(input="whoami\nexit\n", check=False)).stdout
+                return (await conn.run(input="echo $USER\nexit\n", check=False)).stdout
         finally:
             server.close()
             await server.wait_closed()
     shown = asyncio.run(interactive())
-    assert "(OPERATOR)" in shown and "$ " in shown and "OPERATOR" in shown.splitlines()[-1] + shown
+    assert "(operator)" in shown and "$ " in shown and "OPERATOR" in shown.splitlines()[-1] + shown
 
 
 def test_no_host_shell_is_ever_reached(store):
     out, _ = session(store, "STUDENT", "uname -a", password="STUDENT", client_keys=None)
-    assert out.strip() == "ksh: uname: not found."
+    assert out.strip() == "bsh: uname: not found"
     out, _ = session(store, "STUDENT", "ls | cat", password="STUDENT", client_keys=None)
     assert "not available in the simulator" in out
 
@@ -102,9 +102,9 @@ def test_a_key_that_is_not_listed_is_refused(store):
 
 
 def test_deny_and_allow_users_decide_who_may_log_in(store):
-    assert session(store, "CLERK", "whoami", password="CLERK", client_keys=None)[0].strip() == "CLERK"
+    assert session(store, "CLERK", "echo $USER", password="CLERK", client_keys=None)[0].strip() == "CLERK"
     store.ifs["/QOpenSys/etc/ssh/sshd_config.d/20-access.conf"].content = "DenyUsers CLERK\n"
-    assert session(store, "CLERK", "whoami", password="CLERK", client_keys=None)[1]
+    assert session(store, "CLERK", "echo $USER", password="CLERK", client_keys=None)[1]
     store.ifs["/QOpenSys/etc/ssh/sshd_config.d/20-access.conf"].content = "AllowUsers OPERATOR\n"
     assert session(store, "STUDENT", password="STUDENT", client_keys=None)[1]
     assert session(store, "OPERATOR", password="OPERATOR", client_keys=None)[1] == ""

@@ -10,7 +10,7 @@ CALL PGM(QP2TERM)
 
 opens the terminal. Type commands at the `$`, F3 or `exit` leaves. The top row says it is simulated.
 
-Built commands: `pwd`, `cd`, `ls` (`-l`, `-a`), `cat`, `id`, `whoami`, `echo` (with `$VAR`), `env`, `export`, `exit`, and the writing set: `mkdir` (`-p`), `touch`, `rm` (`-r`, `-f`), `cp`, `mv`, `chmod`, `> file` and `>> file` at the end of a command, and `system 'CL command'`. Not built: pipes, input redirection, `;`, `&`, command substitution, globbing, scripts, and every other command (they answer `ksh: name: not found.`).
+Built commands: `pwd`, `cd`, `ls` (`-l`, `-a`), `cat`, `id`, `echo` (with `$VAR`), `env`, `export`, `exit`, and the writing set: `mkdir` (`-p`), `touch`, `rm` (`-r`, `-f`), `cp`, `mv`, `chmod`, `> file` and `>> file` at the end of a command, and `system 'CL command'`. Not built: pipes, input redirection, `;`, `&`, command substitution, globbing, scripts, and every other command (they answer `ksh: name: not found.`).
 
 **Writing.** A change needs `w` and `x` on the directory it lands in, and `x` all the way down the path. A new directory is `rwx` for its owner and `r-x` for everyone, a new file `rw-` and `r--`. `chmod` takes octal (`644`; the group digit is accepted and not kept) or `u+w`, `o-r`, `a+x`; only the owner or `*ALLOBJ` may use it. `/QSYS.LIB` is never written from the shell, objects there are made with CL. Everything is saved with the store, and `reset.sh` puts it back.
 
@@ -76,14 +76,14 @@ One read-only ssh run against PUB400 (port 2222, one connection, nine commands t
 - **`whoami` is not there:** `bsh: whoami: not found`.
 - **Top level permissions:** `/` is `drwxrwsr-x`, `/QOpenSys` and `/home` are `drwxrwsrwx` and `/tmp` is `drwxrwsrwt`, all owned by QSYS. Everything is group writable or world writable, with setgid, and `/tmp` is sticky. Silverlake's seed is much tighter. A shared public host may be looser than a stock system.
 
-Not yet changed in the simulator: the shell name and wording, the `id` format, `whoami`, the `PATH` and the permissions. Each is a decision (match PUB400, or keep a teaching default and say so).
+**Matched in the simulator** (the same day): the shell is `bsh` (the prefix of its own messages and `$SHELL`), a missing path in `ls` is `X not found`, `cat` says `cat: cannot open X` for any open that fails, `cd` says `X: No such file or directory`, an unknown command says `bsh: name: not found`, `id` prints `uid=N(name) gid=0` with the name in lower case, and there is no `whoami`. Single quotes now keep `$VAR` as typed, as a shell does. **Kept on purpose:** the tighter seeded permissions (a real shared host had `/home` and `/QOpenSys` world writable, which would make every lesson trivial) and a `PATH` without `.`. **Still a guess:** the wording of `ls` on a directory you may not read, and of the write commands (`mkdir`, `rm`, `cp`, `mv`, `chmod`, `>`), which were not run on PUB400 because they write.
 
 ## What is not confirmed on a real system
 
 These are guesses from how AIX and IBM i are documented to behave. They are written down here so nobody teaches them as fact. A read-only check against PUB400, a person at the keyboard, would settle each one.
 
-- The exact wording of errors: `ls: 0653-341 The file X does not exist.`, `ls: 0653-345 X: Permission denied.`, `cat: 0652-050 Cannot open X.`, `ksh: cd: X: [No such file or directory]`, `ksh: X: not found.`
-- What `id` prints. Silverlake prints `uid=N(NAME) gid=N(NAME)`, with QSECOFR as 0 and everyone else numbered from 500 in the order the profiles were made. A real system assigns UIDs when a profile is created.
+- The wording of `ls` on a directory the profile may not read (`ls: 0653-345 X: Permission denied.` is a guess) and of the write commands. The wording of missing paths, `cat`, `cd` and unknown commands is copied from PUB400.
+- The UID numbers. The format of `id` is copied from PUB400, but Silverlake numbers QSECOFR as 0 and everyone else from 500, in the order the profiles were made, and a real system assigns UIDs when a profile is created.
 - The default permissions and owners of `/`, `/QOpenSys`, `/home`, `/tmp` and the home directories. Chosen to be plausible, not read off a machine.
 - Whether adopted authority carries into PASE (believed not to, and not modeled).
 - How a `LMTCPB(*YES)` profile fares with `QP2TERM`. Here the profile needs a way to type `CALL QP2TERM`, which a limited profile does not have, but that is not the same as the real rule.

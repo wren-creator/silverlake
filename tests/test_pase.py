@@ -18,7 +18,7 @@ def shell(store, user="STUDENT"):
 
 def test_the_shell_starts_in_the_home_directory_with_a_plain_environment(store):
     sh = shell(store)
-    assert sh.run("pwd") == ["/home/STUDENT"] and sh.run("whoami") == ["STUDENT"]
+    assert sh.run("pwd") == ["/home/STUDENT"] and sh.run("echo $USER") == ["STUDENT"]
     env = dict(line.split("=", 1) for line in sh.run("env"))
     assert env["HOME"] == "/home/STUDENT" and env["USER"] == "STUDENT" and "PATH" in env
 
@@ -45,13 +45,13 @@ def test_ls_long_and_hidden_and_several_paths(store):
 
 def test_what_the_profile_may_not_touch_is_refused_in_the_shells_voice(store):
     sh = shell(store)
-    assert sh.run("cat /home/OPERATOR/.profile") == ["cat: 0652-050 Cannot open /home/OPERATOR/.profile."]
+    assert sh.run("cat /home/OPERATOR/.profile") == ["cat: cannot open /home/OPERATOR/.profile"]
     assert sh.run("ls /home/OPERATOR") == ["ls: 0653-345 /home/OPERATOR: Permission denied."]
-    assert sh.run("cd /home/OPERATOR") == ["ksh: cd: /home/OPERATOR: [Permission denied]"]
-    assert sh.run("ls /nowhere") == ["ls: 0653-341 The file /nowhere does not exist."]
-    assert sh.run("cd /nowhere") == ["ksh: cd: /nowhere: [No such file or directory]"]
-    assert sh.run("cd notes.txt") == ["ksh: cd: notes.txt: [Not a directory]"]
-    assert sh.run("cat /home") == ["cat: 0652-050 /home is a directory."]
+    assert sh.run("cd /home/OPERATOR") == ["/home/OPERATOR: Permission denied"]
+    assert sh.run("ls /nowhere") == ["/nowhere not found"]
+    assert sh.run("cd /nowhere") == ["/nowhere: No such file or directory"]
+    assert sh.run("cd notes.txt") == ["notes.txt: Not a directory"]
+    assert sh.run("cat /home") == ["cat: cannot open /home"]
     assert sh.cwd == "/home/STUDENT"
 
 
@@ -65,30 +65,30 @@ def test_the_shell_reaches_the_object_store_through_qsys_lib_with_the_same_autho
     st = shell(store)
     assert "CUSTOMERS.FILE" in st.run("ls /QSYS.LIB/APPLIB.LIB")
     assert "PAYROLL.FILE" not in st.run("ls /QSYS.LIB/APPLIB.LIB")
-    assert st.run("cat /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE") == ["cat: 0652-050 Cannot open /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE."]
+    assert st.run("cat /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE") == ["cat: cannot open /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE"]
     assert "Chen, Priya" in " ".join(shell(store, "OPERATOR").run("cat /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE"))
 
 
-def test_id_whoami_echo_export_and_variables(store):
+def test_id_echo_export_and_variables(store):
     sh = shell(store)
-    assert sh.run("id")[0].startswith("uid=") and "(STUDENT)" in sh.run("id")[0]
-    assert shell(store, "QSECOFR").run("id")[0].startswith("uid=0(QSECOFR)")
+    assert sh.run("id")[0].startswith("uid=") and "(student)" in sh.run("id")[0]
+    assert shell(store, "QSECOFR").run("id")[0].startswith("uid=0(qsecofr)")
     assert sh.run("echo hello $USER ${HOME}") == ["hello STUDENT /home/STUDENT"]
     assert sh.run("export WHO=me") == [] and sh.run("echo $WHO") == ["me"]
-    assert sh.run("export 9bad=1") == ["ksh: export: 9bad=1: not a valid identifier."]
+    assert sh.run("export 9bad=1") == ["bsh: export: 9bad=1: not a valid identifier."]
     assert sh.run("echo $NOPE.") == ["."]
 
 
 def test_everything_else_is_refused_and_nothing_reaches_the_host(store):
     sh = shell(store)
     assert sh.run("rm -rf /")[0].startswith("rm: 0653-345") and "/home" in store.ifs
-    assert sh.run("python -c 'print(1)'") == ["ksh: python: not found."]
+    assert sh.run("python -c 'print(1)'") == ["bsh: python: not found"]
     for line in ("ls | cat", "cat < /tmp/x", "cat /tmp/x; id", "id &", "echo `id`", "echo $(id)"):
         assert "not available in the simulator" in sh.run(line)[0], line
-    assert sh.run("echo 'unclosed") == ["ksh: a quote was not closed."]
+    assert sh.run("echo 'unclosed") == ["bsh: a quote was not closed."]
     assert sh.run("") == [] and sh.run("# comment") == []
-    assert sh.run("../etc") == ["ksh: ../etc: not found."]
-    assert sh.run("cmd_pwd") == ["ksh: cmd_pwd: not found."]
+    assert sh.run("../etc") == ["bsh: ../etc: not found"]
+    assert sh.run("cmd_pwd") == ["bsh: cmd_pwd: not found"]
 
 
 def test_exit_ends_the_shell(store):
@@ -179,11 +179,11 @@ def test_files_and_directories_can_be_made_changed_and_removed_where_the_profile
 def test_writes_are_refused_without_write_on_the_directory(store):
     sh = shell(store)
     assert sh.run("touch /home/x") == ["touch: 0653-345 /home/x: Permission denied."]
-    assert sh.run("echo hi > /QOpenSys/etc/motd") == ["ksh: 0653-345 /QOpenSys/etc/motd: Permission denied."]
+    assert sh.run("echo hi > /QOpenSys/etc/motd") == ["bsh: 0653-345 /QOpenSys/etc/motd: Permission denied."]
     assert sh.run("rm /QOpenSys/etc/motd")[0].startswith("rm: 0653-345")
     assert sh.run("mkdir /QSYS.LIB/NEW.LIB")[0].startswith("mkdir: 0653-345")
     assert sh.run("rm -rf /")[0].startswith("rm: 0653-345") and "/" in store.ifs
-    assert sh.run("echo x > /home/OPERATOR/.profile")[0].startswith("ksh: 0653-345")
+    assert sh.run("echo x > /home/OPERATOR/.profile")[0].startswith("bsh: 0653-345")
     assert sh.run("mkdir w") == [] and sh.run("mkdir w") == ["mkdir: 0653-340 w already exists."]
 
 
@@ -215,7 +215,7 @@ def test_system_runs_cl_as_the_signed_on_profile_and_nothing_more(store):
 def test_a_redirect_must_end_the_line(store):
     sh = shell(store)
     assert "last thing" in sh.run("echo a > x y z >")[0] or "last thing" in sh.run("echo > x extra")[0]
-    assert sh.run("echo a > /nodir/x") == ["ksh: 0653-341 The file /nodir/x does not exist."]
+    assert sh.run("echo a > /nodir/x") == ["bsh: 0653-341 The file /nodir/x does not exist."]
 
 
 def test_writes_are_saved_with_the_store(store):
@@ -240,7 +240,7 @@ def test_a_script_needs_x_and_is_found_along_path_before_the_simulators_own_comm
 
 def test_a_script_runs_as_whoever_runs_it_and_nests_only_so_far(store):
     sh = shell(store)
-    sh.run("echo whoami > who")
+    sh.run("echo 'echo $USER' > who")
     sh.run("chmod 755 who")
     assert sh.run("./who") == ["STUDENT"] and shell(store, "QSECOFR").run("/home/STUDENT/who") == ["QSECOFR"]
     sh.run("echo ./loop > loop")
@@ -251,7 +251,7 @@ def test_a_script_runs_as_whoever_runs_it_and_nests_only_so_far(store):
 
 def test_login_reads_the_system_profile_then_the_home_profile(store):
     out = shell(store, "OPERATOR").login()
-    assert out and out[0].startswith("uid=") and "(OPERATOR)" in out[0]       # the seeded .profile runs id
+    assert out and out[0].startswith("uid=") and "(operator)" in out[0]       # the seeded .profile runs id
     sh = shell(store, "OPERATOR")
     sh.login()
     assert sh.env["PATH"].startswith("/tmp/opsbin:") and sh.env["EDITOR"] == "vi"
@@ -264,4 +264,10 @@ def test_the_terminal_shows_what_the_login_printed():
     store = profiles.load()
     store.profiles["OPERATOR"]
     term = PaseTerm(Context(store, store.profiles["OPERATOR"], None, lambda line: None))
-    assert any("(OPERATOR)" in line for line in term.lines)
+    assert any("(operator)" in line for line in term.lines)
+
+
+def test_single_quotes_keep_a_dollar_sign_as_it_is(store):
+    sh = shell(store)
+    assert sh.run("echo '$USER' \"$USER\" $USER") == ["$USER STUDENT STUDENT"]
+    assert sh.run("echo 'a b' c") == ["a b c"]
