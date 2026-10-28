@@ -17,6 +17,7 @@ Silverlake does not use the standard ports for everything. Some are on a differe
 | Host server mapper | 4449 | 449 | 449 is privileged | `SILVERLAKE_MAPPER_PORT` |
 | Sign-on server | 8476 | 8476 | same as real | `SILVERLAKE_SIGNON_PORT` |
 | Sign-on server over TLS | 9476 | 9476 | same as real | `SILVERLAKE_SIGNON_TLS_PORT` |
+| ssh (PASE shell, needs asyncssh) | 2222 | 22 | 22 is privileged | `SILVERLAKE_SSH_PORT` |
 
 Two services cannot share a port, and `start.sh` and the server both say so. The mapper names the sign-on servers' ports in its answers (`as-signon`, `as-signon-s`), so if you move one the mapper follows. It also names the standard ports (8470 to 8475, and 9471) for the other host servers, and nothing listens on them.
 
@@ -26,7 +27,7 @@ Things to know when you point a tool at it:
 
 - **Clients with a port option** just need it: `tn5250 ssl:127.0.0.1:5992`, `ftp 127.0.0.1 2121`, a browser at `http://127.0.0.1:2001/HTTPAdmin` or `https://127.0.0.1:2010/HTTPAdmin`.
 - **Clients that hard code the real ports** (an FTP client that insists on 21, a host server client that goes to 449 first, a 5250 client that goes to 23 or 992) will not find anything. Either give them the port or forward the real one to ours, loopback only and needing root for a low port, for example `sudo socat TCP-LISTEN:21,bind=127.0.0.1,fork TCP:127.0.0.1:2121`. Silverlake does not do this for you.
-- **Scanners** need the port list: `nmap -p 5250,5992,2001,2010,2121,2990,4449,8476,9476 127.0.0.1`. A default scan of 127.0.0.1 will not find 5250, 5992, 2121, 2990 or 4449, and a scan of the real port numbers will find nothing at 23, 992, 21, 990 or 449. The `ibmi-httpadmin-nse` script works as is, because 2001 and 2010 are the real ports.
+- **Scanners** need the port list: `nmap -p 5250,5992,2001,2010,2121,2990,4449,8476,9476,2222 127.0.0.1`. A default scan of 127.0.0.1 will not find 5250, 5992, 2121, 2990, 2222 or 4449, and a scan of the real port numbers will find nothing at 23, 992, 21, 990 or 449. The `ibmi-httpadmin-nse` script works as is, because 2001 and 2010 are the real ports.
 - **A port in use:** `start.sh` checks the 5250 port and each service port before it starts and names the variable to change.
 - **Restarts:** `./scenario.sh` restarts with `--services` if the range was started with it, but it does not remember a custom port. Export the `SILVERLAKE_*_PORT` variables in the shell you run it from.
 - `./status.sh` lists every socket the process holds and fails if any is beyond loopback.
@@ -62,6 +63,10 @@ The `ftp-limited-bypass` lesson: FTP does not know what limited capability is, s
 `RCMD` (`quote rcmd <CL command>`) runs a CL command as the signed on profile through Silverlake's own dispatcher, in this process, never a shell. It is the profile's own authority and nothing more, it answers 250 with the text of the result (messages, `DSPMSG`, `WRKUSRPRF`, `DSPUSRPRF`; a command that needs a screen says so) and 550 when the command fails, and the exit program of the `ftp-limited-bypass` lesson turns it away for limited profiles as it does the file commands.
 
 Read only on purpose for files: there is no `STOR`, `DELE`, `MKD`, `RMD` or `RNFR`. Not built: members other than the first, IFS directories, `SITE`, active mode (`PORT`), TLS.
+
+## ssh
+
+Described in [pase.md](pase.md#ssh): the PASE shell on port 2222, password and public key logins, and the `sshd_config` files in the virtual IFS. It starts only when asyncssh is installed (`./setup.sh --ssh`); without it the log says so and the other services run as usual.
 
 ## Host servers
 

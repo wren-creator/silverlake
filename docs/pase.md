@@ -50,7 +50,20 @@ That is what makes two seeded weaknesses real. Both are lessons in group E (docs
 - **pase-profile-plant.** `/QOpenSys/etc/profile` is writable by everyone. Whoever logs in next runs what was appended, with their own authority.
 - **pase-path-hijack.** OPERATOR's `.profile` puts `/tmp/opsbin` first on `PATH` and runs `id`. `/tmp/opsbin` is writable by everyone, so a planted `id` runs as OPERATOR.
 
-In both, the victim is a second session: the trainee signs on as QSECOFR or OPERATOR in another 5250 window and runs `CALL PGM(QP2TERM)`. Not seeded yet: a world writable `authorized_keys` and a limited profile reaching CL through ssh, both of which wait for the ssh listener.
+In both, the victim is a second session: the trainee signs on as QSECOFR or OPERATOR in another 5250 window and runs `CALL PGM(QP2TERM)`.
+
+The two ssh lessons are described below.
+
+## ssh
+
+With `./start.sh --services` and asyncssh installed (`./setup.sh --ssh`), an ssh listener answers on `127.0.0.1:2222` (real: 22). `ssh -p 2222 STUDENT@127.0.0.1` gives the same simulated shell as QP2TERM, as that profile: a login runs the profiles and shows what they print, and `ssh host 'command'` runs one line. No host shell is ever reached, so `ssh host uname` says `not found`, and `scp` and port forwarding are not offered. A password login follows the 5250 sign-on rules (a wrong password counts toward the lockout), and a key login uses the public keys listed in `~/.ssh/authorized_keys` in the virtual IFS. The host key is made on first use in `.tls/`.
+
+The daemon's settings are `/QOpenSys/etc/ssh/sshd_config` and the `.conf` files in `sshd_config.d/` beside it, re-read at every login, first value wins. It reads `PasswordAuthentication`, `PubkeyAuthentication`, `StrictModes`, `DenyUsers` and `AllowUsers`, and ignores the rest. With `StrictModes yes` a key file, its `.ssh` directory or the home directory that others can write is not trusted. Two lessons use it (group E):
+
+- **ssh-strictmodes.** `StrictModes no` and a world writable `/home/DEVELOPER/.ssh/authorized_keys`. STUDENT appends a public key and logs in as DEVELOPER.
+- **ssh-limited-bypass.** CLERK has no command line at the 5250 and a shell over ssh, with the shell's `cat`, `db2` and `system`. The fix is `DenyUsers CLERK`.
+
+The version banner says AsyncSSH, not OpenSSH, so a scanner can tell it is not a real sshd.
 
 ## What is not confirmed on a real system
 
@@ -63,4 +76,5 @@ These are guesses from how AIX and IBM i are documented to behave. They are writ
 - How a `LMTCPB(*YES)` profile fares with `QP2TERM`. Here the profile needs a way to type `CALL QP2TERM`, which a limited profile does not have, but that is not the same as the real rule.
 - The layout of the QP2TERM display. This one is ours.
 - Whether `db2` is the right command name and what its output looks like. IBM i has a `db2` in QShell and a `db2util` from open source; the layout here (a header, a dashed line, the rows, a count) is a guess, and the message IDs are IBM's with wording of ours.
+- The path of the sshd config files (`/QOpenSys/etc/ssh/`), which is ours, and whether a `LMTCPB(*YES)` profile is stopped by sshd or by its login shell on a real IBM i. Here nothing stops it, which is the lesson and is believed but not confirmed.
 - The prompt (`$ `) and the environment variables `env` prints.

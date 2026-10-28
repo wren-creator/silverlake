@@ -1,0 +1,33 @@
+id = "ssh-strictmodes"
+title = "A key file anyone can write, and an ssh daemon that does not mind"
+group = "E"
+summary = "With StrictModes off the daemon trusts authorized_keys even when others can write it, so whoever can write it can log in as its owner."
+[[change]]
+target = "ifs:/QOpenSys/etc/ssh/sshd_config.d/10-modes.conf"
+field = "content"
+vulnerable = "# StrictModes yes refuses a key file that others can write\nStrictModes no\n"
+secure = "# StrictModes yes refuses a key file that others can write\nStrictModes yes\n"
+
+[cleanup]
+remove_new_ifs = true
+restore_ifs = ["/home/DEVELOPER/.ssh/authorized_keys"]
+
+[flag]
+kind = "text"
+task = "Get into DEVELOPER's account over ssh without DEVELOPER's password, and read the deploy token in /home/DEVELOPER/secret.txt."
+
+[doc]
+where = "ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)"
+parallel = "OpenSSH only trusts a key file that nobody but the owner can write, because a key file is a list of who may log in. Turning that check off (StrictModes no) is sometimes done to make a deployment work, and it turns a permissions slip into an account takeover."
+vulnerability = "/home/DEVELOPER/.ssh/authorized_keys is writable by everyone, and the daemon's StrictModes is no. STUDENT can read the directory and write the file."
+mitre = ["T1098.004 Account Manipulation: SSH Authorized Keys", "T1021.004 Remote Services: SSH", "T1078 Valid Accounts"]
+steps = [
+  "ssh-keygen -t ed25519 -f demo_key -N '' makes a key pair on your own machine.",
+  "Sign on to the 5250 as STUDENT, CALL PGM(QP2TERM), and ls -l /home/DEVELOPER/.ssh. The key file has rw- for everyone.",
+  "cat /QOpenSys/etc/ssh/sshd_config.d/10-modes.conf shows StrictModes no.",
+  "echo 'ssh-ed25519 AAAA... you' >> /home/DEVELOPER/.ssh/authorized_keys, with your own public key from demo_key.pub.",
+  "ssh -p 2222 -i demo_key DEVELOPER@127.0.0.1 and then cat secret.txt.",
+]
+consequence = "STUDENT becomes DEVELOPER without knowing a password, and the key stays behind as a way back in."
+fix = "Set StrictModes yes (the secure state does), make authorized_keys and ~/.ssh writable only by their owner, and review who can reach the key files. A changed key file is worth an alert."
+reference = "OpenSSH sshd_config(5), StrictModes; CIS Benchmarks for SSH server configuration; MITRE ATT&CK T1098.004."

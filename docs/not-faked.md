@@ -7,7 +7,7 @@ IBM i has twenty-five years of surface area. Chasing all of it ends the project.
 - Hardware, SLIC, TIMI, MI instructions, single-level store
 - Booting or running real IBM i media, ever
 - Licensed program products beyond what a scenario needs
-- Real PASE or QSH. A small themed shell exists (docs/pase.md), and it is not a real AIX runtime
+- Real PASE or QSH. A small themed shell exists (docs/pase.md), reachable from QP2TERM and over a loopback ssh listener, and it is not a real AIX runtime or a real sshd (no sftp, scp or forwarding)
 - Native ILE binding, service programs, activation groups
 - Clustering, HA, PowerHA, LPAR management
 - Full DB2 for i SQL. We cover what scenarios and teaching need: a small runner over the physical files (`db2` in the PASE shell, docs/pase.md), with SQLite underneath, not Db2 for i

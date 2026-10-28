@@ -107,3 +107,58 @@ public = "rwx"
 path = "/tmp/opsbin"
 owner = "OPERATOR"
 public = "rwx"
+
+[[node]]
+path = "/QOpenSys/etc/ssh"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/etc/ssh/sshd_config"
+kind = "file"
+owner = "QSYS"
+owner_mode = "rw-"
+public = "r--"
+content = "# the ssh daemon's settings. The files in sshd_config.d are read too, first value wins.\nPasswordAuthentication yes\nPubkeyAuthentication yes\n"
+
+[[node]]
+path = "/QOpenSys/etc/ssh/sshd_config.d"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/etc/ssh/sshd_config.d/10-modes.conf"
+kind = "file"
+owner = "QSYS"
+owner_mode = "rw-"
+public = "r--"
+content = "# StrictModes yes refuses a key file that others can write\nStrictModes no\n"
+
+[[node]]
+path = "/QOpenSys/etc/ssh/sshd_config.d/20-access.conf"
+kind = "file"
+owner = "QSYS"
+owner_mode = "rw-"
+public = "r--"
+content = "# no DenyUsers or AllowUsers: every enabled profile may log in over ssh\n"
+
+[[node]]
+path = "/home/DEVELOPER/.ssh"
+owner = "DEVELOPER"
+public = "r-x"
+
+[[node]]
+path = "/home/DEVELOPER/.ssh/authorized_keys"
+kind = "file"
+owner = "DEVELOPER"
+owner_mode = "rw-"
+public = "rw-"
+content = "# keys allowed to log in as DEVELOPER\n"
+
+[[node]]
+path = "/home/DEVELOPER/secret.txt"
+kind = "file"
+owner = "DEVELOPER"
+owner_mode = "rw-"
+public = "---"
+content = "Deploy token @@FLAG:ssh-strictmodes@@\n"

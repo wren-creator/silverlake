@@ -1,0 +1,31 @@
+id = "ssh-limited-bypass"
+title = "A clerk with no command line who can still open a shell over ssh"
+group = "E"
+summary = "Limited capability stops a profile at the 5250 command line and nowhere else, so ssh gives the clerk a shell that reads what the clerk may read."
+[[change]]
+target = "ifs:/QOpenSys/etc/ssh/sshd_config.d/20-access.conf"
+field = "content"
+vulnerable = "# no DenyUsers or AllowUsers: every enabled profile may log in over ssh\n"
+secure = "# the clerk has no business with a shell\nDenyUsers CLERK\n"
+
+[cleanup]
+remove_new_ifs = true
+
+[flag]
+kind = "text"
+task = "Use the clerk's own password over ssh to read the shell access review ticket in APPLIB/DAILYOPS."
+
+[doc]
+where = "ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)"
+parallel = "Limited capability is a rule of the 5250 command line. A profile with LMTCPB(*YES) still has all the authority it was given, and any other way in (FTP, ODBC, ssh) applies that authority and nothing more. The ftp-limited-bypass lesson shows it with FTP, this one with a shell."
+vulnerability = "CLERK has LMTCPB(*YES) and a menu with no way out, but CLERK may read APPLIB/DAILYOPS, and the daemon lets any enabled profile log in. The password is the profile name."
+mitre = ["T1078 Valid Accounts", "T1021.004 Remote Services: SSH", "T1005 Data from Local System"]
+steps = [
+  "Confirm at the 5250 that CLERK has no command line.",
+  "ssh -p 2222 CLERK@127.0.0.1 and use CLERK as the password.",
+  "cat /QSYS.LIB/APPLIB.LIB/DAILYOPS.FILE, or db2 \"select * from applib.dailyops\", or system 'DSPLIBL'.",
+  "Read the ticket.",
+]
+consequence = "The clerk who could not leave a menu has a shell, SQL and CL, all with the clerk's own authority."
+fix = "Keep limited profiles out of ssh (DenyUsers or an AllowUsers list, which the secure state uses), and give people who need a shell their own profiles with only the authority they need."
+reference = "IBM i Security Reference, limited capability; OpenSSH sshd_config(5), DenyUsers and AllowUsers; CIS Benchmarks for SSH server configuration."

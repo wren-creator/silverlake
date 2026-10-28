@@ -12,6 +12,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# The loopback ssh listener for the PASE shell (net/sshd.py). Without it the ssh port is just not started.
+ssh = ["asyncssh>=2.14"]
 # RPG programs run on rpgle_library, which is not on PyPI yet. setup.sh installs it from the sibling folder
 # or from GitHub. Without it Silverlake runs and CALL on an RPG program says the runtime is missing.
 rpg = ["rpgle_library @ git+https://github.com/wren-creator/rpgle_library#subdirectory=python"]

@@ -28,7 +28,7 @@ def test_cd_and_ls_and_cat_work_on_the_virtual_ifs(store):
     assert sh.run("ls") == ["notes.txt"]
     assert sh.run("cat notes.txt") == ["Things to try: ls, cat, cd, id."]
     assert sh.run("cd /QOpenSys/etc") == [] and sh.run("pwd") == ["/QOpenSys/etc"]
-    assert sh.run("ls") == ["motd", "profile"]
+    assert sh.run("ls") == ["motd", "profile", "ssh"]
     assert sh.run("cd ..") == [] and sh.run("pwd") == ["/QOpenSys"]
     assert sh.run("cd") == [] and sh.run("pwd") == ["/home/STUDENT"]
     assert sh.run("cat ~/notes.txt") and sh.run("cat /QOpenSys/etc/motd")[0].startswith("Welcome")

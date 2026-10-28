@@ -48,7 +48,8 @@ def test_the_secret_file_is_made_once_and_kept(tmp_path, monkeypatch):
 
 
 def test_the_seed_holds_no_placeholder_and_every_text_flag_is_planted_once_or_more(store):
-    blob = repr([(o.data, o.text) for o in store.objects.values()]) + repr([f.lines for f in store.spool])
+    blob = repr([(o.data, o.text) for o in store.objects.values()]) + repr([f.lines for f in store.spool]) \
+        + repr([n.content for n in store.ifs.values()])
     assert "@@" not in blob
     for s in flags.lessons(REG):
         if s.flag["kind"] == "text":
@@ -134,7 +135,7 @@ def test_a_submission_is_scored_flag_by_flag_and_state_lessons_need_no_submissio
     rows = {sid: ok for sid, ok, _ in flags.score(store, {"qsysopr-recon": flags.flag("qsysopr-recon"),
                                                           "qprint-report-leak": "FLAG{000000000000}"}, REG)}
     assert rows["qsysopr-recon"] and not rows["qprint-report-leak"] and not rows["runcmd-qcmdexc"]
-    assert len(rows) == 16
+    assert len(rows) == 18
 
 
 def test_the_submission_file_format():
@@ -168,7 +169,7 @@ def test_command_line_scores_and_shows(tmp_path, monkeypatch, capsys):
     sub.write_text(f"qsysopr-recon={flags.flag('qsysopr-recon')}\n")
     assert flags.main(["check", str(sub)]) == 1
     out = capsys.readouterr().out
-    assert "[+] qsysopr-recon" in out and "1 of 16" in out
+    assert "[+] qsysopr-recon" in out and "1 of 18" in out
     assert flags.main(["show"]) == 0
     shown = capsys.readouterr().out
     assert flags.flag("qsysopr-recon") in shown and flags.password("OPERATOR") in shown

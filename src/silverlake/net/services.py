@@ -16,17 +16,18 @@ from collections.abc import Callable
 
 from ..config import check_loopback
 from ..system.profiles import ProfileStore
-from . import certs, ftpd, hostsvr, httpd, httpadmin
+from . import certs, ftpd, hostsvr, httpd, httpadmin, sshd
 from . import server as telnet
 
 log = logging.getLogger("silverlake.services")
 
 DEFAULT_PORTS = {"httpadmin": 2001, "ftp": 2121, "mapper": 4449, "signon": 8476,
-                 "tls5250": 5992, "httpadmin_tls": 2010, "ftp_tls": 2990, "signon_tls": 9476}
+                 "tls5250": 5992, "httpadmin_tls": 2010, "ftp_tls": 2990, "signon_tls": 9476, "ssh": 2222}
 ENV_PORTS = {"httpadmin": "SILVERLAKE_HTTPADMIN_PORT", "ftp": "SILVERLAKE_FTP_PORT",
              "mapper": "SILVERLAKE_MAPPER_PORT", "signon": "SILVERLAKE_SIGNON_PORT",
              "tls5250": "SILVERLAKE_TLS_PORT", "httpadmin_tls": "SILVERLAKE_HTTPADMIN_TLS_PORT",
-             "ftp_tls": "SILVERLAKE_FTP_TLS_PORT", "signon_tls": "SILVERLAKE_SIGNON_TLS_PORT"}
+             "ftp_tls": "SILVERLAKE_FTP_TLS_PORT", "signon_tls": "SILVERLAKE_SIGNON_TLS_PORT",
+             "ssh": "SILVERLAKE_SSH_PORT"}
 
 
 def wanted(env: dict[str, str] | None = None) -> bool:
@@ -72,6 +73,11 @@ async def start(host: str, store_of: Callable[[], ProfileStore], env: dict[str, 
                 servers.append(await telnet.serve(host, chosen["tls5250"], make_controller, ssl_context=tls))
             log.info("TLS: 5250 on %d, console on %d, FTP on %d, sign-on on %d", chosen["tls5250"],
                      chosen["httpadmin_tls"], chosen["ftp_tls"], chosen["signon_tls"])
+        if sshd.available():
+            servers.append(await sshd.serve(host, chosen["ssh"], store_of))
+            log.info("ssh on %s:%d", host, chosen["ssh"])
+        else:
+            log.info("asyncssh is not installed: the ssh port is not started (pip install 'silverlake[ssh]')")
     except OSError:
         for s in servers:
             s.close()

@@ -60,7 +60,7 @@ if [ -n "$SERVICES" ]; then
   if [ -n "$TLS_ON" ]; then
     tls_specs=("5250 TLS:${SILVERLAKE_TLS_PORT:-5992}:SILVERLAKE_TLS_PORT" "HTTP Admin TLS:${SILVERLAKE_HTTPADMIN_TLS_PORT:-2010}:SILVERLAKE_HTTPADMIN_TLS_PORT" "FTP TLS:${SILVERLAKE_FTP_TLS_PORT:-2990}:SILVERLAKE_FTP_TLS_PORT" "Sign-on TLS:${SILVERLAKE_SIGNON_TLS_PORT:-9476}:SILVERLAKE_SIGNON_TLS_PORT")
   fi
-  for spec in ${tls_specs[@]+"${tls_specs[@]}"} "HTTP Admin:${SILVERLAKE_HTTPADMIN_PORT:-2001}:SILVERLAKE_HTTPADMIN_PORT" "FTP:${SILVERLAKE_FTP_PORT:-2121}:SILVERLAKE_FTP_PORT" "Host server mapper:${SILVERLAKE_MAPPER_PORT:-4449}:SILVERLAKE_MAPPER_PORT" "Sign-on server:${SILVERLAKE_SIGNON_PORT:-8476}:SILVERLAKE_SIGNON_PORT"; do
+  for spec in ${tls_specs[@]+"${tls_specs[@]}"} "HTTP Admin:${SILVERLAKE_HTTPADMIN_PORT:-2001}:SILVERLAKE_HTTPADMIN_PORT" "FTP:${SILVERLAKE_FTP_PORT:-2121}:SILVERLAKE_FTP_PORT" "Host server mapper:${SILVERLAKE_MAPPER_PORT:-4449}:SILVERLAKE_MAPPER_PORT" "Sign-on server:${SILVERLAKE_SIGNON_PORT:-8476}:SILVERLAKE_SIGNON_PORT" "ssh:${SILVERLAKE_SSH_PORT:-2222}:SILVERLAKE_SSH_PORT"; do
     IFS=: read -r svc svc_port svc_var <<<"$spec"
     if .venv/bin/python -c "import socket; socket.create_connection(('$HOST', $svc_port), 0.5).close()" 2>/dev/null; then
       bad "port $svc_port ($svc) is already in use. Set $svc_var to another"
@@ -94,6 +94,11 @@ if [ -n "$listening" ]; then
     echo "  TLS            5250 $HOST:${SILVERLAKE_TLS_PORT:-5992}, console $HOST:${SILVERLAKE_HTTPADMIN_TLS_PORT:-2010}, FTP $HOST:${SILVERLAKE_FTP_TLS_PORT:-2990} (implicit), sign-on $HOST:${SILVERLAKE_SIGNON_TLS_PORT:-9476}"
   elif [ -n "$SERVICES" ]; then
     echo "  TLS            off, no certificate (run ./setup.sh)"
+  fi
+  if [ -n "$SERVICES" ] && .venv/bin/python -c "import asyncssh" 2>/dev/null; then
+    echo "  ssh            $HOST:${SILVERLAKE_SSH_PORT:-2222}   (ssh -p ${SILVERLAKE_SSH_PORT:-2222} STUDENT@$HOST)"
+  elif [ -n "$SERVICES" ]; then
+    echo "  ssh            off, asyncssh not installed (run ./setup.sh --ssh)"
   fi
   [ -n "$SERVICES" ] && echo "  Host servers   $HOST:${SILVERLAKE_MAPPER_PORT:-4449} (mapper), $HOST:${SILVERLAKE_SIGNON_PORT:-8476} (sign-on)"
   echo "  logs:          $LOG_FILE"

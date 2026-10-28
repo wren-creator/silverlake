@@ -20,7 +20,7 @@ def test_services_are_off_unless_asked_for():
 
 def test_ports_default_to_the_real_ones_and_can_move():
     assert services.ports({}) == {"httpadmin": 2001, "ftp": 2121, "mapper": 4449, "signon": 8476, "tls5250": 5992,
-                                  "httpadmin_tls": 2010, "ftp_tls": 2990, "signon_tls": 9476}
+                                  "httpadmin_tls": 2010, "ftp_tls": 2990, "signon_tls": 9476, "ssh": 2222}
     assert services.ports({"SILVERLAKE_HTTPADMIN_PORT": "2999"})["httpadmin"] == 2999
     with pytest.raises(ValueError, match="same port"):
         services.ports({"SILVERLAKE_HTTPADMIN_PORT": "2121"})

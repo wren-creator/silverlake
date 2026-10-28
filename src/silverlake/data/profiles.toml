@@ -470,6 +470,7 @@ attr = "PF"
 dds_file = "dailyops.pf"
 records = [
   { NOTE = "Month end close ticket @@FLAG:ftp-limited-bypass@@" },
+  { NOTE = "Shell access review ticket @@FLAG:ssh-limited-bypass@@" },
 ]
 
 [[object]]

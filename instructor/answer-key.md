@@ -40,6 +40,8 @@ The full per lesson key is `docs/scenarios.md`, which is generated from the scen
 | httpadmin-ssi-injection | the web console evaluates exec directives in a description, as QTMHHTTP (needs `--services`) | install the console fix, which escapes the field |
 | pase-profile-plant | `/QOpenSys/etc/profile` is world writable and every login runs it (the victim is a second session as QSECOFR) | profile owned by the system, read only for the rest |
 | pase-path-hijack | `/tmp/opsbin` is world writable and first on the operator's PATH, so a planted `id` runs as OPERATOR (the victim is a second session as OPERATOR) | no writable directory on PATH, `/tmp/opsbin` read only |
+| ssh-strictmodes | `authorized_keys` is world writable and `StrictModes no`, so a planted key logs in as DEVELOPER (needs `--services` and asyncssh) | `StrictModes yes`, key files writable only by their owner |
+| ssh-limited-bypass | limited capability is a 5250 rule, ssh gives CLERK a shell, SQL and CL (needs `--services` and asyncssh) | `DenyUsers CLERK` or an `AllowUsers` list |
 
 ## Verification caveat
 

@@ -29,7 +29,7 @@ The submission file is one `lesson-id = FLAG{...}` per line. State lessons (a ne
 
 - Python 3.12 or newer, and about 200 MB of disk. No Docker, no IBM media.
 - Port 5250 free on 127.0.0.1. `./start.sh --port 5251` if it is not.
-- For the optional network session, `./start.sh --services` also needs 2001, 2121, 4449 and 8476 free, plus 5992, 2010, 2990 and 9476 if `./setup.sh` made a certificate (it needs openssl). Several ports differ from a real IBM i (5250 vs 23, 5992 vs 992, 2121 vs 21, 2990 vs 990, 4449 vs 449), so students must give their tools the port. The table and the variables that move each port are in `docs/services.md`. `scenario.sh` keeps services on across its restart but not a custom port.
+- For the optional network session, `./start.sh --services` also needs 2001, 2121, 4449, 8476 and 2222 (ssh, only with asyncssh from `./setup.sh --ssh`) free, plus 5992, 2010, 2990 and 9476 if `./setup.sh` made a certificate (it needs openssl). Several ports differ from a real IBM i (5250 vs 23, 5992 vs 992, 2121 vs 21, 2990 vs 990, 4449 vs 449, 2222 vs 22), so students must give their tools the port. The table and the variables that move each port are in `docs/services.md`. `scenario.sh` keeps services on across its restart but not a custom port.
 - Linux, macOS, or WSL2.
 
 ## Common failures
