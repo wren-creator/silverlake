@@ -108,10 +108,10 @@ def test_client_that_refuses_new_environ_still_gets_a_screen():
 def test_enter_round_trip_echoes_user_and_reports_unknown_user():
     async def fn(c):
         await c.pump(lambda: c.records)
-        c.send_input(0xF1, [(5, 52, "wren01"), (6, 52, "secret")])
+        c.send_input(0xF1, [(5, 52, "tester"), (6, 52, "secret")])
         await c.pump(lambda: len(c.records) >= 2)
         text = signon_text(ds.split_gds(c.records[1])[1])
-        assert "WREN01" in text
+        assert "TESTER" in text
         assert "CPF1120" in text
         assert "secret" not in text.lower()  # the password is never drawn back
     run(with_server(fn))

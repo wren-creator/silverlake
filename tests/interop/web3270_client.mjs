@@ -36,7 +36,7 @@ try {
   ses.connect();
   const s1 = await first;
 
-  ses.typeAt(5, 52, 'wren01', false);
+  ses.typeAt(5, 52, 'tester', false);
   ses.typeAt(6, 52, 'secret', false);
   const sent = ses.getModifiedFields();
   const second = nextScreen();

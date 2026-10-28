@@ -60,9 +60,9 @@ def test_parse_environ_uservars_and_var():
     payload = (
         bytes([tn.ENV_USERVAR]) + b"DEVNAME" + bytes([tn.ENV_VALUE]) + b"QPADEV0001"
         + bytes([tn.ENV_USERVAR]) + b"CODEPAGE" + bytes([tn.ENV_VALUE]) + b"037"
-        + bytes([tn.ENV_VAR]) + b"USER" + bytes([tn.ENV_VALUE]) + b"WREN01"
+        + bytes([tn.ENV_VAR]) + b"USER" + bytes([tn.ENV_VALUE]) + b"TESTER"
     )
-    assert tn.parse_environ(payload) == {"DEVNAME": "QPADEV0001", "CODEPAGE": "037", "USER": "WREN01"}
+    assert tn.parse_environ(payload) == {"DEVNAME": "QPADEV0001", "CODEPAGE": "037", "USER": "TESTER"}
 
 
 def test_parse_environ_escape_and_empty_value():

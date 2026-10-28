@@ -59,9 +59,9 @@ def test_real_client_signs_on_and_round_trips():
     assert first["cursor"] == [5, 52]
 
     # the client sent exactly what was typed, at the field addresses
-    assert [f["data"] for f in out["sent"]] == ["wren01", "secret"]
+    assert [f["data"] for f in out["sent"]] == ["tester", "secret"]
 
-    assert any("WREN01" in line for line in second["text"])
+    assert any("TESTER" in line for line in second["text"])
     assert any("CPF1120" in line for line in second["text"])
     assert not any("secret" in line.lower() for line in second["text"])
 

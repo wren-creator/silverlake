@@ -29,12 +29,12 @@ def test_split_gds_rejects_wrong_length():
 def test_parse_input_fields_and_aid():
     body = (
         bytes([5, 25, 0xF1])
-        + bytes([ds.ORDER_SBA, 8, 54]) + ebcdic.encode("wren01") + b"\x00\x00"
+        + bytes([ds.ORDER_SBA, 8, 54]) + ebcdic.encode("tester") + b"\x00\x00"
         + bytes([ds.ORDER_SBA, 9, 54]) + ebcdic.encode("secret")
     )
     rec = ds.parse_input(body)
     assert (rec.cursor_row, rec.cursor_col, rec.aid_name) == (4, 24, "ENTER")
-    assert [(f.row, f.col, f.text) for f in rec.fields] == [(7, 53, "wren01"), (8, 53, "secret")]
+    assert [(f.row, f.col, f.text) for f in rec.fields] == [(7, 53, "tester"), (8, 53, "secret")]
 
 
 def test_parse_input_no_fields_and_function_keys():
