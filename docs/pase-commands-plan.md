@@ -6,7 +6,7 @@ The simulated PASE shell has 26 commands. PUB400's real one has about 290 in `/Q
 
 Built (26): `pwd cd ls cat id echo env printenv export exit` and `mkdir touch rm cp mv chmod` and `system db2` and the read-only batch `uname hostname date logname ps head tail wc grep`. The first ten are the first slice, the next sixteen came with the writing set, SQL and the PUB400 batch.
 
-Built in P1: exit statuses and `$?`, `;` `&&` `||`, globbing and `~`. `Shell.run` still returns a list of lines, and the status is read from `Shell.status`, so nothing that calls the shell changed. Not built, and it limits what the commands can do: pipes, input redirection, command substitution, and scripts with `if` or `for`. `head`, `tail`, `wc` and `grep` need a file name today because there is nothing to pipe into them.
+Built in P1: exit statuses and `$?`, `;` `&&` `||`, and globbing (no `~`: bsh has no tilde expansion, as the P1 capture showed). `Shell.run` still returns a list of lines, and the status is read from `Shell.status`, so nothing that calls the shell changed. Not built, and it limits what the commands can do: pipes, input redirection, command substitution, and scripts with `if` or `for`. `head`, `tail`, `wc` and `grep` need a file name today because there is nothing to pipe into them.
 
 ## The rules for every batch
 
@@ -22,7 +22,7 @@ The order follows what each batch needs. Text filters are useless without pipes,
 
 | Step | What | Why here |
 |---|---|---|
-| **P1** | Shell features, part one: exit statuses and `$?`, `;` `&&` `||`, globbing (`*` `?` `[...]`), `~` | `test` and `find` are not much use without them, and PUB400 gave exit codes for everything already captured |
+| **P1** | Shell features, part one: exit statuses and `$?`, `;` `&&` `||`, globbing (`*` `?` `[...]`). Checked on PUB400 afterwards: no `~` | `test` and `find` are not much use without them, and PUB400 gave exit codes for everything already captured |
 | **B2** | `rmdir basename dirname which type test file find du umask` | Finding things and reading permissions. No pipes needed |
 | **P2** | Shell features, part two: pipes, `<`, standard input for `cat head tail wc grep`, command substitution `$()` and backticks (a nested run of the same shell, never a host shell) | Everything after this assumes it |
 | **B3** | `dspmsg catsplf dataq datarea getjobid sysval clrtmp setccsid Rfile getconf` | The IBM i side of PASE, and where the lessons are (see below). Several need an object type Silverlake does not model yet (`*DTAARA`, `*DTAQ`, message files) |

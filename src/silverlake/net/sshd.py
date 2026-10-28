@@ -152,6 +152,7 @@ def _process_handler(store_of: Callable[[], ProfileStore]):
             return
         shell = pase.Shell(store, profile)
         if process.command is not None:
+            shell.batch = True
             shell.login()                                   # a login shell would, so its lines run too
             for line in shell.run(process.command)[:MAX_LINE]:
                 process.stdout.write(line + "\n")

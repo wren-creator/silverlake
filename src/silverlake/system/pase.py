@@ -19,7 +19,8 @@ touch, rm (-r -f), cp, mv, chmod, `> file` and `>> file` at the end of a command
 which runs through the CL dispatcher as the signed on profile. A line may hold several commands joined by `;`,
 `&&` and `||`, read left to right; every command leaves an exit status in `status`, which `$?` shows and which
 `&&` and `||` act on. Words may use `*`, `?` and `[...]` (matched against the directories the profile can list,
-a pattern with no match stays as typed) and a leading `~`. Not built: pipes, input redirection, `&`, command
+a pattern with no match stays as typed). There is no `~` expansion, because bsh has none. A line that does not
+parse is refused whole, before anything runs. Not built: pipes, input redirection, `&`, command
 substitution, `if` and `for`, and every other command.
 
 The shell is bsh, as PUB400 showed over ssh on 2026-10-27, and what it said is copied: a missing path in `ls`
@@ -60,6 +61,7 @@ class Shell:
     depth: int = 0
     status: int = 0                              # the exit status of the last command, what `$?` shows
     leaving: bool = False                        # `exit` inside a script ends the script, not the shell
+    batch: bool = False                          # a command run with no terminal (ssh host cmd): a failed cd or export ends it
     job: object = None
     clock: object = None                         # a callable giving "now" in UTC, for tests; None means the real time
 
@@ -77,7 +79,8 @@ class Shell:
         return "$ "
 
     def path(self, arg: str) -> str:
-        return ifs.normalize(arg, self.cwd, self.env["HOME"])
+        """bsh has no tilde expansion (`echo ~` printed `~` on PUB400), so `~` is an ordinary name here."""
+        return ifs.normalize("./" + arg if arg.startswith("~") else arg, self.cwd, self.env["HOME"])
 
     # -- running a line ----------------------------------------------------------------------------------------
 
@@ -122,6 +125,8 @@ class Shell:
             elif ch == "#" and (i == 0 or line[i - 1].isspace()):
                 end = i
                 break
+            elif two == ";;":
+                return "bsh: syntax error at line 1: `;;' unexpected"
             elif ch == ";" or two in ("&&", "||"):
                 op = ch if ch == ";" else two
                 parts.append((joint, line[start:i]))
@@ -135,8 +140,16 @@ class Shell:
         if len(parts) > MAX_COMMANDS:
             return f"bsh: too many commands on one line (the simulator stops at {MAX_COMMANDS})."
         for n, (j, text) in enumerate(parts):
-            if not text.strip() and (j != ";" or n < len(parts) - 1) and not (n == len(parts) - 1 and j == ";" and n > 0):
-                return f"bsh: syntax error: {j} is not expected."
+            if text.strip():
+                continue
+            last = n == len(parts) - 1
+            if last and (j == ";" and n > 0 or len(parts) == 1):
+                continue                                           # `echo a;` and an empty line are fine
+            # What PUB400's bsh said: the whole line is refused before anything runs, and the token it names is the
+            # operator after the empty command, `end of file` at the end of the line, and (odd, but copied) for a
+            # `;` that starts the line.
+            token = "end of file" if last or (n == 0 and parts[n + 1][0] == ";") else parts[n + 1][0]
+            return f"bsh: syntax error at line 1: `{token}' unexpected"
         return [(j, t) for j, t in parts if t.strip()]
 
     def run_simple(self, text: str) -> list[str]:
@@ -157,7 +170,7 @@ class Shell:
         if script is not None:
             out = self.run_script(script, name)
         elif "/" in name or fn is None:
-            self.status = 127
+            self.status = 1                                    # PUB400's bsh, not the 127 other shells give
             return [f"bsh: {name}: not found"]
         else:
             out = fn(args)
@@ -219,8 +232,6 @@ class Shell:
                     elif piece:
                         cur_t, cur_m, have = cur_t + piece, cur_m + "1" * len(piece), True
                 continue
-            elif ch == "~" and not have and (i + 1 == len(text) or text[i + 1] in "/ \t"):
-                cur_t, cur_m, have = self.env["HOME"], "0" * len(self.env["HOME"]), True
             else:
                 cur_t, cur_m, have = cur_t + ch, cur_m + "1", True
             i += 1
@@ -272,9 +283,11 @@ class Shell:
                     entries = ifs.listdir(self.store, self.actor, self.path(base or "."))
                 except ifs.IfsError:
                     continue
-                for e in entries:
+                names = [e.path.rsplit("/", 1)[-1] for e in entries]
+                if piece.startswith("."):
+                    names = [".", ".."] + names                        # `.*` matched both on PUB400
+                for name in names:
                     seen += 1
-                    name = e.path.rsplit("/", 1)[-1]
                     if seen > MAX_GLOB:
                         break
                     if rx.fullmatch(name) and (not name.startswith(".") or piece.startswith(".")):
@@ -376,20 +389,29 @@ class Shell:
         return [self.cwd]
 
     def cmd_cd(self, args: list[str]) -> list[str]:
-        target = self.path(args[0] if args else "~")
+        target = self.path(args[0]) if args else self.env["HOME"]
+        given = args[0] if args else target
         try:
             entry = ifs.lookup(self.store, self.actor, target)
         except ifs.IfsError as exc:
-            self.status = 1
-            return [self._cd_error(exc, args[0] if args else "~")]
+            return self._abort([self._cd_error(exc, given)])
         if not entry.is_dir:
-            self.status = 1
-            return [f"{args[0]}: Not a directory"]
+            return self._abort([f"{given}: Not a directory"])
         if "x" not in entry.mode:
-            self.status = 1
-            return [f"{args[0]}: Permission denied"]
+            return self._abort([f"{given}: Permission denied"])
         self.cwd = target
         return []
+
+    def _abort(self, out: list[str]) -> list[str]:
+        """A failed `cd` or `export` in PUB400's bsh ends the shell when there is no terminal: `cd /nosuchdir || echo x`
+        printed the error and nothing else, status 1. In a script it ends the script. At a prompt it is a guess that
+        the shell carries on."""
+        self.status = 1
+        if self.depth:
+            self.leaving = True
+        elif self.batch:
+            self.done = True
+        return out
 
     @staticmethod
     def _cd_error(exc: ifs.IfsError, given: str) -> str:
@@ -452,8 +474,7 @@ class Shell:
         for a in args:
             name, sep, value = a.partition("=")
             if not re.fullmatch(r"[A-Za-z_]\w*", name):
-                self.status = 1
-                return [f"bsh: export: {a}: not a valid identifier."]
+                return self._abort([f"bsh: {a}: is not an identifier"])
             if sep:
                 self.env[name] = value
         return []

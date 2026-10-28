@@ -153,4 +153,6 @@ def test_the_ssh_command_exits_with_the_shells_status(store):
             await server.wait_closed()
     assert asyncio.run(go("pwd"))[0] == 0
     assert asyncio.run(go("ls /nowhere"))[0] == 2
-    assert asyncio.run(go("cd /nowhere || echo ok; exit 7")) == (7, "/nowhere: No such file or directory\nok\n")
+    assert asyncio.run(go("ls /nowhere || echo ok; exit 7")) == (7, "/nowhere not found\nok\n")
+    # bsh with no terminal ends at a failed cd, as PUB400's did
+    assert asyncio.run(go("echo a && cd /nowhere || echo c; echo d")) == (1, "a\n/nowhere: No such file or directory\n")

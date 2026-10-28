@@ -31,7 +31,7 @@ def test_cd_and_ls_and_cat_work_on_the_virtual_ifs(store):
     assert sh.run("ls") == ["motd", "profile", "ssh"]
     assert sh.run("cd ..") == [] and sh.run("pwd") == ["/QOpenSys"]
     assert sh.run("cd") == [] and sh.run("pwd") == ["/home/STUDENT"]
-    assert sh.run("cat ~/notes.txt") and sh.run("cat /QOpenSys/etc/motd")[0].startswith("Welcome")
+    assert sh.run("cat $HOME/notes.txt") == ["Things to try: ls, cat, cd, id."] and sh.run("cat /QOpenSys/etc/motd")[0].startswith("Welcome")
 
 
 def test_ls_long_and_hidden_and_several_paths(store):
@@ -75,7 +75,7 @@ def test_id_echo_export_and_variables(store):
     assert shell(store, "QSECOFR").run("id")[0].startswith("uid=0(qsecofr)")
     assert sh.run("echo hello $USER ${HOME}") == ["hello STUDENT /home/STUDENT"]
     assert sh.run("export WHO=me") == [] and sh.run("echo $WHO") == ["me"]
-    assert sh.run("export 9bad=1") == ["bsh: export: 9bad=1: not a valid identifier."]
+    assert sh.run("export 9bad=1") == ["bsh: 9bad=1: is not an identifier"]       # PUB400's wording
     assert sh.run("echo $NOPE.") == ["."]
 
 
@@ -219,7 +219,7 @@ def test_a_redirect_must_end_the_line(store):
 
 
 def test_writes_are_saved_with_the_store(store):
-    shell(store).run("echo kept > ~/k")
+    shell(store).run("echo kept > $HOME/k")
     again = ifs.from_rows(ifs.to_rows(store.ifs))
     assert again["/home/STUDENT/k"].content == "kept\n"
 
@@ -335,7 +335,7 @@ def test_exit_statuses_follow_what_pub400_returned(store):
     assert status_of(sh, "grep zzzz notes.txt") == 1 and status_of(sh, "grep Things notes.txt") == 0
     assert status_of(sh, "printenv NOSUCH") == 1 and status_of(sh, "printenv HOME") == 0
     assert status_of(sh, "logname") == 1 and status_of(sh, "ps") == 1
-    assert status_of(sh, "nosuchcmd") == 127
+    assert status_of(sh, "nosuchcmd") == 1 and status_of(sh, "/nosuchdir/x") == 1, "bsh gives 1, not 127"
     assert status_of(sh, "mkdir /QOpenSys/x") == 1
     assert sh.run("ls /nowhere; echo $?") == ["/nowhere not found", "2"]
     assert sh.run("echo $?") == ["0"], "$? is the status of the line before"
@@ -413,8 +413,12 @@ def test_a_glob_has_a_cap(store):
 
 def test_tilde_and_variables_in_words(store):
     sh = shell(store)
-    assert sh.run("echo ~") == ["/home/STUDENT"] and sh.run("echo ~/x") == ["/home/STUDENT/x"]
+    assert sh.run("echo ~") == ["~"] and sh.run("echo ~/x") == ["~/x"], "bsh does not expand a tilde (PUB400)"
     assert sh.run("echo a~") == ["a~"] and sh.run("echo '~'") == ["~"]
+    assert sh.run("cd ~") == ["~: No such file or directory"] and sh.run("pwd") == ["/home/STUDENT"]
+    sh.run("cd /tmp")
+    assert sh.run("cd") == [] and sh.run("pwd") == ["/home/STUDENT"], "cd with no argument still goes home"
+    assert sh.run("cat ~/notes.txt") == ["cat: cannot open ~/notes.txt"]
     sh.run("W='two words'")
     assert sh.run('echo "$W" | cat')[0].startswith("bsh:")
     assert sh.run('ls "$W"') == ["two words not found"], "quoted, so one word"
@@ -431,3 +435,36 @@ def test_scripts_give_the_status_of_their_last_line_and_exit_ends_only_the_scrip
     assert sh.run("/tmp/s1; echo $?") == ["in", "3"]
     assert not sh.done
     assert sh.run("exit 4") == [] and sh.done and sh.status == 4
+
+
+def test_what_pub400_did_with_a_bad_line_and_a_failed_cd(store):
+    """From the ssh-pase-p1 capture (2026-10-28). Nothing runs when the line does not parse, and the wording is bsh's."""
+    sh = shell(store)
+    bad = {";echo a": "end of file", "echo a ;; echo b": ";;", "echo a && && echo b": "&&", "echo a &&": "end of file",
+           "echo a || || echo b": "||", "echo a ; ; echo b": ";", "echo a ||": "end of file"}
+    for line, token in bad.items():
+        assert sh.run(line) == [f"bsh: syntax error at line 1: `{token}' unexpected"], line
+        assert sh.status == 2, line
+    assert sh.run("echo a;") == ["a"] and sh.run("   ") == [] and sh.run("") == []
+    # at a prompt a failed cd is a guess (carries on); with no terminal it ends the line, like PUB400
+    assert sh.run("cd /nowhere || echo recovered") == ["/nowhere: No such file or directory", "recovered"]
+    batch = shell(store)
+    batch.batch = True
+    assert batch.run("echo a && cd /nowhere || echo c; echo d") == ["a", "/nowhere: No such file or directory"]
+    assert batch.done and batch.status == 1
+    again = shell(store)
+    again.batch = True
+    assert again.run("export 9bad=1; echo $?") == ["bsh: 9bad=1: is not an identifier"] and again.done
+
+
+def test_a_failed_cd_ends_a_script_and_not_the_shell(store):
+    sh = shell(store)
+    sh.run("echo 'cd /nowhere; echo after' > /tmp/s2")
+    sh.run("chmod 755 /tmp/s2")
+    assert sh.run("/tmp/s2; echo back $?") == ["/nowhere: No such file or directory", "back 1"] and not sh.done
+
+
+def test_dot_star_matches_dot_and_dot_dot_as_it_did_on_pub400(store):
+    sh = shell(store)
+    assert sh.run("echo /QOpenSys/etc/.*") == ["/QOpenSys/etc/. /QOpenSys/etc/.."]
+    assert sh.run("echo [p]rofile") == ["[p]rofile"], "nothing here matches, so it stays as typed"
