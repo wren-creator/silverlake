@@ -155,7 +155,7 @@ def _process_handler(store_of: Callable[[], ProfileStore]):
             shell.login()                                   # a login shell would, so its lines run too
             for line in shell.run(process.command)[:MAX_LINE]:
                 process.stdout.write(line + "\n")
-            process.exit(0)
+            process.exit(shell.status)                      # what `ssh host cmd; echo $?` shows on the other end
             return
         for line in shell.login():
             process.stdout.write(line + "\n")
@@ -171,7 +171,7 @@ def _process_handler(store_of: Callable[[], ProfileStore]):
                 break
             for out in shell.run(line.rstrip("\r\n")[:MAX_LINE]):
                 process.stdout.write(out + "\n")
-        process.exit(0)
+        process.exit(shell.status if shell.done else 0)
     return handle
 
 

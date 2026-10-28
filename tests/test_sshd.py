@@ -137,3 +137,20 @@ def test_the_services_start_the_listener_on_its_own_port_when_asyncssh_is_there(
             for s in servers:
                 s.close()
     assert asyncio.run(go()).startswith(b"SSH-2.0-")
+
+
+def test_the_ssh_command_exits_with_the_shells_status(store):
+    async def go(command):
+        port = free_port()
+        server = await sshd.serve("127.0.0.1", port, lambda: store)
+        try:
+            async with asyncssh.connect("127.0.0.1", port, username="STUDENT", password="STUDENT", client_keys=None,
+                                        known_hosts=None, preferred_auth="password") as conn:
+                result = await conn.run(command, check=False)
+                return result.exit_status, result.stdout
+        finally:
+            server.close()
+            await server.wait_closed()
+    assert asyncio.run(go("pwd"))[0] == 0
+    assert asyncio.run(go("ls /nowhere"))[0] == 2
+    assert asyncio.run(go("cd /nowhere || echo ok; exit 7")) == (7, "/nowhere: No such file or directory\nok\n")

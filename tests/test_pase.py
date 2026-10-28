@@ -83,7 +83,7 @@ def test_everything_else_is_refused_and_nothing_reaches_the_host(store):
     sh = shell(store)
     assert sh.run("rm -rf /")[0].startswith("rm: 0653-345") and "/home" in store.ifs
     assert sh.run("python -c 'print(1)'") == ["bsh: python: not found"]
-    for line in ("ls | cat", "cat < /tmp/x", "cat /tmp/x; id", "id &", "echo `id`", "echo $(id)"):
+    for line in ("ls | cat", "cat < /tmp/x", "id &", "echo `id`", "echo $(id)", "echo \"$(id)\"", "ls|cat"):
         assert "not available in the simulator" in sh.run(line)[0], line
     assert sh.run("echo 'unclosed") == ["bsh: a quote was not closed."]
     assert sh.run("") == [] and sh.run("# comment") == []
@@ -317,3 +317,117 @@ def test_grep_options_end_at_the_pattern_or_at_double_dash(store):
     sh.run("echo '-x marks it' > f")
     assert sh.run("grep -- -x f") == ["-x marks it"]
     assert sh.run("grep -i X -x") == ["grep: can't open -x"]                       # the second -x is a file name
+
+
+# -- P1: exit statuses, ; && ||, globbing, ~ ----------------------------------------------------------------------
+
+def status_of(sh, line):
+    sh.run(line)
+    return sh.status
+
+
+def test_exit_statuses_follow_what_pub400_returned(store):
+    sh = shell(store)
+    assert status_of(sh, "pwd") == 0
+    assert status_of(sh, "ls /nowhere") == 2 and status_of(sh, "cat /nowhere") == 2
+    assert status_of(sh, "cd /nowhere") == 1 and status_of(sh, "head /nowhere") == 1
+    assert status_of(sh, "wc /nowhere") == 2 and status_of(sh, "grep x /nowhere") == 2
+    assert status_of(sh, "grep zzzz notes.txt") == 1 and status_of(sh, "grep Things notes.txt") == 0
+    assert status_of(sh, "printenv NOSUCH") == 1 and status_of(sh, "printenv HOME") == 0
+    assert status_of(sh, "logname") == 1 and status_of(sh, "ps") == 1
+    assert status_of(sh, "nosuchcmd") == 127
+    assert status_of(sh, "mkdir /QOpenSys/x") == 1
+    assert sh.run("ls /nowhere; echo $?") == ["/nowhere not found", "2"]
+    assert sh.run("echo $?") == ["0"], "$? is the status of the line before"
+
+
+def test_joints_read_left_to_right(store):
+    sh = shell(store)
+    assert sh.run("echo a; echo b") == ["a", "b"]
+    assert sh.run("cd /nowhere && echo no") == ["/nowhere: No such file or directory"]
+    assert sh.run("cd /tmp && echo yes") == ["yes"]
+    assert sh.run("cd /nowhere || echo recovered") == ["/nowhere: No such file or directory", "recovered"]
+    assert sh.run("pwd || echo never") == ["/tmp"]
+    assert sh.run("cd /nowhere && echo a || echo b") == ["/nowhere: No such file or directory", "b"]
+    assert sh.run("pwd && cd /nowhere || echo c; echo d")[-2:] == ["c", "d"]
+    assert sh.run("echo a;") == ["a"] and sh.run("echo a ;echo b") == ["a", "b"]
+    assert sh.run("cd /nowhere; pwd") [-1] == "/tmp"
+    sh.run("cd; X=1; echo $X")
+    assert sh.env["X"] == "1"
+
+
+def test_joints_inside_quotes_are_text_and_bad_lines_are_refused(store):
+    sh = shell(store)
+    assert sh.run("echo 'a; b && c || d'") == ["a; b && c || d"]
+    assert sh.run('echo "a;b" ; echo x#y') == ["a;b", "x#y"]
+    assert sh.run("echo a # a comment; echo b") == ["a"]
+    assert sh.run("echo 'a|b' '$(id)' \\| ") == ["a|b $(id) |"]
+    for line in ("; echo a", "echo a ;; echo b", "echo a && && echo b", "echo a &&"):
+        out = sh.run(line)
+        assert out and "syntax error" in out[0] and sh.status == 2, line
+    many = sh.run("; ".join(["echo x"] * 101))
+    assert len(many) == 1 and "too many commands" in many[0]
+    assert len(sh.run("; ".join(["echo x"] * 100))) == 100
+
+
+def test_globbing_matches_what_the_profile_can_list(store):
+    sh = shell(store)
+    sh.run("cd /tmp")
+    sh.run("touch a1.txt a2.txt b1.txt .hid")
+    sh.run("mkdir sub")
+    sh.run("touch sub/z.txt")
+    assert sh.run("echo a*") == ["a1.txt a2.txt"]
+    assert sh.run("echo *.txt") == ["a1.txt a2.txt b1.txt"]
+    assert sh.run("echo ?1.txt") == ["a1.txt b1.txt"]
+    assert sh.run("echo [ab]1.txt") == ["a1.txt b1.txt"] and sh.run("echo [!a]1.txt") == ["b1.txt"]
+    assert sh.run("echo *") == [" ".join(sh.run("ls"))]
+    assert ".hid" not in sh.run("echo *")[0] and sh.run("echo .h*") == [".hid"]
+    assert sh.run("echo */z.txt") == ["sub/z.txt"] and sh.run("echo /tmp/a*") == ["/tmp/a1.txt /tmp/a2.txt"]
+    assert sh.run("echo nomatch*") == ["nomatch*"]
+    assert sh.run("echo 'a*' \"a*\" a\\*") == ["a* a* a*"], "quoted stars are text"
+    assert sh.run("cat a*.txt") == []
+    assert sh.run("rm a*.txt; ls") .count("a1.txt") == 0
+
+
+def test_a_glob_only_sees_directories_the_profile_may_list(store):
+    sh = shell(store)
+    assert sh.run("echo /home/OPERATOR/*") == ["/home/OPERATOR/*"]
+    assert "/home/STUDENT" in sh.run("echo /home/*")[0].split()
+    assert sh.run("echo /home/OPER*") == ["/home/OPERATOR"], "the name shows in a directory the profile may list"
+    assert sh.run("echo /home/OPERATOR/.p*") == ["/home/OPERATOR/.p*"], "what is inside does not"
+
+
+def test_a_glob_has_a_cap(store):
+    sh = shell(store)
+    sh.run("cd /tmp")
+    for i in range(30):
+        sh.run(f"touch f{i}")
+    assert len(sh.run("echo f*")[0].split()) == 30
+    from silverlake.system import pase as module
+    module.MAX_GLOB = 10
+    try:
+        assert len(sh.run("echo f*")[0].split()) <= 10
+    finally:
+        module.MAX_GLOB = 1000
+
+
+def test_tilde_and_variables_in_words(store):
+    sh = shell(store)
+    assert sh.run("echo ~") == ["/home/STUDENT"] and sh.run("echo ~/x") == ["/home/STUDENT/x"]
+    assert sh.run("echo a~") == ["a~"] and sh.run("echo '~'") == ["~"]
+    sh.run("W='two words'")
+    assert sh.run('echo "$W" | cat')[0].startswith("bsh:")
+    assert sh.run('ls "$W"') == ["two words not found"], "quoted, so one word"
+    assert sh.run("ls $W") == ["two not found", "words not found"], "unquoted, so two"
+    assert sh.run("echo $?x ${HOME}y") == ["2x /home/STUDENTy"], "$? is the ls before, which failed"
+    assert sh.run("echo a>/tmp/redir; cat /tmp/redir") == ["a"]
+    assert sh.run("echo a > b > c")[0].startswith("bsh: the redirection")
+
+
+def test_scripts_give_the_status_of_their_last_line_and_exit_ends_only_the_script(store):
+    sh = shell(store)
+    sh.run("echo 'echo in; exit 3; echo not' > /tmp/s1")
+    sh.run("chmod 755 /tmp/s1")
+    assert sh.run("/tmp/s1; echo $?") == ["in", "3"]
+    assert not sh.done
+    assert sh.run("exit 4") == [] and sh.done and sh.status == 4

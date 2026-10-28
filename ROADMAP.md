@@ -68,7 +68,7 @@
 - [ ] PASE facts to check on a real system before teaching them: whether adopted authority carries into PASE (believed not to, unconfirmed), what `id` and `ps` really print, default IFS authorities on `/QOpenSys` and `/home`, and how a LMTCPB(*YES) profile fares with QP2TERM (read-only checks on PUB400, human decides)
 - [ ] PASE commands, ten at a time (plan and reasons in docs/pase-commands-plan.md). 26 built. Each batch starts with one read-only PUB400 capture, copies its wording, and ships as one commit:
   - [x] Batches 0 and 1: pwd cd ls cat id echo env printenv export exit; mkdir touch rm cp mv chmod system db2; uname hostname date logname ps head tail wc grep
-  - [ ] P1, shell features part one: exit statuses and `$?`, `;` `&&` `||`, globbing, `~`. Lands alone, existing tests unchanged
+  - [x] P1, shell features part one: exit statuses and `$?`, `;` `&&` `||`, globbing, `~`. Landed alone. `Shell.run` still returns the lines and the status is `Shell.status`, so no caller changed. One old test lost `;` from its refused list. The statuses PUB400 gave are copied, the rest are labelled guesses
   - [ ] B2, files and lookup: rmdir basename dirname which type test file find du umask. Lesson: pase-find-writable
   - [ ] P2, shell features part two: pipes, `<`, standard input for cat head tail wc grep, command substitution
   - [ ] B3, the IBM i side: dspmsg catsplf dataq datarea getjobid sysval clrtmp setccsid Rfile getconf. Needs *DTAARA, *DTAQ and message file objects. Lessons: system values, spool files and data areas read from the shell

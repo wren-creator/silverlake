@@ -6,7 +6,7 @@ The simulated PASE shell has 26 commands. PUB400's real one has about 290 in `/Q
 
 Built (26): `pwd cd ls cat id echo env printenv export exit` and `mkdir touch rm cp mv chmod` and `system db2` and the read-only batch `uname hostname date logname ps head tail wc grep`. The first ten are the first slice, the next sixteen came with the writing set, SQL and the PUB400 batch.
 
-Not built, and it limits what the commands can do: pipes, input redirection, `;` `&&` `||`, exit statuses (`$?`), globbing, command substitution, and scripts with `if` or `for`. `head`, `tail`, `wc` and `grep` need a file name today because there is nothing to pipe into them.
+Built in P1: exit statuses and `$?`, `;` `&&` `||`, globbing and `~`. `Shell.run` still returns a list of lines, and the status is read from `Shell.status`, so nothing that calls the shell changed. Not built, and it limits what the commands can do: pipes, input redirection, command substitution, and scripts with `if` or `for`. `head`, `tail`, `wc` and `grep` need a file name today because there is nothing to pipe into them.
 
 ## The rules for every batch
 
@@ -51,7 +51,7 @@ A batch ships a lesson only when it makes something findable that was not.
 
 ## Risks
 
-1. **The shell rewrite.** Exit statuses and pipes change what `Shell.run` returns, from a list of lines to lines and a status. That touches every command and the PASE terminal, the ssh listener and the tests. P1 should land alone, with the existing tests unchanged, before any new command.
+1. **The shell rewrite.** (P1 is done, and kept the return type by putting the status on the shell. Pipes will need a stream between commands.) Exit statuses and pipes change what `Shell.run` returns, from a list of lines to lines and a status. That touches every command and the PASE terminal, the ssh listener and the tests. P1 should land alone, with the existing tests unchanged, before any new command.
 2. **Runaway work.** Regular expressions, `find` on a big tree, `xargs` and `awk` can all loop. Each needs a step cap and a size cap from the start, tested with a hostile input, as `db2` has.
 3. **Teaching a guess.** The IBM i commands behave in ways the docs describe and a real system may not. Capture first, and when a command cannot be captured safely, say so in `docs/pase.md`.
 4. **Scope creep.** About 290 commands exist. Each batch has to justify itself, and B6 and B8 are the first candidates to drop.
