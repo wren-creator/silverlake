@@ -78,6 +78,20 @@ One read-only ssh run against PUB400 (port 2222, one connection, nine commands t
 
 **Matched in the simulator** (the same day): the shell is `bsh` (the prefix of its own messages and `$SHELL`), a missing path in `ls` is `X not found`, `cat` says `cat: cannot open X` for any open that fails, `cd` says `X: No such file or directory`, an unknown command says `bsh: name: not found`, `id` prints `uid=N(name) gid=0` with the name in lower case, and there is no `whoami`. Single quotes now keep `$VAR` as typed, as a shell does. **Kept on purpose:** the tighter seeded permissions (a real shared host had `/home` and `/QOpenSys` world writable, which would make every lesson trivial) and a `PATH` without `.`. **Still a guess:** the wording of `ls` on a directory you may not read, and of the write commands (`mkdir`, `rm`, `cp`, `mv`, `chmod`, `>`), which were not run on PUB400 because they write.
 
+## The commands PUB400 has (2026-10-27)
+
+A second read-only ssh run listed the directories on the login `PATH` (`ls` only, six commands, one connection; the full listing stays in the local capture). Counts: 293 files in `/QOpenSys/usr/bin`, 163 in `/usr/bin`, 23 in `/usr/ccs/bin`, 12 in `/usr/sbin`, 16 in `/QOpenSys/usr/bin/X11`. A few things worth knowing:
+
+- **Shells:** `bsh` (the login shell), `sh`, `ksh`, `ksh93`, `csh`, `psh` and `qsh` in `/QOpenSys/usr/bin`, and `bash` in `/usr/bin` (installed on this host, not stock).
+- **Builtins:** `type` says `echo`, `cd` and `pwd` are shell builtins, and `ls`, `cat` and `id` are separate programs in `/QOpenSys/usr/bin`. Silverlake treats `cd`, `pwd`, `echo`, `export` and `exit` as the shell's own, which agrees.
+- **The classics are all there:** `ls cat cp mv rm mkdir rmdir touch chmod chown ln find grep sed awk sort uniq head tail wc cut tr tar pax diff more vi ed make xargs env printenv date uname hostname logname ps kill sleep time test expr printf`.
+- **IBM i bridges:** `system` (run CL), `qsh`, `db2` (in `/usr/bin`, so the name Silverlake uses is right, and its output layout is still unchecked), `dspmsg`, `catsplf`, `dataq`, `datarea`, `getjobid`, `setccsid`, `sysval`, `clrtmp`, `Rfile`.
+- **Network and remote:** `ssh ssh-keygen ssh-copy-id ssh-keyscan ssh-agent scp sftp slogin rsync`, `dig host nslookup`, `ldapsearch`, and `sshd` in `/usr/sbin`.
+- **Runtimes:** `java javac jar`, and `node` and `npm`.
+- **Not there:** `whoami`, `who`, `curl`, `wget`, `nc`, `ping`.
+
+Silverlake has the first dozen or so of these. The ones a student reaches for next and that cost almost nothing to simulate are `uname`, `hostname`, `date`, `head`, `tail`, `wc`, `grep`, `printenv`, `logname` and `ps`. They are not built yet.
+
 ## What is not confirmed on a real system
 
 These are guesses from how AIX and IBM i are documented to behave. They are written down here so nobody teaches them as fact. A read-only check against PUB400, a person at the keyboard, would settle each one.
@@ -88,6 +102,6 @@ These are guesses from how AIX and IBM i are documented to behave. They are writ
 - Whether adopted authority carries into PASE (believed not to, and not modeled).
 - How a `LMTCPB(*YES)` profile fares with `QP2TERM`. Here the profile needs a way to type `CALL QP2TERM`, which a limited profile does not have, but that is not the same as the real rule.
 - The layout of the QP2TERM display. This one is ours.
-- Whether `db2` is the right command name and what its output looks like. IBM i has a `db2` in QShell and a `db2util` from open source; the layout here (a header, a dashed line, the rows, a count) is a guess, and the message IDs are IBM's with wording of ours.
+- What `db2` prints. The command exists on PUB400 (`/usr/bin/db2`), but the layout here (a header, a dashed line, the rows, a count) is a guess, and the message IDs are IBM's with wording of ours.
 - The path of the sshd config files (`/QOpenSys/etc/ssh/`), which is ours, and whether a `LMTCPB(*YES)` profile is stopped by sshd or by its login shell on a real IBM i. Here nothing stops it, which is the lesson and is believed but not confirmed.
 - The prompt (`$ `) and the environment variables `env` prints.
