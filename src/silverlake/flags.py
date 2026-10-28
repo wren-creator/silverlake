@@ -26,6 +26,7 @@ A submission is lines like `runcmd-qcmdexc=done` (any text for a `state` lesson)
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import hmac
 import os
@@ -39,6 +40,8 @@ from .system.authority import Auth
 
 SECRET_FILE = Path(__file__).resolve().parent.parent.parent / ".instance-secret"
 PLACEHOLDER = re.compile(r"@@FLAG:([a-z0-9-]+)@@")
+KEY_PLACEHOLDER = re.compile(r"@@KEY:(private|public):([a-z0-9-]+)@@")
+NO_KEY = "(no ssh key here: asyncssh is not installed, ./setup.sh --ssh adds it)"
 
 
 def secret() -> bytes:
@@ -66,9 +69,36 @@ def password(label: str) -> str:
     return f"Sl{_mac('pw:' + label)[:6]}9"
 
 
+@functools.lru_cache(maxsize=16)
+def _ssh_key(label: str, instance: bytes):
+    """An ed25519 key pair for a lesson, made from the instance secret so it is the same after a reset and different on
+    every range. None when asyncssh (and the cryptography package it brings) is not installed."""
+    try:
+        import asyncssh
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    except ImportError:
+        return None
+    seed = hmac.new(instance, ("key:" + label).encode(), hashlib.sha256).digest()
+    pem = Ed25519PrivateKey.from_private_bytes(seed).private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    key = asyncssh.import_private_key(pem)
+    key.set_comment("ops-deploy@SILVERLAKE.LOCALDOMAIN")
+    return key.export_private_key().decode(), key.export_public_key().decode().strip()
+
+
+def _key_text(kind: str, label: str) -> str:
+    pair = _ssh_key(label, secret())
+    if pair is None:
+        return NO_KEY
+    return pair[0].replace("\n", "\\n") if kind == "private" else pair[1]
+
+
 def fill(text: str) -> str:
-    """The seed text with each @@FLAG:id@@ replaced by that scenario's flag."""
-    return PLACEHOLDER.sub(lambda m: flag(m.group(1)), text)
+    """The seed text with each @@FLAG:id@@ replaced by that scenario's flag, and each @@KEY:private|public:id@@ by one half of
+    that lesson's ssh key pair. A private key is returned with its newlines written as `\\n`, because it sits inside a TOML
+    string in the seed; leave a key placeholder out of any value that is not TOML text."""
+    return KEY_PLACEHOLDER.sub(lambda m: _key_text(m.group(1), m.group(2)), PLACEHOLDER.sub(lambda m: flag(m.group(1)), text))
 
 
 # -- what each state lesson looks at --------------------------------------------------------------------------------

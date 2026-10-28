@@ -384,7 +384,29 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Flag:** As STUDENT, find everything under /QOpenSys/var/ops that anyone can write to. Submit the paths, sorted and joined by a comma with no spaces, or none if there are none.
 
-### 19. A writable directory at the front of the operator's PATH
+### 19. The deploy key left on the shelf
+
+**Where:** PASE terminal (CALL PGM(QP2TERM)) or ssh to 127.0.0.1:2222; the ssh command inside the shell works too (asyncssh needed, ./setup.sh --ssh)
+
+**Real-world parallel:** Service accounts log in with keys so that nobody has to type a password, and the private half gets copied into a shared folder, a backup, a ticket. A key is a password that cannot be reset by the person who forgot it. Anyone who can read the file is the account, and nothing in the logs says otherwise.
+
+**Vulnerability:** /QOpenSys/var/ops/keys/deploy_ed25519 is an unencrypted private key readable by every profile, and its public half is the only key listed in OPERATOR's authorized_keys.
+
+**MITRE ATT&CK:** T1552.004 Unsecured Credentials: Private Keys, T1078 Valid Accounts, T1021.004 Remote Services: SSH, T1083 File and Directory Discovery
+
+**Exploit:**
+
+1. Sign on as STUDENT and CALL PGM(QP2TERM) (or ssh in).
+2. find /QOpenSys/var -type f -perm -004 lists the files anyone can read, and xargs grep -l 'PRIVATE KEY' picks out the ones that are keys.
+3. ssh-keygen -l -f /QOpenSys/var/ops/keys/deploy_ed25519 prints the key's fingerprint and comment, ops-deploy, which says what it is for.
+4. ls /home shows the accounts. Copy the key (cp, since OpenSSH ignores a key other people can read) and chmod 600 the copy.
+5. ssh -i mykey OPERATOR@localhost cat deploy-token.txt (or the same key from a real ssh client against 127.0.0.1 port 2222, with the key text from cat).
+
+**Consequence in the sim:** STUDENT is OPERATOR without a password, and because the key never expires and is not tied to a person, the login looks like the deploy job.
+
+**Flag:** As STUDENT, find the private key someone left readable under /QOpenSys/var, work out which account trusts it, log in as that account with it, and read the deploy token in its home directory.
+
+### 20. A writable directory at the front of the operator's PATH
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -406,7 +428,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Flag:** As STUDENT, get a copy of the payroll file into the IFS that STUDENT can read, by making the operator's own login do the copying. Then play the operator: sign on as OPERATOR and run CALL PGM(QP2TERM).
 
-### 20. The system profile that anyone can write and every login runs
+### 21. The system profile that anyone can write and every login runs
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -428,7 +450,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Flag:** As STUDENT, get a copy of the payroll file into the IFS that STUDENT can read, without STUDENT ever being allowed to read APPLIB/PAYROLL. Then play the security officer: open a second session as QSECOFR and run CALL PGM(QP2TERM).
 
-### 21. The password typed into the script
+### 22. The password typed into the script
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
 
@@ -449,7 +471,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Flag:** As STUDENT, find the password written in a script under /QOpenSys/var and read it out without opening the files one at a time.
 
-### 22. A clerk with no command line who can still open a shell over ssh
+### 23. A clerk with no command line who can still open a shell over ssh
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 
@@ -470,7 +492,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Flag:** Use the clerk's own password over ssh to read the shell access review ticket in APPLIB/DAILYOPS.
 
-### 23. A key file anyone can write, and an ssh daemon that does not mind
+### 24. A key file anyone can write, and an ssh daemon that does not mind
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 

@@ -1,0 +1,33 @@
+id = "pase-key-hygiene"
+title = "The deploy key left on the shelf"
+group = "E"
+summary = "The private key the deploy job logs in with sits in a directory everyone can read, and the account it opens trusts it, so reading a file is the same as having the password."
+
+[[change]]
+target = "ifs:/QOpenSys/var/ops/keys/deploy_ed25519"
+field = "public"
+vulnerable = "r--"
+secure = "---"
+
+[cleanup]
+remove_new_ifs = true
+
+[flag]
+kind = "text"
+task = "As STUDENT, find the private key someone left readable under /QOpenSys/var, work out which account trusts it, log in as that account with it, and read the deploy token in its home directory."
+
+[doc]
+where = "PASE terminal (CALL PGM(QP2TERM)) or ssh to 127.0.0.1:2222; the ssh command inside the shell works too (asyncssh needed, ./setup.sh --ssh)"
+parallel = "Service accounts log in with keys so that nobody has to type a password, and the private half gets copied into a shared folder, a backup, a ticket. A key is a password that cannot be reset by the person who forgot it. Anyone who can read the file is the account, and nothing in the logs says otherwise."
+vulnerability = "/QOpenSys/var/ops/keys/deploy_ed25519 is an unencrypted private key readable by every profile, and its public half is the only key listed in OPERATOR's authorized_keys."
+mitre = ["T1552.004 Unsecured Credentials: Private Keys", "T1078 Valid Accounts", "T1021.004 Remote Services: SSH", "T1083 File and Directory Discovery"]
+steps = [
+  "Sign on as STUDENT and CALL PGM(QP2TERM) (or ssh in).",
+  "find /QOpenSys/var -type f -perm -004 lists the files anyone can read, and xargs grep -l 'PRIVATE KEY' picks out the ones that are keys.",
+  "ssh-keygen -l -f /QOpenSys/var/ops/keys/deploy_ed25519 prints the key's fingerprint and comment, ops-deploy, which says what it is for.",
+  "ls /home shows the accounts. Copy the key (cp, since OpenSSH ignores a key other people can read) and chmod 600 the copy.",
+  "ssh -i mykey OPERATOR@localhost cat deploy-token.txt (or the same key from a real ssh client against 127.0.0.1 port 2222, with the key text from cat).",
+]
+consequence = "STUDENT is OPERATOR without a password, and because the key never expires and is not tied to a person, the login looks like the deploy job."
+fix = "Take the read bit off the key (the secure state does) and keep private keys in the owner's own ~/.ssh, mode 600. Protect them with a passphrase or keep them in a key store, give each job its own key limited with command= or from= in authorized_keys, rotate any key that was ever readable, and search for stray keys on a schedule."
+reference = "OpenSSH ssh-keygen(1) and sshd(8), AUTHORIZED_KEYS FILE FORMAT; CIS Benchmarks for SSH; MITRE ATT&CK T1552.004."

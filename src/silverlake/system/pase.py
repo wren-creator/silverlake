@@ -1167,11 +1167,17 @@ class Shell(Filters, Heavy, Archives, SshTools):
             hits = [(n, l) for n, l in enumerate(lines, 1) if bool(rx.search(l)) != ("v" in flags)]
             matched = matched or bool(hits)
             prefix = f"{given}:" if len(files) > 1 else ""
-            if "c" in flags:
+            if "q" in flags:                                    # -l and -q are POSIX, not seen on PUB400
+                continue
+            if "l" in flags:
+                out += [("(standard input)" if given == "-" else given)] if hits else []
+            elif "c" in flags:
                 out.append(f"{prefix}{len(hits)}")
             else:
                 out += [f"{prefix}{str(n) + ':' if 'n' in flags else ''}{l}" for n, l in hits]
-        self.status = 2 if failed else (0 if matched else 1)            # 1 for no match and 2 for a file it could not open, as PUB400 did
+        if "q" in flags:
+            out = []
+        self.status = 0 if "q" in flags and matched else 2 if failed else (0 if matched else 1)            # 1 for no match and 2 for a file it could not open, as PUB400 did
         return out
 
     # -- B2: files and lookup, wording copied from PUB400 (ssh-pase-b2, 2026-10-28) -------------------------------

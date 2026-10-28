@@ -456,7 +456,33 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-732 Incorrect Permission Assignment for Critical Resource; CIS Benchmarks on world writable files; MITRE ATT&CK T1222.
 
-### 19. A writable directory at the front of the operator's PATH
+### 19. The deploy key left on the shelf
+
+**Where:** PASE terminal (CALL PGM(QP2TERM)) or ssh to 127.0.0.1:2222; the ssh command inside the shell works too (asyncssh needed, ./setup.sh --ssh)
+
+**Real-world parallel:** Service accounts log in with keys so that nobody has to type a password, and the private half gets copied into a shared folder, a backup, a ticket. A key is a password that cannot be reset by the person who forgot it. Anyone who can read the file is the account, and nothing in the logs says otherwise.
+
+**Vulnerability:** /QOpenSys/var/ops/keys/deploy_ed25519 is an unencrypted private key readable by every profile, and its public half is the only key listed in OPERATOR's authorized_keys.
+
+**MITRE ATT&CK:** T1552.004 Unsecured Credentials: Private Keys, T1078 Valid Accounts, T1021.004 Remote Services: SSH, T1083 File and Directory Discovery
+
+**Exploit:**
+
+1. Sign on as STUDENT and CALL PGM(QP2TERM) (or ssh in).
+2. find /QOpenSys/var -type f -perm -004 lists the files anyone can read, and xargs grep -l 'PRIVATE KEY' picks out the ones that are keys.
+3. ssh-keygen -l -f /QOpenSys/var/ops/keys/deploy_ed25519 prints the key's fingerprint and comment, ops-deploy, which says what it is for.
+4. ls /home shows the accounts. Copy the key (cp, since OpenSSH ignores a key other people can read) and chmod 600 the copy.
+5. ssh -i mykey OPERATOR@localhost cat deploy-token.txt (or the same key from a real ssh client against 127.0.0.1 port 2222, with the key text from cat).
+
+**Consequence in the sim:** STUDENT is OPERATOR without a password, and because the key never expires and is not tied to a person, the login looks like the deploy job.
+
+**Flag:** As STUDENT, find the private key someone left readable under /QOpenSys/var, work out which account trusts it, log in as that account with it, and read the deploy token in its home directory.
+
+**Fix:** Take the read bit off the key (the secure state does) and keep private keys in the owner's own ~/.ssh, mode 600. Protect them with a passphrase or keep them in a key store, give each job its own key limited with command= or from= in authorized_keys, rotate any key that was ever readable, and search for stray keys on a schedule. (`./scenario.sh set pase-key-hygiene secure`)
+
+**Reference:** OpenSSH ssh-keygen(1) and sshd(8), AUTHORIZED_KEYS FILE FORMAT; CIS Benchmarks for SSH; MITRE ATT&CK T1552.004.
+
+### 20. A writable directory at the front of the operator's PATH
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -482,7 +508,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-426 Untrusted Search Path; CIS Benchmarks on PATH and world writable directories; MITRE ATT&CK T1574.007.
 
-### 20. The system profile that anyone can write and every login runs
+### 21. The system profile that anyone can write and every login runs
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -508,7 +534,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i PASE documentation on shell startup files; CIS Benchmarks for AIX and Linux on profile file permissions; MITRE ATT&CK T1546.004.
 
-### 21. The password typed into the script
+### 22. The password typed into the script
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
 
@@ -533,7 +559,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-798 Use of Hard-coded Credentials; CWE-312 Cleartext Storage of Sensitive Information; MITRE ATT&CK T1552.001.
 
-### 22. A clerk with no command line who can still open a shell over ssh
+### 23. A clerk with no command line who can still open a shell over ssh
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 
@@ -558,7 +584,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, limited capability; OpenSSH sshd_config(5), DenyUsers and AllowUsers; CIS Benchmarks for SSH server configuration.
 
-### 23. A key file anyone can write, and an ssh daemon that does not mind
+### 24. A key file anyone can write, and an ssh daemon that does not mind
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 

@@ -29,7 +29,7 @@ The order follows what each batch needs. Text filters are useless without pipes,
 | **B4** | `sort uniq cut tr sed nl fold rev tee xargs` | The text filters. `sed` only `s///`, `d` and `p`, `xargs` only runs commands the shell already has |
 | **B5** | `awk diff cmp comm join paste od strings split pr` | The heavier filters. `awk` is a small subset (`print $N`, `-F`, a pattern, `NR`, `BEGIN` and `END`), not the language |
 | **B6** (built) | `tar zcat compress uncompress pax ar more sleep time` (`qsh` was already in B3) | Archives and odds and ends. The archive formats are ours, a text container, because the IFS holds text. `sleep` never waits and `time` prints fixed figures |
-| **B7** (commands built, lesson next) | `ssh-keygen ssh-keyscan ssh scp sftp dig nslookup host openssl ldapsearch` | Keys and names, only against the simulator itself: `ssh` goes to Silverlake's own listener and nowhere else, `dig` and its cousins read a small static table in the IFS, `openssl` does `version` and reading a certificate. `sftp` and `scp` need a subsystem the listener does not have yet. `ldapsearch` is the weakest fit |
+| **B7** (built) | `ssh-keygen ssh-keyscan ssh scp sftp dig nslookup host openssl ldapsearch` | Keys and names, only against the simulator itself: `ssh` goes to Silverlake's own listener and nowhere else, `dig` and its cousins read a small static table in the IFS, `openssl` does `version` and reading a certificate. `sftp` and `scp` need a subsystem the listener does not have yet. `ldapsearch` is the weakest fit |
 | **B8** | `kill jobs ulimit nice nohup wait fg bg alias unalias`, and real rows for `ps` | Process control with nothing real behind it, so mostly wording. Optional |
 
 ## Lessons that come with the batches

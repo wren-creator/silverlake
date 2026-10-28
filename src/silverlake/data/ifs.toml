@@ -222,6 +222,51 @@ owner_mode = "rwx"
 public = "r-x"
 content = "#!/QOpenSys/usr/bin/bsh\n# push the nightly extract to the bank gateway\nHOST=bank-gw.example.com\nFTP_USER=payxfer\nFTP_PASS=@@FLAG:pase-secrets-in-profile@@\necho sending extract to $HOST as $FTP_USER\n"
 
+# Lesson pase-key-hygiene: the key the deploy job logs in with, left where the operators keep their files. The key pair is made
+# from the instance secret (flags.py), the public half is what OPERATOR's authorized_keys lists, and the secure state takes
+# the read bit off the private half. OPERATOR's home, .ssh and authorized_keys are closed, so StrictModes is satisfied.
+[[node]]
+path = "/QOpenSys/var/ops/keys"
+owner = "OPERATOR"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/var/ops/keys/deploy_ed25519"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rw-"
+public = "r--"
+content = "@@KEY:private:pase-key-hygiene@@\n"
+
+[[node]]
+path = "/QOpenSys/var/ops/keys/deploy_ed25519.pub"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rw-"
+public = "r--"
+content = "@@KEY:public:pase-key-hygiene@@\n"
+
+[[node]]
+path = "/home/OPERATOR/.ssh"
+owner = "OPERATOR"
+public = "---"
+
+[[node]]
+path = "/home/OPERATOR/.ssh/authorized_keys"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rw-"
+public = "---"
+content = "@@KEY:public:pase-key-hygiene@@\n"
+
+[[node]]
+path = "/home/OPERATOR/deploy-token.txt"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rw-"
+public = "---"
+content = "Deploy token @@FLAG:pase-key-hygiene@@\n"
+
 # Lesson console-cert-audit: where an IBM i keeps the web server's certificate and key. The key file here is a stand in, the
 # real key never goes in the seed; what the lesson teaches is that the public may read it.
 [[node]]

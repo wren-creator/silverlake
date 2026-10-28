@@ -36,7 +36,7 @@ def test_cd_and_ls_and_cat_work_on_the_virtual_ifs(store):
 
 def test_ls_long_and_hidden_and_several_paths(store):
     sh = shell(store, "OPERATOR")
-    assert sh.run("ls") == [] and ".profile" in sh.run("ls -a")
+    assert sh.run("ls") == ["deploy-token.txt"] and ".profile" in sh.run("ls -a")
     long = sh.run("ls -la")
     assert any(row.startswith("-rw-r--r--") and row.endswith(".profile") and "OPERATOR" in row for row in long)
     both = sh.run("ls /QOpenSys /tmp")
@@ -57,7 +57,7 @@ def test_what_the_profile_may_not_touch_is_refused_in_the_shells_voice(store):
 
 def test_a_security_officer_reads_everything(store):
     sh = shell(store, "QSECOFR")
-    assert sh.run("cat /home/STUDENT/notes.txt") and sh.run("ls /home/OPERATOR") == []
+    assert sh.run("cat /home/STUDENT/notes.txt") and sh.run("ls /home/OPERATOR") == ["deploy-token.txt"]
     assert "Chen, Priya" in " ".join(sh.run("cat /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE"))
 
 
@@ -1219,3 +1219,11 @@ def test_openssl_x509_reads_a_certificate_from_the_ifs(store, tmp_path):
     assert sh.run("openssl x509 -in c.pem -noout -fingerprint")[0].startswith("SHA1 Fingerprint=") and sh.run("openssl x509 -in c.pem")[0] == "-----BEGIN CERTIFICATE-----"
     assert sh.run("openssl x509 -in notes.txt -noout; echo $?")[-2:] == ["Unable to load certificate", "1"]
     assert sh.run("cat c.pem | openssl x509 -noout -subject") == ["subject=CN = SYSTEM1.LOCAL, OU = lab"]
+
+
+def test_grep_l_and_q_are_posix_and_not_taken_from_pub400(store):
+    sh = shell(store)
+    sh.run("echo a > f1; echo b > f2")
+    assert sh.run("grep -l a f1 f2") == ["f1"] and sh.run("grep -l z f1 f2; echo $?") == ["1"]
+    assert sh.run("grep -q a f1; echo $?") == ["0"] and sh.run("grep -q z f1; echo $?") == ["1"] and sh.run("grep -q a f1") == []
+    assert sh.run("echo a | grep -l a") == ["(standard input)"]
