@@ -3,8 +3,10 @@ profile, and nothing else: no process is ever started, no host file is read, and
 these commands is refused in the shell's own voice. That is what makes it safe to leave on a training box and
 why `reset.sh` puts everything back exactly.
 
-Built: pwd, cd, ls (-l -a), cat, id, whoami, echo ($VAR), env, export and exit. Not built: pipes, redirection,
-`;`, `&`, command substitution, globbing, scripts, and every other command.
+Built: pwd, cd, ls (-l -a), cat, id, whoami, echo ($VAR), env, export, exit, and the writing set: mkdir (-p),
+touch, rm (-r -f), cp, mv, chmod, `> file` and `>> file` at the end of a command, and `system 'CL command'`,
+which runs through the CL dispatcher as the signed on profile. Not built: pipes, input redirection, `;`, `&`,
+command substitution, globbing, scripts, and every other command.
 
 The wording of the refusals follows the AIX style PASE inherits (`ls: 0653-341 The file X does not exist.`,
 `cat: 0652-050 Cannot open X.`), written from how those tools are known to speak and not captured from a real
@@ -20,7 +22,7 @@ from . import ifs
 from .profiles import Profile, ProfileStore
 
 BANNER = "Simulated PASE terminal. Not an AIX runtime: a few commands over a virtual IFS."
-UNSUPPORTED = re.compile(r"[|&;<>`]|\$\(")
+UNSUPPORTED = re.compile(r"[|&;<`]|\$\(")
 SYSTEM_PATH = "/QOpenSys/usr/bin:/usr/bin"
 
 
@@ -60,11 +62,26 @@ class Shell:
             words = shlex.split(line)
         except ValueError:
             return ["ksh: a quote was not closed."]
+        redirect = None
+        if len(words) >= 2 and re.fullmatch(r">>?", words[-2]):
+            redirect, words = (words[-2], words[-1]), words[:-2]
+        elif any(re.fullmatch(r">>?", w) for w in words) or any(w.endswith(">") for w in words):
+            return ["ksh: the redirection must be the last thing on the line: command > file."]
+        if not words:
+            return []
         name, args = words[0], [self.expand(w) for w in words[1:]]
         fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[a-z]+", name) else None
         if fn is None:
             return [f"ksh: {name}: not found."]
-        return fn(args)
+        out = fn(args)
+        if redirect is None:
+            return out
+        target = self.path(self.expand(redirect[1]))
+        try:
+            ifs.write(self.store, self.actor, target, "".join(l + "\n" for l in out), append=redirect[0] == ">>")
+        except ifs.IfsError as exc:
+            return [self._write_error("ksh", exc, redirect[1])]
+        return []
 
     def expand(self, word: str) -> str:
         return re.sub(r"\$(\w+)|\$\{(\w+)\}", lambda m: self.env.get(m.group(1) or m.group(2), ""), word)
@@ -159,3 +176,98 @@ class Shell:
         return []
 
     cmd_logout = cmd_exit
+
+    # -- writing -----------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _write_error(cmd: str, exc: ifs.IfsError, given: str) -> str:
+        why = {"EACCES": "0653-345 {0}: Permission denied.", "ENOENT": "0653-341 The file {0} does not exist.",
+               "EEXIST": "0653-340 {0} already exists.", "ENOTDIR": "0653-346 {0} is not a directory.",
+               "EISDIR": "0653-347 {0} is a directory.", "ENOTEMPTY": "0653-348 {0} is not empty.",
+               "EPERM": "0653-349 {0}: Operation not permitted.", "EINVAL": "0653-350 {0}: invalid mode."}
+        return f"{cmd}: " + why.get(exc.kind, exc.kind).format(given)
+
+    def cmd_mkdir(self, args: list[str]) -> list[str]:
+        parents = "-p" in args
+        out: list[str] = []
+        for given in [a for a in args if a != "-p"]:
+            target = self.path(given)
+            try:
+                if parents:
+                    walk = ""
+                    for part in [p for p in target.split("/") if p]:
+                        walk += "/" + part
+                        if walk not in self.store.ifs:
+                            ifs.make(self.store, self.actor, walk, "dir")
+                    continue
+                ifs.make(self.store, self.actor, target, "dir")
+            except ifs.IfsError as exc:
+                out.append(self._write_error("mkdir", exc, given))
+        return out
+
+    def cmd_touch(self, args: list[str]) -> list[str]:
+        out: list[str] = []
+        for given in args:
+            target = self.path(given)
+            try:
+                if target not in self.store.ifs:
+                    ifs.make(self.store, self.actor, target, "file")
+                else:
+                    ifs.lookup(self.store, self.actor, target)
+            except ifs.IfsError as exc:
+                out.append(self._write_error("touch", exc, given))
+        return out
+
+    def cmd_rm(self, args: list[str]) -> list[str]:
+        flags = "".join(a[1:] for a in args if a.startswith("-") and len(a) > 1)
+        out: list[str] = []
+        for given in [a for a in args if not a.startswith("-")]:
+            try:
+                target = self.path(given)
+                if target in self.store.ifs and self.store.ifs[target].is_dir and "r" not in flags:
+                    out.append(f"rm: 0653-603 {given} is a directory.")
+                    continue
+                ifs.remove(self.store, self.actor, target, recursive="r" in flags)
+            except ifs.IfsError as exc:
+                if not ("f" in flags and exc.kind == "ENOENT"):
+                    out.append(self._write_error("rm", exc, given))
+        return out
+
+    def _two(self, name: str, args: list[str], fn) -> list[str]:
+        args = [a for a in args if not a.startswith("-")]
+        if len(args) != 2:
+            return [f"{name}: 0653-401 usage: {name} source target"]
+        try:
+            fn(self.store, self.actor, self.path(args[0]), self.path(args[1]))
+        except ifs.IfsError as exc:
+            return [self._write_error(name, exc, args[0] if exc.path == self.path(args[0]) else args[1])]
+        return []
+
+    def cmd_cp(self, args: list[str]) -> list[str]:
+        return self._two("cp", args, ifs.copy)
+
+    def cmd_mv(self, args: list[str]) -> list[str]:
+        return self._two("mv", args, ifs.move)
+
+    def cmd_chmod(self, args: list[str]) -> list[str]:
+        if len(args) < 2:
+            return ["chmod: 0653-401 usage: chmod mode file ..."]
+        out: list[str] = []
+        for given in args[1:]:
+            try:
+                ifs.chmod(self.store, self.actor, self.path(given), args[0])
+            except ifs.IfsError as exc:
+                out.append(self._write_error("chmod", exc, args[0] if exc.kind == "EINVAL" else given))
+        return out
+
+    def cmd_system(self, args: list[str]) -> list[str]:
+        """Run a CL command as the signed on profile, as the real `system` utility does, and print what it said."""
+        from ..cl import commands
+        from ..cl.session import Session
+        from ..net import textview
+        if not args:
+            return ["system: 0653-401 usage: system 'CL command'"]
+        line = " ".join(args)
+        self.job = getattr(self, "job", None) or Session.for_profile(self.actor.current_library)
+        text = textview.outcome_text(self.store, commands.execute(self.store, self.actor, line, self.job), line)
+        return text.splitlines()

@@ -81,11 +81,10 @@ def test_id_whoami_echo_export_and_variables(store):
 
 def test_everything_else_is_refused_and_nothing_reaches_the_host(store):
     sh = shell(store)
-    assert sh.run("rm -rf /") == ["ksh: rm: not found."]
+    assert sh.run("rm -rf /")[0].startswith("rm: 0653-345") and "/home" in store.ifs
     assert sh.run("python -c 'print(1)'") == ["ksh: python: not found."]
-    for line in ("ls | cat", "echo hi > /tmp/x", "cat /tmp/x; id", "id &", "echo `id`", "echo $(id)"):
+    for line in ("ls | cat", "cat < /tmp/x", "cat /tmp/x; id", "id &", "echo `id`", "echo $(id)"):
         assert "not available in the simulator" in sh.run(line)[0], line
-    assert "/tmp/x" not in store.ifs
     assert sh.run("echo 'unclosed") == ["ksh: a quote was not closed."]
     assert sh.run("") == [] and sh.run("# comment") == []
     assert sh.run("../etc") == ["ksh: ../etc: not found."]
@@ -158,3 +157,68 @@ def test_a_profile_without_use_authority_to_the_program_cannot_open_it(store):
     c = signed(store)
     s = c.handle("ENTER", {"command": "CALL PGM(QP2TERM)"})
     assert "Simulated PASE terminal" not in text(s) and "uthorized" in text(s)
+
+
+# -- the writing set -------------------------------------------------------------------------------------------
+
+def test_files_and_directories_can_be_made_changed_and_removed_where_the_profile_may(store):
+    sh = shell(store)
+    assert sh.run("mkdir work") == [] and sh.run("touch work/a") == []
+    assert sh.run("echo hi > work/a") == [] and sh.run("echo there >> work/a") == []
+    assert sh.run("cat work/a") == ["hi", "there"]
+    assert sh.run("cp work/a work/b") == [] and sh.run("mv work/b /tmp/b") == []
+    assert sh.run("ls work") == ["a"] and sh.run("cat /tmp/b") == ["hi", "there"]
+    assert store.ifs["/tmp/b"].owner == "STUDENT"
+    assert sh.run("rm work") == ["rm: 0653-603 work is a directory."]
+    assert sh.run("rm -r work") == [] and "/home/STUDENT/work" not in store.ifs and "/home/STUDENT/work/a" not in store.ifs
+    assert sh.run("rm /tmp/b") == [] and sh.run("rm /tmp/b") == ["rm: 0653-341 The file /tmp/b does not exist."]
+    assert sh.run("rm -f /tmp/b") == []
+    assert sh.run("mkdir -p a/b/c") == [] and "/home/STUDENT/a/b/c" in store.ifs
+
+
+def test_writes_are_refused_without_write_on_the_directory(store):
+    sh = shell(store)
+    assert sh.run("touch /home/x") == ["touch: 0653-345 /home/x: Permission denied."]
+    assert sh.run("echo hi > /QOpenSys/etc/motd") == ["ksh: 0653-345 /QOpenSys/etc/motd: Permission denied."]
+    assert sh.run("rm /QOpenSys/etc/motd")[0].startswith("rm: 0653-345")
+    assert sh.run("mkdir /QSYS.LIB/NEW.LIB")[0].startswith("mkdir: 0653-345")
+    assert sh.run("rm -rf /")[0].startswith("rm: 0653-345") and "/" in store.ifs
+    assert sh.run("echo x > /home/OPERATOR/.profile")[0].startswith("ksh: 0653-345")
+    assert sh.run("mkdir w") == [] and sh.run("mkdir w") == ["mkdir: 0653-340 w already exists."]
+
+
+def test_chmod_by_octal_and_symbol_and_only_for_the_owner(store):
+    sh = shell(store)
+    assert sh.run("touch f") == [] and sh.run("chmod 600 f") == []
+    assert store.ifs["/home/STUDENT/f"].public == "---"
+    assert sh.run("chmod o+w f") == [] and store.ifs["/home/STUDENT/f"].public == "-w-"
+    assert sh.run("chmod a-w f") == [] and store.ifs["/home/STUDENT/f"].owner_mode == "r--"
+    assert sh.run("chmod u+w f") == [] and sh.run("chmod 7z f") == ["chmod: 0653-350 7z: invalid mode."]
+    assert sh.run("chmod 777 /QOpenSys/etc/motd")[0].startswith("chmod: 0653-349")
+    assert shell(store, "QSECOFR").run("chmod 666 /QOpenSys/etc/motd") == []
+
+
+def test_a_world_writable_file_can_be_changed_by_anyone(store):
+    assert shell(store, "QSECOFR").run("chmod 666 /QOpenSys/etc/profile") == []
+    assert shell(store).run("echo owned >> /QOpenSys/etc/profile") == []
+    assert shell(store).run("cat /QOpenSys/etc/profile")[-1] == "owned"
+
+
+def test_system_runs_cl_as_the_signed_on_profile_and_nothing_more(store):
+    sh = shell(store)
+    assert "STUDENT" in " ".join(sh.run("system 'DSPUSRPRF USRPRF(STUDENT)'"))
+    assert sh.run("system 'NOSUCHCMD'")[0].startswith("CPD") or "not found" in sh.run("system 'NOSUCHCMD'")[0]
+    assert sh.run("system") == ["system: 0653-401 usage: system 'CL command'"]
+    assert sh.run("system 'CRTUSRPRF USRPRF(EVIL) PASSWORD(X) SPCAUT(*ALLOBJ)'") and "EVIL" not in store.profiles
+
+
+def test_a_redirect_must_end_the_line(store):
+    sh = shell(store)
+    assert "last thing" in sh.run("echo a > x y z >")[0] or "last thing" in sh.run("echo > x extra")[0]
+    assert sh.run("echo a > /nodir/x") == ["ksh: 0653-341 The file /nodir/x does not exist."]
+
+
+def test_writes_are_saved_with_the_store(store):
+    shell(store).run("echo kept > ~/k")
+    again = ifs.from_rows(ifs.to_rows(store.ifs))
+    assert again["/home/STUDENT/k"].content == "kept\n"

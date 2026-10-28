@@ -10,7 +10,11 @@ CALL PGM(QP2TERM)
 
 opens the terminal. Type commands at the `$`, F3 or `exit` leaves. The top row says it is simulated.
 
-Built commands: `pwd`, `cd`, `ls` (`-l`, `-a`), `cat`, `id`, `whoami`, `echo` (with `$VAR`), `env`, `export`, `exit`. Not built: pipes, redirection, `;`, `&`, command substitution, globbing, scripts, and every other command (they answer `ksh: name: not found.`). Nothing can write to the IFS yet.
+Built commands: `pwd`, `cd`, `ls` (`-l`, `-a`), `cat`, `id`, `whoami`, `echo` (with `$VAR`), `env`, `export`, `exit`, and the writing set: `mkdir` (`-p`), `touch`, `rm` (`-r`, `-f`), `cp`, `mv`, `chmod`, `> file` and `>> file` at the end of a command, and `system 'CL command'`. Not built: pipes, input redirection, `;`, `&`, command substitution, globbing, scripts, and every other command (they answer `ksh: name: not found.`).
+
+**Writing.** A change needs `w` and `x` on the directory it lands in, and `x` all the way down the path. A new directory is `rwx` for its owner and `r-x` for everyone, a new file `rw-` and `r--`. `chmod` takes octal (`644`; the group digit is accepted and not kept) or `u+w`, `o-r`, `a+x`; only the owner or `*ALLOBJ` may use it. `/QSYS.LIB` is never written from the shell, objects there are made with CL. Everything is saved with the store, and `reset.sh` puts it back.
+
+**`system`.** `system 'DSPLIBL'` runs a CL command through the same dispatcher as the command line, as the signed on profile, in this process. It gets that profile's authority and nothing more, and it never reaches a host shell.
 
 ## The virtual IFS
 

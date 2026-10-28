@@ -16,6 +16,7 @@ seeded directories, which were chosen to be plausible, not read off a machine.""
 from __future__ import annotations
 
 import posixpath
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -274,3 +275,113 @@ def perms(entry: Entry) -> str:
     def bits(m: str) -> str:
         return "".join(c if c in m else "-" for c in "rwx")
     return ("d" if entry.is_dir else "-") + bits(entry.owner_mode) + bits(entry.public) + bits(entry.public)
+
+
+# -- writing ---------------------------------------------------------------------------------------------------
+# Every change goes through the same walk as a read (`x` on each directory above), then asks the parent for `w`.
+# /QSYS.LIB is never written from here: its objects are made and changed by CL, with CL's own rules.
+
+def _parent(store: ProfileStore, actor: Profile, path: str) -> tuple[str, Entry]:
+    if path == "/" or path == QSYS or path.startswith(QSYS + "/"):
+        raise IfsError("EACCES", path)
+    parent = posixpath.dirname(path) or "/"
+    entry = lookup(store, actor, parent)
+    if not entry.is_dir:
+        raise IfsError("ENOTDIR", path)
+    if "w" not in entry.mode or "x" not in entry.mode:
+        raise IfsError("EACCES", path)
+    return parent, entry
+
+
+def make(store: ProfileStore, actor: Profile, path: str, kind: str, content: str = "") -> Node:
+    """A new directory or file owned by the actor. A new directory is rwx for the owner and r-x for everyone;
+    a file is rw- for the owner and r-- for everyone (a umask of 022)."""
+    _parent(store, actor, path)
+    if path in store.ifs:
+        raise IfsError("EEXIST", path)
+    node = Node(path, kind, actor.name, "rwx" if kind == "dir" else "rw-", "r-x" if kind == "dir" else "r--",
+                {}, content)
+    store.ifs[path] = node
+    store.on_change()
+    return node
+
+
+def write(store: ProfileStore, actor: Profile, path: str, text: str, append: bool = False) -> None:
+    """Replace or extend a stream file, making it if it is not there (what `>` and `>>` do)."""
+    if path not in store.ifs:
+        make(store, actor, path, "file", text)
+        return
+    entry = lookup(store, actor, path)
+    if entry.is_dir:
+        raise IfsError("EISDIR", path)
+    if "w" not in entry.mode:
+        raise IfsError("EACCES", path)
+    node = store.ifs[path]
+    node.content = node.content + text if append else text
+    store.on_change()
+
+
+def remove(store: ProfileStore, actor: Profile, path: str, recursive: bool = False) -> None:
+    _parent(store, actor, path)
+    entry = lookup(store, actor, path)
+    node = store.ifs[path]
+    below = [p for p in store.ifs if p.startswith(path.rstrip("/") + "/")]
+    if node.is_dir and below and not recursive:
+        raise IfsError("ENOTEMPTY", path)
+    for p in below:
+        del store.ifs[p]
+    del store.ifs[path]
+    store.on_change()
+
+
+def copy(store: ProfileStore, actor: Profile, src: str, dst: str) -> None:
+    text = read(store, actor, src)
+    if dst in store.ifs and store.ifs[dst].is_dir:
+        dst = dst.rstrip("/") + "/" + posixpath.basename(src)
+    write(store, actor, dst, text)
+
+
+def move(store: ProfileStore, actor: Profile, src: str, dst: str) -> None:
+    _parent(store, actor, src)
+    entry = lookup(store, actor, src)
+    if dst in store.ifs and store.ifs[dst].is_dir:
+        dst = dst.rstrip("/") + "/" + posixpath.basename(src)
+    _parent(store, actor, dst)
+    if dst in store.ifs:
+        raise IfsError("EEXIST", dst)
+    node = store.ifs[src]
+    moved = {p: n for p, n in store.ifs.items() if p == src or p.startswith(src.rstrip("/") + "/")}
+    for p, n in moved.items():
+        del store.ifs[p]
+        n.path = dst + p[len(src):]
+        store.ifs[n.path] = n
+    store.on_change()
+
+
+def chmod(store: ProfileStore, actor: Profile, path: str, spec: str) -> None:
+    """Octal (`644`, owner then group then public; the group digit is accepted and not kept) or `[ugoa][+-][rwx]`.
+    Only the owner or *ALLOBJ may change a mode."""
+    entry = lookup(store, actor, path)
+    node = store.ifs.get(path)
+    if node is None:
+        raise IfsError("EACCES", path)                       # a library object is changed with CL
+    if not (actor.name == node.owner or _all_object(store, actor)):
+        raise IfsError("EPERM", path)
+    if spec.isdigit() and len(spec) in (3, 4) and set(spec) <= set("01234567"):
+        d = spec[-3:]
+        node.owner_mode, node.public = _from_octal(int(d[0])), _from_octal(int(d[2]))
+    else:
+        m = re.fullmatch(r"([ugoa]*)([+-])([rwx]+)", spec)
+        if not m:
+            raise IfsError("EINVAL", spec)
+        who, op, bits = m.group(1) or "a", m.group(2), m.group(3)
+        for target, hit in (("owner_mode", "u"), ("public", "o")):
+            if "a" in who or hit in who or (hit == "o" and "g" in who):
+                cur = {c for c in getattr(node, target) if c in MODES}
+                cur = cur | set(bits) if op == "+" else cur - set(bits)
+                setattr(node, target, "".join(c if c in cur else "-" for c in "rwx"))
+    store.on_change()
+
+
+def _from_octal(n: int) -> str:
+    return ("r" if n & 4 else "-") + ("w" if n & 2 else "-") + ("x" if n & 1 else "-")
