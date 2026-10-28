@@ -90,7 +90,15 @@ A second read-only ssh run listed the directories on the login `PATH` (`ls` only
 - **Runtimes:** `java javac jar`, and `node` and `npm`.
 - **Not there:** `whoami`, `who`, `curl`, `wget`, `nc`, `ping`.
 
-Silverlake has the first dozen or so of these. The ones a student reaches for next and that cost almost nothing to simulate are `uname`, `hostname`, `date`, `head`, `tail`, `wc`, `grep`, `printenv`, `logname` and `ps`. They are not built yet.
+A third read-only run (eighteen commands, wording below) captured the small batch, and Silverlake now has it: `uname`, `hostname`, `date`, `logname`, `printenv`, `ps`, `head`, `tail`, `wc` and `grep`. What PUB400 said, copied:
+
+- `uname` is `OS400`, and `uname -a` is `OS400 <node> <release> <version> <machine id>` (the host showed `5 7` for V7R5, so Silverlake says `4 7` for V7R4M0). `hostname` is the full name (`WWW.PUB400.COM` there, `SILVERLAKE.LOCALDOMAIN` here, the node name being `SILVERLAKE`).
+- `date` is `Wed Oct 28 01:14:40 UTC 2026`, with the day padded by a space when it is one digit.
+- `logname` over ssh says `logname: getlogin failed`, because there is no terminal. `printenv NAME` prints the value, or nothing when it is not set. `ps` printed only the header `    PID    TTY  TIME CMD` for the login.
+- `head` and `tail` on a missing file say `X: No such file or directory`, `wc` says `wc: cannot open X`, `grep` says `grep: can't open X`. `wc` prints each count in an eight wide column and then the name.
+- `grep x` with no file waits for input, and timed out after twenty seconds. Silverlake has no pipes and no input, so these four print nothing when given no file, where the real ones would wait.
+
+Not captured, so a guess: any option beyond `-n N`, `-l -w -c`, and `-i -v -n -c`; `grep` output with several files; and what `logname` and `ps` say on a terminal (QP2TERM) instead of over ssh.
 
 ## What is not confirmed on a real system
 

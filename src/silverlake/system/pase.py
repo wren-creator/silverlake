@@ -10,6 +10,10 @@ over `id`, which is the point of the PATH lessons. A script is a stream file wit
 line runs as that profile through this same shell (no interpreter, no shebang meaning, five levels deep at
 most). `login()` reads /QOpenSys/etc/profile and then ~/.profile, as a login shell does.
 
+The read-only batch PUB400 has (uname, hostname, date, logname, printenv, ps, head, tail, wc, grep) was captured
+on 2026-10-27 and its wording and layout are copied. The simulator has no pipes and no input, so head, tail, wc
+and grep need a file name; with none, they read an empty input and print nothing, where a real one would wait.
+
 Built: pwd, cd, ls (-l -a), cat, id, echo ($VAR), env, export, exit, and the writing set: mkdir (-p),
 touch, rm (-r -f), cp, mv, chmod, `> file` and `>> file` at the end of a command, and `system 'CL command'`,
 which runs through the CL dispatcher as the signed on profile. Not built: pipes, input redirection, `;`, `&`,
@@ -26,6 +30,7 @@ from __future__ import annotations
 import re
 import shlex
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from . import ifs
 from .profiles import Profile, ProfileStore
@@ -34,6 +39,9 @@ BANNER = "Simulated PASE terminal. Not an AIX runtime: a few commands over a vir
 UNSUPPORTED = re.compile(r"[|&;<`]|\$\(")
 SYSTEM_PATH = "/QOpenSys/usr/bin:/usr/bin"
 BUILTINS = frozenset({"cd", "pwd", "echo", "export", "exit", "logout"})
+NODE_NAME = "SILVERLAKE"
+HOST_NAME = "SILVERLAKE.LOCALDOMAIN"
+MACHINE_ID = "0078000000A1"                    # made up: a real one is the machine's serial based id
 MAX_DEPTH = 5
 SYSTEM_PROFILE = "/QOpenSys/etc/profile"
 
@@ -47,6 +55,7 @@ class Shell:
     done: bool = False
     depth: int = 0
     job: object = None
+    clock: object = None                         # a callable giving "now" in UTC, for tests; None means the real time
 
     def __post_init__(self) -> None:
         home = ifs.home_of(self.actor)
@@ -362,3 +371,122 @@ class Shell:
         if not args:
             return ["db2: usage: db2 \"SQL statement\""]
         return sql.render(sql.run(self.store, self.actor, self._job(), " ".join(args)))
+
+    # -- the small read-only batch, wording copied from PUB400 ------------------------------------------------------
+
+    def cmd_uname(self, args: list[str]) -> list[str]:
+        from ..net import hostsvr
+        v, r = re.match(r"V(\d+)R(\d+)", hostsvr.OS_LEVEL).groups()
+        fields = {"s": "OS400", "n": NODE_NAME, "r": r, "v": v, "m": MACHINE_ID}
+        flags = "".join(a[1:] for a in args if a.startswith("-") and len(a) > 1)
+        if "a" in flags:
+            return [" ".join(fields[k] for k in "snrvm")]
+        picked = [fields[k] for k in "snrvm" if k in flags]
+        return [" ".join(picked) if picked else "OS400"]
+
+    def cmd_hostname(self, args: list[str]) -> list[str]:
+        return [HOST_NAME]
+
+    def cmd_date(self, args: list[str]) -> list[str]:
+        now = (self.clock or (lambda: datetime.now(timezone.utc)))()
+        return [now.strftime(f"%a %b {now.day:2d} %H:%M:%S UTC %Y")]      # %e is not portable, the padding is the same
+
+    def cmd_logname(self, args: list[str]) -> list[str]:
+        return ["logname: getlogin failed"]               # what PUB400 said over ssh, where there is no terminal
+
+    def cmd_printenv(self, args: list[str]) -> list[str]:
+        if not args:
+            return self.cmd_env([])
+        return [self.env[a] for a in args[:1] if a in self.env]
+
+    def cmd_ps(self, args: list[str]) -> list[str]:
+        return ["    PID    TTY  TIME CMD"]               # PUB400 listed no process for the login, and neither do we
+
+    def _lines_of(self, name: str, given: str) -> tuple[list[str] | None, str]:
+        try:
+            return ifs.read(self.store, self.actor, self.path(given)).splitlines(), ""
+        except ifs.IfsError as exc:
+            if name == "wc":
+                return None, f"wc: cannot open {given}"
+            if name == "grep":
+                return None, f"grep: can't open {given}"
+            return None, f"{given}: {'Permission denied' if exc.kind == 'EACCES' else 'No such file or directory'}"
+
+    @staticmethod
+    def _count_option(args: list[str]) -> tuple[int, list[str]]:
+        """`-n N`, `-nN` or `-N` for head and tail, and the file names that are left."""
+        count, files, i = 10, [], 0
+        while i < len(args):
+            a = args[i]
+            if a == "-n" and i + 1 < len(args) and args[i + 1].isdigit():
+                count, i = int(args[i + 1]), i + 1
+            elif re.fullmatch(r"-n?\d+", a):
+                count = int(a.lstrip("-n"))
+            elif not a.startswith("-") or a == "-":
+                files.append(a)
+            i += 1
+        return count, files
+
+    def _head_tail(self, name: str, args: list[str], pick) -> list[str]:
+        count, files = self._count_option(args)
+        out: list[str] = []
+        for given in files:
+            lines, err = self._lines_of(name, given)
+            if lines is None:
+                out.append(err)
+                continue
+            if len(files) > 1:
+                out += (["" ] if out else []) + [f"==> {given} <=="]
+            out += pick(lines, count)
+        return out
+
+    def cmd_head(self, args: list[str]) -> list[str]:
+        return self._head_tail("head", args, lambda lines, n: lines[:n])
+
+    def cmd_tail(self, args: list[str]) -> list[str]:
+        return self._head_tail("tail", args, lambda lines, n: lines[-n:] if n else [])
+
+    def cmd_wc(self, args: list[str]) -> list[str]:
+        flags = "".join(a[1:] for a in args if a.startswith("-") and len(a) > 1)
+        wanted = [k for k in "lwc" if k in flags] or ["l", "w", "c"]
+        out: list[str] = []
+        for given in [a for a in args if not a.startswith("-")]:
+            try:
+                text = ifs.read(self.store, self.actor, self.path(given))
+            except ifs.IfsError:
+                out.append(f"wc: cannot open {given}")
+                continue
+            counts = {"l": text.count("\n"), "w": len(text.split()), "c": len(text.encode())}
+            out.append("".join(f"{counts[k]:8d}" for k in wanted) + f" {given}")
+        return out
+
+    def cmd_grep(self, args: list[str]) -> list[str]:
+        flags, rest, options = "", [], True
+        for a in args:                         # options end at the first word that is not one, or at `--`
+            if options and a == "--":
+                options = False
+            elif options and a.startswith("-") and len(a) > 1:
+                flags += a[1:]
+            else:
+                options = False
+                rest.append(a)
+        if not rest:
+            return ["Usage: grep [-i] [-v] [-n] [-c] pattern [file ...]"]
+        pattern, files = rest[0], rest[1:]
+        try:
+            rx = re.compile(pattern, re.I if "i" in flags else 0)
+        except re.error:
+            return [f"grep: 0651-209 The regular expression {pattern} is not valid."]
+        out: list[str] = []
+        for given in files:
+            lines, err = self._lines_of("grep", given)
+            if lines is None:
+                out.append(err)
+                continue
+            hits = [(n, l) for n, l in enumerate(lines, 1) if bool(rx.search(l)) != ("v" in flags)]
+            prefix = f"{given}:" if len(files) > 1 else ""
+            if "c" in flags:
+                out.append(f"{prefix}{len(hits)}")
+            else:
+                out += [f"{prefix}{str(n) + ':' if 'n' in flags else ''}{l}" for n, l in hits]
+        return out

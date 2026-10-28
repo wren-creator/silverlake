@@ -271,3 +271,49 @@ def test_single_quotes_keep_a_dollar_sign_as_it_is(store):
     sh = shell(store)
     assert sh.run("echo '$USER' \"$USER\" $USER") == ["$USER STUDENT STUDENT"]
     assert sh.run("echo 'a b' c") == ["a b c"]
+
+
+# -- the small read-only batch, wording from PUB400 --------------------------------------------------------------
+
+def test_uname_hostname_date_logname_printenv_and_ps_say_what_pub400_said(store):
+    from datetime import datetime, timezone
+    sh = shell(store)
+    sh.clock = lambda: datetime(2026, 10, 28, 1, 14, 40, tzinfo=timezone.utc)
+    assert sh.run("uname") == ["OS400"] and sh.run("uname -s") == ["OS400"]
+    assert sh.run("uname -a") == [f"OS400 SILVERLAKE 4 7 {pase.MACHINE_ID}"]       # nodename, release, version, machine
+    assert sh.run("uname -r") == ["4"] and sh.run("hostname") == [pase.HOST_NAME]
+    assert sh.run("date") == ["Wed Oct 28 01:14:40 UTC 2026"]
+    sh.clock = lambda: datetime(2026, 10, 5, 9, 0, 0, tzinfo=timezone.utc)
+    assert sh.run("date") == ["Mon Oct  5 09:00:00 UTC 2026"]                       # the day is padded with a space
+    assert sh.run("logname") == ["logname: getlogin failed"]
+    assert sh.run("printenv HOME") == ["/home/STUDENT"] and sh.run("printenv NOSUCHVAR") == []
+    assert any(l.startswith("HOME=") for l in sh.run("printenv"))
+    assert sh.run("ps") == ["    PID    TTY  TIME CMD"]
+
+
+def test_head_tail_wc_and_grep_read_files_and_fail_the_way_pub400_did(store):
+    sh = shell(store, "QSECOFR")
+    sh.run("echo one > f")
+    sh.run("echo two >> f")
+    sh.run("echo three >> f")
+    assert sh.run("head -n 2 f") == ["one", "two"] and sh.run("tail -n 2 f") == ["two", "three"]
+    assert sh.run("head -1 f") == ["one"] and sh.run("tail f") == ["one", "two", "three"]
+    assert sh.run("wc f") == ["       3       3      14 f"]
+    assert sh.run("wc -l f") == ["       3 f"]
+    assert sh.run("grep t f") == ["two", "three"] and sh.run("grep -c t f") == ["2"]
+    assert sh.run("grep -n -v t f") == ["1:one"] and sh.run("grep -i ONE f") == ["one"]
+    assert sh.run("grep nomatch f") == []
+    assert sh.run("head /nosuchfile") == ["/nosuchfile: No such file or directory"]
+    assert sh.run("tail /nosuchfile") == ["/nosuchfile: No such file or directory"]
+    assert sh.run("wc /nosuchfile") == ["wc: cannot open /nosuchfile"]
+    assert sh.run("grep x /nosuchfile") == ["grep: can't open /nosuchfile"]
+    assert sh.run("head f f")[0] == "==> f <==" and sh.run("grep o f f")[0] == "f:one"
+    assert sh.run("head") == [] and sh.run("grep")[0].startswith("Usage")
+    assert shell(store).run("head /home/OPERATOR/.profile") == ["/home/OPERATOR/.profile: Permission denied"]
+
+
+def test_grep_options_end_at_the_pattern_or_at_double_dash(store):
+    sh = shell(store)
+    sh.run("echo '-x marks it' > f")
+    assert sh.run("grep -- -x f") == ["-x marks it"]
+    assert sh.run("grep -i X -x") == ["grep: can't open -x"]                       # the second -x is a file name
