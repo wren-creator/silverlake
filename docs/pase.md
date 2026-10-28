@@ -65,6 +65,19 @@ The daemon's settings are `/QOpenSys/etc/ssh/sshd_config` and the `.conf` files 
 
 The version banner says AsyncSSH, not OpenSSH, so a scanner can tell it is not a real sshd.
 
+## What PUB400 showed (2026-10-27)
+
+One read-only ssh run against PUB400 (port 2222, one connection, nine commands that only read, three seconds apart; the capture stays local and gitignored). QP2TERM over 5250 never answered there, so ssh was the way in. It is a shared host, so some of this is its setup and not an IBM i default. What came back:
+
+- **The shell is `bsh`**, not ksh (`$SHELL` is `/QOpenSys/usr/bin/bsh`). The sshd banner is `SSH-2.0-OpenSSH_9.6`. The login starts in `/home/<PROFILE>`.
+- **`id`** prints `uid=<n>(name) gid=0`: the profile name in lower case, a five digit UID, and a group id with no name. Silverlake prints the name in upper case and a made up gid.
+- **`PATH`** is `/QOpenSys/usr/bin:/usr/ccs/bin:/QOpenSys/usr/bin/X11:/usr/sbin:.:/usr/bin`. The current directory (`.`) is on it, which is itself a finding.
+- **Errors:** `ls /nosuchdir` says `/nosuchdir not found` (exit 2), `cat /nosuchfile` says `cat: cannot open /nosuchfile` (exit 2), `cd /nosuchdir` says `/nosuchdir: No such file or directory` (exit 1). The AIX style `0653-341` and `0652-050` wording Silverlake uses was a guess and did not match.
+- **`whoami` is not there:** `bsh: whoami: not found`.
+- **Top level permissions:** `/` is `drwxrwsr-x`, `/QOpenSys` and `/home` are `drwxrwsrwx` and `/tmp` is `drwxrwsrwt`, all owned by QSYS. Everything is group writable or world writable, with setgid, and `/tmp` is sticky. Silverlake's seed is much tighter. A shared public host may be looser than a stock system.
+
+Not yet changed in the simulator: the shell name and wording, the `id` format, `whoami`, the `PATH` and the permissions. Each is a decision (match PUB400, or keep a teaching default and say so).
+
 ## What is not confirmed on a real system
 
 These are guesses from how AIX and IBM i are documented to behave. They are written down here so nobody teaches them as fact. A read-only check against PUB400, a person at the keyboard, would settle each one.
