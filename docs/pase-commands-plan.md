@@ -1,10 +1,10 @@
 # PASE commands: the plan
 
-The simulated PASE shell has 56 commands. PUB400's real one has about 290 in `/QOpenSys/usr/bin` alone. This plan adds commands ten at a time, in the order that teaches the most for the least work, and says what will never be built. The checkable version is in [ROADMAP.md](../ROADMAP.md).
+The simulated PASE shell has 66 commands. PUB400's real one has about 290 in `/QOpenSys/usr/bin` alone. This plan adds commands ten at a time, in the order that teaches the most for the least work, and says what will never be built. The checkable version is in [ROADMAP.md](../ROADMAP.md).
 
 ## Where it stands
 
-Built (56): `pwd cd ls cat id echo env printenv export exit` and `mkdir touch rm cp mv chmod` and `system db2` and the read-only batch `uname hostname date logname ps head tail wc grep` and B2, `basename dirname which type test [ file rmdir umask du find` (`[` is `test`), and B3, `qsh datarea dataq catsplf getjobid sysval getconf dspmsg setccsid Rfile` (not `clrtmp`, which deletes), and B4, `sort uniq cut tr sed nl fold rev tee xargs`. The first ten are the first slice, the next sixteen came with the writing set, SQL and the PUB400 batch, and the last ten with B2.
+Built (66): `pwd cd ls cat id echo env printenv export exit` and `mkdir touch rm cp mv chmod` and `system db2` and the read-only batch `uname hostname date logname ps head tail wc grep` and B2, `basename dirname which type test [ file rmdir umask du find` (`[` is `test`), and B3, `qsh datarea dataq catsplf getjobid sysval getconf dspmsg setccsid Rfile` (not `clrtmp`, which deletes), and B4, `sort uniq cut tr sed nl fold rev tee xargs`, and B5, `awk diff cmp comm join paste od strings split pr`. The first ten are the first slice, the next sixteen came with the writing set, SQL and the PUB400 batch, and the last ten with B2.
 
 Built in P2: pipes, `<`, standard input for `cat head tail wc grep`, and backticks; no `$()`, because bsh has none (the P2 capture). Built in P1: exit statuses and `$?`, `;` `&&` `||`, and globbing (no `~`: bsh has no tilde expansion, as the P1 capture showed). `Shell.run` still returns a list of lines, and the status is read from `Shell.status`, so nothing that calls the shell changed. Not built, and it limits what the commands can do: pipes, input redirection, command substitution, and scripts with `if` or `for`. `head`, `tail`, `wc` and `grep` need a file name today because there is nothing to pipe into them.
 

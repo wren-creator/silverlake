@@ -957,3 +957,109 @@ def test_sed_addresses_and_semicolons_inside_s_and_a_huge_number_in_sort(store):
     assert sh.run("sed '2,/c/d' g") == ["a", "d"] and sh.run("sed -n '/b/,/c/p' g") == ["b", "c"]
     assert sh.run("echo 1 > n; echo " + "9" * 400 + " >> n; echo 2 >> n; sort -n n | head -1") == ["1"]
     assert sh.run("sort -n n | tail -1") == ["9" * 400]
+
+
+# -- B5: the heavier filters, wording from the PUB400 run of 2026-10-28 (ssh-pase-b5) -------------------------------
+
+def test_awk_fields_patterns_arithmetic_and_what_pub400_printed(store):
+    sh = shell(store)
+    assert sh.run("echo a b c | awk '{print $2}'") == ["b"] and sh.run("echo a b c | awk '{print $1, $3}'") == ["a c"]
+    assert sh.run("echo a b c | awk '{print $NF}'") == ["c"] and sh.run("echo a b c | awk '{print NF}'") == ["3"]
+    assert sh.run("echo a:b:c | awk -F: '{print $2}'") == ["b"] and sh.run("echo a:b:c | awk -F: -v OFS=- '{print $1, $3}'") == ["a-c"]
+    assert sh.run("echo a:b:c | awk 'BEGIN{FS=\":\"}{print $3}'") == ["c"]
+    assert sh.run("echo a b c | awk 'BEGIN{print \"start\"}{print $1}END{print \"end\"}'") == ["start", "a", "end"]
+    assert sh.run("echo a b c | awk '/b/'") == ["a b c"] and sh.run("echo a b c | awk '/x/'") == []
+    assert sh.run("echo a b c | awk '$2 == \"b\"'") == ["a b c"] and sh.run("echo 5 | awk '$1 > 3'") == ["5"]
+    assert sh.run("echo 1 2 3 | awk '{print $1 + $2}'") == ["3"] and sh.run("echo 7 | awk '{print $1 / 2}'") == ["3.5"]
+    assert sh.run("echo 7 | awk '{print $1 % 4}'") == ["3"] and sh.run("echo 1 2 3 | awk '{s += $3} END {print s}'") == ["3"]
+    assert sh.run("echo hello | awk '{print substr($1, 2, 3), index($1, \"l\"), toupper($1), length($1)}'") == ["ell 3 HELLO 5"]
+    assert sh.run("echo a-b | awk '{split($1, p, \"-\"); print p[2]}'") == ["b"]
+    assert sh.run("echo a b | awk '{printf \"%s=%s\\n\", $1, $2}'") == ["a=b"] and sh.run("echo 3.14159 | awk '{printf \"%.2f\\n\", $1}'") == ["3.14"]
+    assert sh.run("echo a b | awk '{ $2 = \"X\"; print }'") == ["a X"] and sh.run("echo a | awk '{print $5}'") == [""]
+    assert sh.run("echo a b c | awk '{for (i = 1; i <= NF; i++) print $i}'") == ["a", "b", "c"]
+    assert sh.run("echo a | awk '{ if ($1 == \"a\") print \"yes\"; else print \"no\" }'") == ["yes"]
+    assert sh.run("echo a | awk 'BEGIN{ a[\"k\"] = 1; for (k in a) print k }'") == ["k"]
+    assert sh.run("echo a | awk 'BEGIN{exit 3}'; echo $?") == ["3"]
+    sh.run("echo x > f; echo y >> f; echo z >> f")
+    assert sh.run("awk 'END{print NR}' f") == ["3"] and sh.run("awk 'NR <= 2' f") == ["x", "y"]
+    assert sh.run("awk '{print NR\": \"$0}' f | head -2") == ["1: x", "2: y"]
+
+
+def test_awk_errors_read_like_pub400_and_a_runaway_program_is_stopped(store):
+    sh = shell(store)
+    assert sh.run("awk; echo $?") == ["Usage: awk [-u] [-F Character][-v Assignment][-f File|Commands][Assignment|File] ...", "2"]
+    assert sh.run("echo a | awk '{print}' /nosuchfile; echo $?") == [
+        "awk: Cannot find or open file /nosuchfile.", "", " The source line number is 1.", "2"]
+    assert sh.run("awk -f /nosuchfile; echo $?") == ["awk: Cannot find or open file /nosuchfile.", "2"]
+    assert sh.run("echo a | awk '{'; echo $?") == [
+        " syntax error The source line is 1.", " The error context is", "\t\t >>> { <<< ", " awk: The statement cannot be correctly parsed.",
+        " The source line is 1.", "\tawk: There is a missing } character.", "2"]
+    assert sh.run("echo a | awk '{print $1'; echo $?")[2] == "\t\t{print >>>  $1 <<< "
+    out = sh.run("echo a | awk 'BEGIN { while (1) { x++ } }'; echo $?")
+    assert out[-1] == "2" and "too long" in out[0], "stopped by the step limit, not left running"
+    out = sh.run("echo a | awk 'BEGIN { while (1) print \"xxxxxxxxxxxxxxxxxxxxxxxx\" }'; echo $?")
+    assert out[-1] == "2" and len(out) < 20000, "and the output is capped"
+
+
+def test_diff_cmp_and_comm_match_pub400(store):
+    sh = shell(store)
+    for name, body in (("a", "one\ntwo\nthree\n"), ("b", "one\n2\nthree\nfour\n"), ("c", "x\n"), ("d", "x\n")):
+        sh.run(f"printf x >/dev/null; echo '{body.replace(chr(10), '|')}' | tr '|' '\\n' | head -{body.count(chr(10))} > {name}")
+    assert sh.run("diff a a; echo $?") == ["0"] and sh.run("diff a b > /dev/null; echo $?") == ["1"]
+    assert sh.run("diff a b") == ["2c2", "< two", "---", "> 2", "3a4", "> four"]
+    assert sh.run("diff -u a b")[0].startswith("--- a\t2026-10-26") and "@@ -1,3 +1,4 @@" in sh.run("diff -u a b")
+    assert sh.run("diff -c a b")[0] == "*** a\tMon Oct 26 09:00:00 2026" and sh.run("diff -c a b")[2] == "***************"
+    assert sh.run("diff -i a a; echo $?") == ["0"] and sh.run("diff -q a b; echo $?")[0] == "diff: illegal option -- q"
+    assert sh.run("diff /nosuchfile a; echo $?") == ["diff: /nosuchfile: No such file or directory", "2"]
+    assert sh.run("diff; echo $?")[0] == "diff: two filename arguments required" and sh.run("diff a")[-1].startswith("       diff [-bilrstw]")
+    assert sh.run("cmp a a; echo $?") == ["0"] and sh.run("cmp a b") == ["a b differ: char 5, line 2"]
+    assert sh.run("cmp -s a b; echo $?") == ["1"] and sh.run("cmp /nosuchfile a; echo $?") == ["cmp: cannot open /nosuchfile", "2"]
+    assert sh.run("cmp -l c d; echo $?") == ["0"] and sh.run("cmp; echo $?") == ["usage: cmp [-l | -s] file1 file2", "2"]
+    assert sh.run("cmp -l a b | head -1") == ["cmp: EOF on a", "     5 164  62"], "t is 164 octal, 2 is 62; the EOF note is stderr"
+    assert sh.run("comm a a | head -2") == ["\t\tone", "\t\ttwo"] and sh.run("comm -12 a a | head -2") == ["one", "two"]
+    assert sh.run("comm -3 a a") == [] and sh.run("comm -1 a a | head -1") == ["\tone"]
+    assert sh.run("comm; echo $?") == ["usage: comm [-123] file1 file2", "2"]
+    assert sh.run("comm /nosuchfile a; echo $?") == ["comm: cannot open /nosuchfile", "1"]
+
+
+def test_join_paste_od_strings_pr_and_split_match_pub400(store):
+    sh = shell(store)
+    sh.run("echo k1 a > l; echo k2 b >> l; echo k1 c > r; echo k3 d >> r")
+    assert sh.run("join l r") == ["k1 a c"] and sh.run("join -j 1 l r") == ["k1 a c"] and sh.run("join -a 1 l r") == ["k1 a c", "k2 b"]
+    assert sh.run("join -t: l l") == ["k1 a", "k2 b"] and sh.run("join; echo $?")[-1] == "1"
+    assert sh.run("join /nosuchfile l; echo $?") == ["join: Cannot open file /nosuchfile", "1"]
+    assert sh.run("paste l r") == ["k1 a\tk1 c", "k2 b\tk3 d"] and sh.run("paste -d: l r") == ["k1 a:k1 c", "k2 b:k3 d"]
+    assert sh.run("paste -s l") == ["k1 a\tk2 b"] and sh.run("echo a b c | paste - -") == ["a b c\t"]
+    assert sh.run("paste /nosuchfile; echo $?") == ["paste: /nosuchfile: cannot open", "1"]
+    assert sh.run("echo abc | od") == ["0000000  060542 061412", "0000004"], "big endian words, like the machine"
+    assert sh.run("echo abc | od -c") == ["0000000    a   b   c  \\n", "0000004"] and sh.run("echo abc | od -x") == ["0000000  6162 630a", "0000004"]
+    assert sh.run("echo abc | od -b") == ["0000000  141 142 143 012", "0000004"] and sh.run("echo abc | od -t x1") == ["0000000  61 62 63 0a", "0000004"]
+    assert sh.run("echo abc | od -d") == ["0000000  24930 25354", "0000004"] and sh.run("echo abc | od -N 2") == ["0000000  060542", "0000002"]
+    assert sh.run("echo abc | od -j 1") == ["0000000  061143 005000", "0000003"]
+    assert sh.run("echo abc | od -An -c") == ["\t   a   b   c  \\n", ""]
+    assert sh.run("echo abcdefghijklmnopqrstuvwxyz | od -c")[1].startswith("0000020    q   r") and sh.run("od /nosuchfile; echo $?") == [
+        "/nosuchfile: No such file or directory", "1"]
+    sh.run("echo hi > s; echo longer line > s2")
+    assert sh.run("strings s2") == ["longer line"] and sh.run("strings s") == [] and sh.run("strings -n 2 s") == ["hi"]
+    assert sh.run("echo abcdef | strings") == [], "PUB400 read nothing from the pipe"
+    assert sh.run("strings /nosuchfile; echo $?") == ["/nosuchfile: No such file or directory", "1"]
+    page = sh.run("pr l")
+    assert page[:6] == ["", "", "Oct 26 09:00 2026 l Page 1", "", "", "k1 a"] and len(page) == 66
+    assert sh.run("pr -t l") == ["k1 a", "k2 b"] and sh.run("pr -l 10 l") == ["k1 a", "k2 b"] and sh.run("pr -n -t l") == ["    1\tk1 a", "    2\tk2 b"]
+    assert sh.run("pr -d -t l") == ["k1 a", "", "k2 b", ""] and sh.run("pr -o 4 -t l") == ["    k1 a", "    k2 b"]
+    assert sh.run("pr -h TITLE l | head -3")[2] == "Oct 26 09:00 2026 TITLE Page 1"
+    assert sh.run("pr -2 -t l") == ["k1 a".ljust(36) + "k2 b"], "two columns, 36 wide"
+    assert sh.run("pr /nosuchfile; echo $?") == ["pr: Cannot open file /nosuchfile.", "1"]
+    sh.run("echo 1 > n; echo 2 >> n; echo 3 >> n")
+    assert sh.run("split -l 2 n; cat xaa; cat xab") == ["1", "2", "3"] and sh.run("split -l 1 n part; cat partac") == ["3"]
+    assert sh.run("split /nosuchfile; echo $?") == ["cannot open input", "1"]
+    out = sh.run("split -z n; echo $?")
+    assert out[0] == "split: illegal option -- z" and out[1] == "usage: split [-l line_count] [-a suffix_length] [file [name]]"
+
+
+def test_the_b5_commands_are_found_by_which_and_cannot_be_used_to_loop(store):
+    sh = shell(store)
+    assert sh.run("which awk diff cmp comm join paste od strings split pr") == [
+        f"/QOpenSys/usr/bin/{n}" for n in "awk diff cmp comm join paste od strings split pr".split()]
+    assert sh.run("echo a | awk 'BEGIN { for (i = 0; i < 100000000; i++) s += i }'; echo $?")[-1] == "2"
+    assert sh.run("echo a | awk 'BEGIN { x = 1 / 0 }'; echo $?")[-1] == "2"
