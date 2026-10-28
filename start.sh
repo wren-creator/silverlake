@@ -6,14 +6,16 @@ cd "$(dirname "$0")"
 source ./lib.sh
 
 usage() {
-  echo "usage: ./start.sh [-p PORT | --port PORT] [--services]"
+  echo "usage: ./start.sh [-p PORT | --port PORT] [--services] [--real-ports]"
   echo "  Listens on 127.0.0.1, default port 5250. SILVERLAKE_PORT does the same."
   echo "  --services also starts the network services (HTTP Admin 2001, FTP 2121, host servers 4449 and 8476, and TLS ports when ./setup.sh made a certificate), loopback only."
   echo "  SILVERLAKE_SERVICES=1 does the same, and ./scenario.sh keeps it across its restart."
+  echo "  --real-ports uses the real IBM i numbers where they differ (23, 992, 21, 990, 449, 22). Those are below 1024, so the account must be allowed to bind them (root, or a Linux sysctl, see docs/services.md). SILVERLAKE_REAL_PORTS=1 does the same. A SILVERLAKE_*_PORT you set yourself wins."
 }
 
 SERVICES_MARK="$STATE_DIR/services.on"
 SERVICES="${SILVERLAKE_SERVICES:-}"
+REAL_PORTS="${SILVERLAKE_REAL_PORTS:-}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -22,10 +24,20 @@ while [ $# -gt 0 ]; do
       PORT="$2"; shift 2 ;;
     --port=*) PORT="${1#--port=}"; shift ;;
     --services) SERVICES=1; shift ;;
+    --real-ports) REAL_PORTS=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) bad "unknown option: $1"; usage >&2; exit 2 ;;
   esac
 done
+case "$REAL_PORTS" in
+  ''|0|off|no) ;;
+  *)
+    # Only where nobody chose a port: 5250 becomes 23, and each service its real number unless one was set.
+    [ "$PORT" != "5250" ] || PORT=23
+    export SILVERLAKE_TLS_PORT="${SILVERLAKE_TLS_PORT:-992}" SILVERLAKE_FTP_PORT="${SILVERLAKE_FTP_PORT:-21}" \
+           SILVERLAKE_FTP_TLS_PORT="${SILVERLAKE_FTP_TLS_PORT:-990}" SILVERLAKE_MAPPER_PORT="${SILVERLAKE_MAPPER_PORT:-449}" \
+           SILVERLAKE_SSH_PORT="${SILVERLAKE_SSH_PORT:-22}" ;;
+esac
 case "$PORT" in
   ''|*[!0-9]*) bad "port must be a number, not '$PORT'"; exit 2 ;;
 esac

@@ -89,7 +89,8 @@
   - [x] 5f-2: FTP on 2121 (cleartext sign-on, naming formats, file get through the normal authority checks), lesson `ftp-limited-bypass` (limited capability does not stop FTP); RCMD added afterwards
   - [x] 5f-3: host servers, the mapper on 4449 and the sign-on server on 8476 answering exchange attributes before any sign-on, lesson `hostsvr-recon`
   - [x] 5f TLS: a throwaway certificate (`./setup.sh`, `.tls/`) and TLS ports for 5250 (5992), the console (2010), FTP (explicit AUTH TLS with PROT P on 2121, implicit on 2990) and the sign-on server (9476)
-  - [ ] 5f later: a lesson on requiring TLS (cleartext FTP and console sign-on refused), a certificate audit lesson on 2010, the real low ports (21, 449, 23, 992, 990) for people who run as root, TLS 1.3 only option
+  - [x] 5f TLS follow-ups: lesson `ftp-console-cleartext` (a `require_tls` system setting; FTP answers 534 to USER before AUTH TLS and the console answers 403 on 2001 without a challenge; the flag is a fact, `ftp,httpadmin` or `none`), `./start.sh --real-ports` for 23, 992, 21, 990, 449 and 22, and `SILVERLAKE_TLS_MIN=1.3` for TLS 1.3 only. Nineteen lessons
+  - [ ] 5f later: a certificate audit lesson on 2010. Held back on purpose: one certificate serves every TLS port, so a vulnerable and a secure state would mean two certificates and a second trust path in every TLS test. A cleaner start is a small local CA in `./setup.sh`; check `--real-ports` on macOS and Linux as a normal user
 - [ ] Silverlake 101 EPUB, same format as the Mainframe 10x series
 
 ## Needs verification on a real system

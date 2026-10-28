@@ -16,7 +16,7 @@ log = logging.getLogger("silverlake.http")
 HEAD_LIMIT = 16 * 1024
 READ_TIMEOUT = 10.0
 REASONS = {200: "OK", 302: "Found", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found", 409: "Conflict",
-           413: "Payload Too Large"}
+           403: "Forbidden", 413: "Payload Too Large"}
 
 
 class TooLarge(Exception):
@@ -64,7 +64,7 @@ async def serve(host: str, port: int, store_of: Callable[[], ProfileStore], ssl_
             if req is None:
                 resp = Response(400, {"Server": "IBM HTTP Server for i"}, "")
             else:
-                resp = handle(req, store_of(), state)
+                resp = handle(req, store_of(), state, secure=ssl_context is not None)
             writer.write(_wire(resp))
             await writer.drain()
         except TooLarge:

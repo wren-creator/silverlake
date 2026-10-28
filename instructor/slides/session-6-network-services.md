@@ -27,9 +27,15 @@ Needs `./start.sh --services`. Everything still binds to 127.0.0.1.
 - Read the release and the password level. Level 0 means case does not matter: try `student` in lower case at the 5250.
 - Submit `V7R4M0/0`. Raise QPWDLVL with the lesson's secure state and the answer, and the lower case guess, both change.
 
-## Slide 6: Fix and re-run
+## Slide 6: ftp-console-cleartext
+- Both services have a TLS port and neither requires it. Log in to FTP on 2121 and fetch the console on 2001 with `curl -u`. Both work, and the password crossed the wire either time.
+- Optional with root: `tcpdump -i lo0 -A port 2121` and read `PASS STUDENT` off the capture.
+- Try the same on 2990 and 2010 (`--cacert .tls/cert.pem`). Nothing readable. Submit `ftp,httpadmin`.
+- `./scenario.sh set ftp-console-cleartext secure`: FTP answers 534 before the password, the console answers 403 without asking. The answer to submit is now `none`.
+
+## Slide 7: Fix and re-run
 - `./scenario.sh set httpadmin-ssi-injection secure`. The About page shows the PTF and the description is escaped.
 - Ask: what else should limit who can reach the console?
 
-## Slide 7: Debrief
+## Slide 8: Debrief
 - Nothing here needed an exploit kit. A browser, a profile and a field that was trusted.

@@ -37,6 +37,7 @@ The full per lesson key is `docs/scenarios.md`, which is generated from the scen
 | payrun-qtemp | calls a program with no library | call it with its library |
 | hostsvr-recon | the sign-on server reports QPWDLVL (0, case does not matter) before sign-on (needs `--services`) | QPWDLVL 2 or 3, limit who reaches the host servers |
 | ftp-limited-bypass | limited capability is a 5250 rule, FTP ignores it (needs `--services`) | register a request exit program, require TLS |
+| ftp-console-cleartext | FTP on 2121 and the console on 2001 take a password in clear text beside their TLS ports (needs `--services`); the answer is `ftp,httpadmin` | require TLS (FTP 534 before `AUTH TLS`, console 403 on 2001), then close the clear ports |
 | httpadmin-ssi-injection | the web console evaluates exec directives in a description, as QTMHHTTP (needs `--services`) | install the console fix, which escapes the field |
 | pase-profile-plant | `/QOpenSys/etc/profile` is world writable and every login runs it (the victim is a second session as QSECOFR) | profile owned by the system, read only for the rest |
 | pase-path-hijack | `/tmp/opsbin` is world writable and first on the operator's PATH, so a planted `id` runs as OPERATOR (the victim is a second session as OPERATOR) | no writable directory on PATH, `/tmp/opsbin` read only |

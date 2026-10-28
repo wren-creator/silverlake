@@ -276,7 +276,34 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 ## Group D: Network services (start with ./start.sh --services)
 
-### 12. A clerk with no command line who can still use FTP
+### 12. Which services take a password in clear text
+
+**Where:** FTP 127.0.0.1:2121 and 2990, console 127.0.0.1:2001 and 2010 (start the range with ./start.sh --services)
+
+**Real-world parallel:** Most IBM i installs run FTP and the web administration console beside their TLS ports and never turn the clear ones off. A password sent that way can be read by anyone on the path, and a review of network services always asks which ports take one. The usual answers are a request exit program, the server's own setting to require TLS, or closing the clear port.
+
+**Vulnerability:** FTP on 2121 takes USER and PASS before AUTH TLS, and the console on 2001 asks for Basic credentials over plain HTTP. Both also have a TLS port, so TLS exists and is simply not required.
+
+**MITRE ATT&CK:** T1040 Network Sniffing, T1078 Valid Accounts, T1021 Remote Services
+
+**Exploit:**
+
+1. Scan the range's ports and note the pairs: 2121 and 2990 for FTP, 2001 and 2010 for the console.
+2. ftp 127.0.0.1 2121, USER STUDENT, PASS STUDENT. It signs on. The password crossed the loopback in clear.
+3. curl -i -u STUDENT:STUDENT http://127.0.0.1:2001/HTTPAdmin. The console answers with the page. Basic is only base64, so the password is as readable as the FTP one.
+4. Optional, needs root: run tcpdump -i lo0 -A port 2121 (lo on Linux) and repeat the FTP login to see PASS STUDENT on the wire.
+5. Repeat both on the TLS ports (explicit AUTH TLS on 2121, or 2990, and https on 2010 with --cacert .tls/cert.pem) and confirm the sign-on works there and the capture shows nothing readable.
+6. Submit the names of the services that signed you on without TLS.
+
+**Consequence in the sim:** Anyone able to see the traffic reads a profile name and password and signs on as that person, with all their authority. A limited profile is still limited, but a powerful one is not.
+
+**Flag:** Find out which of FTP and the HTTP console take a sign-on without TLS. Submit their names, lower case, sorted and joined by a comma (ftp,httpadmin), or none when neither does.
+
+**Fix:** Require TLS (the secure state does: FTP answers 534 to USER before AUTH TLS, and the console answers 403 on 2001 without asking for credentials), then close or firewall the clear ports. On a real system that is the FTP server's secure-only setting or an exit program, and the HTTP server's own configuration. (`./scenario.sh set ftp-console-cleartext secure`)
+
+**Reference:** CIS controls on encrypting data in transit; CISA CPG on encrypted network traffic; IBM i Security Reference, network services.
+
+### 13. A clerk with no command line who can still use FTP
 
 **Where:** FTP server, 127.0.0.1:2121 (start the range with ./start.sh --services)
 
@@ -301,7 +328,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, limited capability and FTP exit points; CIS controls on network services; CISA CPG on encrypting data in transit.
 
-### 13. The sign-on server that says how passwords are checked
+### 14. The sign-on server that says how passwords are checked
 
 **Where:** Host server mapper 127.0.0.1:4449 and sign-on server 127.0.0.1:8476 (start the range with ./start.sh --services)
 
@@ -326,7 +353,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, QPWDLVL; CIS controls on password policy; CISA CPG on reducing network exposure.
 
-### 14. A web console that runs commands found in a description
+### 15. A web console that runs commands found in a description
 
 **Where:** HTTP Server Administration console, 127.0.0.1:2001 (start the range with ./start.sh --services)
 
@@ -353,7 +380,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 ## Group E: PASE and the IFS
 
-### 15. A writable directory at the front of the operator's PATH
+### 16. A writable directory at the front of the operator's PATH
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -379,7 +406,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-426 Untrusted Search Path; CIS Benchmarks on PATH and world writable directories; MITRE ATT&CK T1574.007.
 
-### 16. The system profile that anyone can write and every login runs
+### 17. The system profile that anyone can write and every login runs
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -405,7 +432,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i PASE documentation on shell startup files; CIS Benchmarks for AIX and Linux on profile file permissions; MITRE ATT&CK T1546.004.
 
-### 17. A clerk with no command line who can still open a shell over ssh
+### 18. A clerk with no command line who can still open a shell over ssh
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 
@@ -430,7 +457,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, limited capability; OpenSSH sshd_config(5), DenyUsers and AllowUsers; CIS Benchmarks for SSH server configuration.
 
-### 18. A key file anyone can write, and an ssh daemon that does not mind
+### 19. A key file anyone can write, and an ssh daemon that does not mind
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 

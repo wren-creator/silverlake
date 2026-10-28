@@ -54,13 +54,22 @@ def make(directory: Path | None = None, force: bool = False) -> bool:
     return True
 
 
+def minimum_version(env: dict[str, str] | None = None) -> ssl.TLSVersion:
+    """TLS 1.2 unless SILVERLAKE_TLS_MIN says 1.3. Anything else is a mistake and is refused, not guessed at."""
+    value = (env if env is not None else os.environ).get("SILVERLAKE_TLS_MIN", "1.2").strip()
+    try:
+        return {"1.2": ssl.TLSVersion.TLSv1_2, "1.3": ssl.TLSVersion.TLSv1_3}[value]
+    except KeyError:
+        raise ValueError(f"SILVERLAKE_TLS_MIN must be 1.2 or 1.3, not {value!r}") from None
+
+
 def server_context(directory: Path | None = None) -> ssl.SSLContext | None:
     """A server side TLS context from the certificate, or None when there is not one."""
     cert, key = paths(directory)
     if not (cert.exists() and key.exists()):
         return None
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.minimum_version = minimum_version()
     ctx.load_cert_chain(cert, key)
     return ctx
 

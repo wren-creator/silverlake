@@ -88,6 +88,9 @@ class FtpSession:
     # -- sign on ---------------------------------------------------------------------------------------------
 
     def _user(self, arg: str) -> Step:
+        if self.store.system.require_tls == "yes" and not self.secure:
+            self.user = None                                   # refused before a password is ever sent
+            return Step([(534, "Sign on requires TLS. Send AUTH TLS first, or use the TLS port.")])
         self.user, self.actor = arg, None
         return Step([(331, "Enter password.")])
 

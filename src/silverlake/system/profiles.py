@@ -72,6 +72,7 @@ class System:
     qpwdlmtajc: int = 0      # QPWDLMTAJC: 1 means no two adjacent digits
     qpwdlmtrep: int = 0      # QPWDLMTREP: 1 no repeated character at all, 2 not twice in a row
     qpwdrqddif: int = 0      # QPWDRQDDIF: 0 off, 1 to 8 are the IBM steps (32 down to 4 remembered passwords)
+    require_tls: str = "no"   # yes: FTP and the console take no sign-on until the connection is TLS (on a real system an exit program or the server's own setting does this)
 
 
 class ProfileStore:
@@ -406,6 +407,7 @@ def load(path: Path | str | None = None) -> ProfileStore:
         qpwdlmtajc=int(sysdata.get("qpwdlmtajc", 0)),
         qpwdlmtrep=int(sysdata.get("qpwdlmtrep", 0)),
         qpwdrqddif=int(sysdata.get("qpwdrqddif", 0)),
+        require_tls=str(sysdata.get("require_tls", "no")),
     )
     if system.qsecurity not in QSECURITY_LEVELS:
         raise SeedError(f"qsecurity must be one of {QSECURITY_LEVELS}, not {system.qsecurity}")
@@ -413,6 +415,8 @@ def load(path: Path | str | None = None) -> ProfileStore:
         raise SeedError(f"qpwdlvl must be 0 to 3, not {system.qpwdlvl}")
     if system.qpwdrqddif not in ProfileStore.HISTORY:
         raise SeedError(f"qpwdrqddif must be 0 to 8, not {system.qpwdrqddif}")
+    if system.require_tls not in ("no", "yes"):
+        raise SeedError(f"require_tls must be no or yes, not {system.require_tls}")
     if system.qpwdminlen > system.qpwdmaxlen:
         raise SeedError("qpwdminlen cannot be more than qpwdmaxlen")
 

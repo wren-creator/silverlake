@@ -129,7 +129,13 @@ def _release_and_pwdlevel(store) -> str:
     return f"{hostsvr.OS_LEVEL}/{store.system.qpwdlvl}"
 
 
-FACTS = {"release_and_pwdlevel": _release_and_pwdlevel}
+def _cleartext_signon_services(store) -> str:
+    """The services that take a password on a connection that is not TLS, by name and sorted. 5250 is left
+    out because the whole range signs on that way, so it cannot be this lesson's fix."""
+    return "none" if store.system.require_tls == "yes" else "ftp,httpadmin"
+
+
+FACTS = {"release_and_pwdlevel": _release_and_pwdlevel, "cleartext_signon_services": _cleartext_signon_services}
 
 CHECKS = {"new_privileged_profile": _new_privileged_profile, "salary_raised": _salary_raised,
           "student_reads_payroll": _student_reads_payroll, "readable_copy": _readable_copy,

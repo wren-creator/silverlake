@@ -28,7 +28,7 @@ def to_dict(store: ProfileStore) -> dict:
                    "qmaxsign": sysd.qmaxsign, "qmaxsgnacn": sysd.qmaxsgnacn, "qpwdexpitv": sysd.qpwdexpitv,
                    "qpwdexpwrn": sysd.qpwdexpwrn, "qpwdminlen": sysd.qpwdminlen, "qpwdmaxlen": sysd.qpwdmaxlen,
                    "qpwdrqddgt": sysd.qpwdrqddgt, "qpwdlmtajc": sysd.qpwdlmtajc, "qpwdlmtrep": sysd.qpwdlmtrep,
-                   "qpwdrqddif": sysd.qpwdrqddif},
+                   "qpwdrqddif": sysd.qpwdrqddif, "require_tls": sysd.require_tls},
         "scenarios": dict(store.scenarios),
         "ifs": ifs.to_rows(store.ifs),
         "profiles": [{

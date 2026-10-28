@@ -1,0 +1,32 @@
+id = "ftp-console-cleartext"
+title = "Which services take a password in clear text"
+group = "D"
+summary = "FTP and the web console accept a sign-on on a connection anyone on the path can read, even though both have a TLS port."
+
+[[change]]
+target = "system"
+field = "require_tls"
+vulnerable = "no"
+secure = "yes"
+
+[flag]
+kind = "fact"
+fact = "cleartext_signon_services"
+task = "Find out which of FTP and the HTTP console take a sign-on without TLS. Submit their names, lower case, sorted and joined by a comma (ftp,httpadmin), or none when neither does."
+
+[doc]
+where = "FTP 127.0.0.1:2121 and 2990, console 127.0.0.1:2001 and 2010 (start the range with ./start.sh --services)"
+parallel = "Most IBM i installs run FTP and the web administration console beside their TLS ports and never turn the clear ones off. A password sent that way can be read by anyone on the path, and a review of network services always asks which ports take one. The usual answers are a request exit program, the server's own setting to require TLS, or closing the clear port."
+vulnerability = "FTP on 2121 takes USER and PASS before AUTH TLS, and the console on 2001 asks for Basic credentials over plain HTTP. Both also have a TLS port, so TLS exists and is simply not required."
+mitre = ["T1040 Network Sniffing", "T1078 Valid Accounts", "T1021 Remote Services"]
+steps = [
+  "Scan the range's ports and note the pairs: 2121 and 2990 for FTP, 2001 and 2010 for the console.",
+  "ftp 127.0.0.1 2121, USER STUDENT, PASS STUDENT. It signs on. The password crossed the loopback in clear.",
+  "curl -i -u STUDENT:STUDENT http://127.0.0.1:2001/HTTPAdmin. The console answers with the page. Basic is only base64, so the password is as readable as the FTP one.",
+  "Optional, needs root: run tcpdump -i lo0 -A port 2121 (lo on Linux) and repeat the FTP login to see PASS STUDENT on the wire.",
+  "Repeat both on the TLS ports (explicit AUTH TLS on 2121, or 2990, and https on 2010 with --cacert .tls/cert.pem) and confirm the sign-on works there and the capture shows nothing readable.",
+  "Submit the names of the services that signed you on without TLS.",
+]
+consequence = "Anyone able to see the traffic reads a profile name and password and signs on as that person, with all their authority. A limited profile is still limited, but a powerful one is not."
+fix = "Require TLS (the secure state does: FTP answers 534 to USER before AUTH TLS, and the console answers 403 on 2001 without asking for credentials), then close or firewall the clear ports. On a real system that is the FTP server's secure-only setting or an exit program, and the HTTP server's own configuration."
+reference = "CIS controls on encrypting data in transit; CISA CPG on encrypted network traffic; IBM i Security Reference, network services."

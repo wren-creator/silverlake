@@ -25,6 +25,8 @@ The 5250 TLS port, the console TLS port, the FTP implicit port and the sign-on T
 
 Things to know when you point a tool at it:
 
+- **The real numbers.** `./start.sh --services --real-ports` (or `SILVERLAKE_REAL_PORTS=1`) uses 23, 992, 21, 990, 449 and 22 where they differ, and keeps the ones that already match (2001, 2010, 8476, 9476). A `SILVERLAKE_*_PORT` you set yourself still wins. Those ports are below 1024, so the account has to be allowed to bind them: root (and then the files in `state/` and `.venv/` should not be created by root, so start it as your user where you can), or on Linux `sudo sysctl net.ipv4.ip_unprivileged_port_start=0`. Recent macOS lets a normal user bind a low port on loopback, but that has not been checked here. If the bind fails the server says which port and nothing else starts. `./status.sh` and the loopback guard still apply, so the ports stay on 127.0.0.1.
+
 - **Clients with a port option** just need it: `tn5250 ssl:127.0.0.1:5992`, `ftp 127.0.0.1 2121`, a browser at `http://127.0.0.1:2001/HTTPAdmin` or `https://127.0.0.1:2010/HTTPAdmin`.
 - **Clients that hard code the real ports** (an FTP client that insists on 21, a host server client that goes to 449 first, a 5250 client that goes to 23 or 992) will not find anything. Either give them the port or forward the real one to ours, loopback only and needing root for a low port, for example `sudo socat TCP-LISTEN:21,bind=127.0.0.1,fork TCP:127.0.0.1:2121`. Silverlake does not do this for you.
 - **Scanners** need the port list: `nmap -p 5250,5992,2001,2010,2121,2990,4449,8476,9476,2222 127.0.0.1`. A default scan of 127.0.0.1 will not find 5250, 5992, 2121, 2990, 2222 or 4449, and a scan of the real port numbers will find nothing at 23, 992, 21, 990 or 449. The `ibmi-httpadmin-nse` script works as is, because 2001 and 2010 are the real ports.
@@ -36,9 +38,9 @@ Things to know when you point a tool at it:
 
 `./setup.sh` makes one throwaway certificate with the openssl command line tool: self-signed, 2048 bit RSA, SHA-256, for SILVERLAKE, valid for `localhost` and 127.0.0.1, kept in `.tls/` (gitignored, mode 0600 for the key). `./setup.sh --force-tls` makes a new one, `reset.sh` never touches it, and `SILVERLAKE_TLS_DIR` moves it. With no certificate, or no openssl, the TLS ports are skipped and the log says so.
 
-It is a self-signed certificate on purpose, as on a stock IBM i. A client has to be told to trust it (`curl --cacert .tls/cert.pem`, `ssl.create_default_context(cafile=".tls/cert.pem")`, or an explicit "accept" in a browser). TLS 1.2 is the minimum.
+It is a self-signed certificate on purpose, as on a stock IBM i. A client has to be told to trust it (`curl --cacert .tls/cert.pem`, `ssl.create_default_context(cafile=".tls/cert.pem")`, or an explicit "accept" in a browser). TLS 1.2 is the minimum, and `SILVERLAKE_TLS_MIN=1.3` makes it 1.3 (a client that offers only 1.2 is then refused in the handshake; any other value is an error at start).
 
-- **FTP** offers `AUTH TLS` on 2121: the control connection upgrades in place, then `PBSZ 0` and `PROT P` make data connections TLS too (`PROT C` keeps them clear). Port 2990 is TLS from the first byte. Clear text sign-on is still accepted on 2121, which is what a stock IBM i does too.
+- **FTP** offers `AUTH TLS` on 2121: the control connection upgrades in place, then `PBSZ 0` and `PROT P` make data connections TLS too (`PROT C` keeps them clear). Port 2990 is TLS from the first byte. Clear text sign-on is accepted on 2121 in the vulnerable state, which is what a stock IBM i does too; the `ftp-console-cleartext` lesson turns on `require_tls`, after which `USER` before `AUTH TLS` answers 534 and the console on 2001 answers 403 without asking for credentials.
 - **The console** serves the same pages on 2001 and 2010 from one state, so a server created on one shows on the other.
 - **The sign-on server** answers the same exchange on 9476.
 - **5250** on 5992 negotiates telnet inside TLS, the way `tn5250 ssl:` and Access Client Solutions do.

@@ -112,7 +112,7 @@ def _description(store: ProfileStore, raw: str) -> str:
     return DIRECTIVE.sub(run, raw)
 
 
-def handle(req: Request, store: ProfileStore, state: State) -> Response:
+def handle(req: Request, store: ProfileStore, state: State, secure: bool = True) -> Response:
     url = req.url.split("?", 1)[0]
     method = req.method.upper()
     if url in ("", "/"):
@@ -120,6 +120,9 @@ def handle(req: Request, store: ProfileStore, state: State) -> Response:
     if not url.startswith("/HTTPAdmin"):
         return _reply(404, _page(store, "Not found", "<p>The requested page was not found.</p>"))
 
+    if not secure and store.system.require_tls == "yes":       # no challenge on a clear connection: nothing to sniff
+        return _reply(403, _page(store, "TLS required", "<p>This console takes a sign-on over TLS only. "
+                                 "Use https on the TLS port (2010).</p>"))
     cred = _basic(req.headers.get("authorization"))
     result = store.check_signon(*cred) if cred else None
     if result is None or result.profile is None:
