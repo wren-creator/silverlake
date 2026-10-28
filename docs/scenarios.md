@@ -380,7 +380,32 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 ## Group E: PASE and the IFS
 
-### 16. The operations area nobody audited
+### 16. The transfer key in the data area
+
+**Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
+
+**Real-world parallel:** Data areas are the old place to keep a setting a program reads at run time, and people keep putting passwords and keys in them because nothing about one looks like a secret. The authority is on the object, so anyone who can reach the library and has *USE can read it, from a 5250 session with RTVDTAARA or from a shell with datarea.
+
+**Vulnerability:** APPLIB/PAYXFER is a data area with *PUBLIC *USE. Its text says what it is for, and its value holds the host, the user and the key of the payroll transfer.
+
+**MITRE ATT&CK:** T1552.001 Unsecured Credentials: Credentials In Files, T1083 File and Directory Discovery, T1005 Data from Local System
+
+**Exploit:**
+
+1. Sign on as STUDENT and CALL PGM(QP2TERM) (or ssh in).
+2. ls /QSYS.LIB/APPLIB.LIB lists the objects. PAYXFER.DTAARA is one of them.
+3. datarea only runs in QSH, so qsh -c 'datarea -r /QSYS.LIB/APPLIB.LIB/PAYXFER.DTAARA' prints the value. Running datarea straight from the shell says cannot execute.
+4. The key is in the value.
+
+**Consequence in the sim:** Anyone with a login can read the credentials the payroll transfer uses to reach the bank gateway.
+
+**Flag:** As STUDENT, find the data area in APPLIB that holds the payroll transfer settings and read the transfer key out of it.
+
+**Fix:** Keep secrets out of data areas, or take public authority off the area (the secure state does: *EXCLUDE) and give it to the one profile that runs the transfer. Rotate a key that was exposed. (`./scenario.sh set pase-datarea-secret secure`)
+
+**Reference:** CWE-312 Cleartext Storage of Sensitive Information; IBM i Security Reference, object authority; MITRE ATT&CK T1552.
+
+### 17. The operations area nobody audited
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
 
@@ -406,7 +431,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-732 Incorrect Permission Assignment for Critical Resource; CIS Benchmarks on world writable files; MITRE ATT&CK T1222.
 
-### 17. A writable directory at the front of the operator's PATH
+### 18. A writable directory at the front of the operator's PATH
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -432,7 +457,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-426 Untrusted Search Path; CIS Benchmarks on PATH and world writable directories; MITRE ATT&CK T1574.007.
 
-### 18. The system profile that anyone can write and every login runs
+### 19. The system profile that anyone can write and every login runs
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -458,7 +483,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i PASE documentation on shell startup files; CIS Benchmarks for AIX and Linux on profile file permissions; MITRE ATT&CK T1546.004.
 
-### 19. A clerk with no command line who can still open a shell over ssh
+### 20. A clerk with no command line who can still open a shell over ssh
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 
@@ -472,7 +497,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 1. Confirm at the 5250 that CLERK has no command line.
 2. ssh -p 2222 CLERK@127.0.0.1 and use CLERK as the password.
-3. cat /QSYS.LIB/APPLIB.LIB/DAILYOPS.FILE, or db2 "select * from applib.dailyops", or system 'DSPLIBL'.
+3. cat /QSYS.LIB/APPLIB.LIB/DAILYOPS.FILE, or qsh -c 'db2 "select * from applib.dailyops"', or system 'DSPLIBL'.
 4. Read the ticket.
 
 **Consequence in the sim:** The clerk who could not leave a menu has a shell, SQL and CL, all with the clerk's own authority.
@@ -483,7 +508,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, limited capability; OpenSSH sshd_config(5), DenyUsers and AllowUsers; CIS Benchmarks for SSH server configuration.
 
-### 20. A key file anyone can write, and an ssh daemon that does not mind
+### 21. A key file anyone can write, and an ssh daemon that does not mind
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 

@@ -248,6 +248,17 @@ text = "Application library"
 
 [[object]]
 library = "APPLIB"
+name = "PAYXFER"
+type = "*DTAARA"
+owner = "QSECOFR"
+public = "*USE"
+text = "Payroll transfer settings"
+[object.data]
+length = 80
+value = "HOST=bank-gw.example.com USER=payxfer KEY=@@FLAG:pase-datarea-secret@@"
+
+[[object]]
+library = "APPLIB"
 name = "PAYROLL"
 type = "*FILE"
 owner = "QSECOFR"

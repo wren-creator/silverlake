@@ -20,6 +20,20 @@ Two behaviors that surprise people, both from the P1 run below: a line that does
 
 **`system`.** `system 'DSPLIBL'` runs a CL command through the same dispatcher as the command line, as the signed on profile, in this process. It gets that profile's authority and nothing more, and it never reaches a host shell.
 
+## The IBM i side: QSH and friends (B3)
+
+Wording and statuses come from three read-only PUB400 runs on 2026-10-28 (`ssh-pase-b3a`, `b3b`, `b3c`, kept local). Ten commands: `qsh`, `datarea`, `dataq`, `catsplf`, `getjobid`, `sysval`, `getconf`, `dspmsg`, `setccsid` and `Rfile`.
+
+**`qsh -c 'line'`** (or a script on standard input) runs the line in QSH. Three things change inside it: `datarea`, `dataq`, `catsplf` and `db2` run, which bsh refuses with `bsh: X: cannot execute` (status 1); a command that is not there is `qsh: 001-0019 Error found searching for command X. No such path or directory.` with status 127; and `ls` and `cd` of a missing path use QSH's wording (`ls: 001-2113 Error found getting information for object X. No such path or directory.`, `cd: 001-0008 Error found changing to directory X.`, both status 1). `exit` ends QSH and not the shell that started it. Not copied: QSH's `$0`, its home directory and its upper case user name.
+
+**`datarea -r|-w [-l] [-s start[,length]] /QSYS.LIB/LIB.LIB/NAME.DTAARA [data]`** reads or changes a character data area, which is a `*DTAARA` object (`WRKOBJ OBJTYPE(*DTAARA)` lists them). Reading needs `*USE`, writing `*CHANGE`, and the library has to be reachable. A name that is not a path into QSYS.LIB gets `datarea: 001-2242 Path name X must specify an object in the QSYS.LIB file system.`, a missing object `001-2113 ... No such path or directory.`, and a call with nothing to do prints `001-0098` and the usage under `001-3111`. **Unchecked:** what a successful read prints (Silverlake prints the value with trailing blanks cut), what `-l` means (accepted and ignored), and the wording of a refusal for lack of authority (a guess in the same `001-2113` form). **`dataq`** (`-c` create, `-r` read with `-p` to look without taking and `-n` for a count, `-w` write) is a `*DTAQ` object kept in order and capped at 100 entries; only its usage line and the two path errors were seen, the rest is built from the usage text. **`catsplf -j number/user/name [-aen] name number`** (or `-p pid`) prints a spooled file the profile may display (the same rule as DSPSPLF). Seen: the usage, `001-2373 Job X was not found.` and `001-2193` for a process that is not the shell's. **Unchecked:** the output of a real file and the errors for a missing file or no authority.
+
+**`getjobid`** prints `Process identifier 872856 is 679199/QUSER/QP0ZSPWT` (`-s` the job alone, `-v` a table, `-j` as the default). The numbers are made up in the same shape as PUB400's, which change at every login. **`sysval [-p] name ...`** prints a system value, one per line (`-p` as `NAME=value`, `-n` for network attributes such as `SYSNAME`). The ones Silverlake models (`QSECURITY QPWDLVL QMAXSIGN QMAXSGNACN QPWDEXPITV QPWDEXPWRN QPWDMINLEN QPWDMAXLEN QPWDRQDDGT QPWDLMTAJC QPWDLMTREP QPWDRQDDIF`) come from the live settings, so a lesson that changes one changes what `sysval` says; `QCCSID QMODEL QLANGID QSRLNBR` and a few more are fixed (the serial number is made up). An unknown name is `sysval: 001-2219 System value X is not valid.` **`getconf`** answers `PATH PAGESIZE CHILD_MAX ARG_MAX OPEN_MAX` and, with a path, `NAME_MAX`; anything else is `getconf: specified variable is not valid on this system` (status 2). `getconf -a` is not built: on PUB400 it dropped the connection. **`dspmsg`** is the AIX catalog utility and not the IBM i message file command; with no catalog it prints the default text with `%s` filled in (PUB400 printed it with no newline at the end; Silverlake ends the line). **`setccsid`** checks the arguments and the file and then succeeds, because the virtual IFS keeps no CCSID. **`Rfile`** has its usage line (status 2) and `-r`, which prints the records like `cat` (a guess); writing is not built.
+
+The lesson **pase-datarea-secret** (group E) uses it: `APPLIB/PAYXFER` is a data area with public `*USE` and the payroll transfer key in its value. `ls /QSYS.LIB/APPLIB.LIB` shows it and `qsh -c 'datarea -r /QSYS.LIB/APPLIB.LIB/PAYXFER.DTAARA'` reads it. The fix takes public authority off (`*EXCLUDE`).
+
+**Not built: `clrtmp`.** It deletes, so it was never run on the shared host, and there is nothing in Silverlake for it to clean.
+
 ## The virtual IFS
 
 A node is data: a directory or a stream file, with an owner, owner bits, public bits, optional private entries per profile, and (for files) text. It is kept in the store and saved with the rest of the state, from the seed in `src/silverlake/data/ifs.toml`. `/QSYS.LIB` is not stored but mapped onto the library and object store that the 5250 side uses.
@@ -37,7 +51,7 @@ Not modeled: group bits (the long listing repeats the public bits there), author
 
 ## SQL: `db2`
 
-`db2 "select name from applib.payroll where empno = 10003"` runs one SQL statement as the signed on profile over the physical files (system/sql.py). A file is named `LIB.FILE`, `LIB/FILE` or just `FILE` through the library list. SELECT, INSERT, UPDATE and DELETE are built, and so is `CALL QSYS2.QCMDEXC('CL command')`, which runs CL through the dispatcher as the same profile.
+Run it inside QSH: `qsh -c 'db2 "select name from applib.payroll where empno = 10003"'`. On PUB400 `db2` in `/usr/bin` is a link to `/QSYS.LIB/QZDFMDB2.PGM`, which bsh cannot execute (`bsh: db2: cannot execute`), and so do `datarea`, `dataq` and `catsplf`; QSH can. Silverlake does the same. What follows is the statement itself, as it runs in QSH: `db2 "select name from applib.payroll where empno = 10003"` runs one SQL statement as the signed on profile over the physical files (system/sql.py). A file is named `LIB.FILE`, `LIB/FILE` or just `FILE` through the library list. SELECT, INSERT, UPDATE and DELETE are built, and so is `CALL QSYS2.QCMDEXC('CL command')`, which runs CL through the dispatcher as the same profile.
 
 Authority is checked before anything runs: SELECT needs `*USE` on the file, INSERT `*OBJOPR` and `*ADD`, UPDATE `*OBJOPR` and `*UPD`, DELETE `*OBJOPR` and `*DLT`, with `*EXECUTE` on the library and `*ALLOBJ` passing. So a profile that may read a file reads it through SQL without going through the program that guards it (the same lesson as CPYF). A refusal is `SQL0551`, a missing file `SQL0204`, anything else the runner will not do `SQL0104`.
 
@@ -66,7 +80,7 @@ With `./start.sh --services` and asyncssh installed (`./setup.sh --ssh`), an ssh
 The daemon's settings are `/QOpenSys/etc/ssh/sshd_config` and the `.conf` files in `sshd_config.d/` beside it, re-read at every login, first value wins. It reads `PasswordAuthentication`, `PubkeyAuthentication`, `StrictModes`, `DenyUsers` and `AllowUsers`, and ignores the rest. With `StrictModes yes` a key file, its `.ssh` directory or the home directory that others can write is not trusted. Two lessons use it (group E):
 
 - **ssh-strictmodes.** `StrictModes no` and a world writable `/home/DEVELOPER/.ssh/authorized_keys`. STUDENT appends a public key and logs in as DEVELOPER.
-- **ssh-limited-bypass.** CLERK has no command line at the 5250 and a shell over ssh, with the shell's `cat`, `db2` and `system`. The fix is `DenyUsers CLERK`.
+- **ssh-limited-bypass.** CLERK has no command line at the 5250 and a shell over ssh, with the shell's `cat`, `system`, and `db2` through `qsh -c`. The fix is `DenyUsers CLERK`.
 
 The version banner says AsyncSSH, not OpenSSH, so a scanner can tell it is not a real sshd.
 
@@ -90,7 +104,7 @@ A second read-only ssh run listed the directories on the login `PATH` (`ls` only
 - **Shells:** `bsh` (the login shell), `sh`, `ksh`, `ksh93`, `csh`, `psh` and `qsh` in `/QOpenSys/usr/bin`, and `bash` in `/usr/bin` (installed on this host, not stock).
 - **Builtins:** `type` says `echo`, `cd` and `pwd` are shell builtins, and `ls`, `cat` and `id` are separate programs in `/QOpenSys/usr/bin`. Silverlake treats `cd`, `pwd`, `echo`, `export` and `exit` as the shell's own, which agrees.
 - **The classics are all there:** `ls cat cp mv rm mkdir rmdir touch chmod chown ln find grep sed awk sort uniq head tail wc cut tr tar pax diff more vi ed make xargs env printenv date uname hostname logname ps kill sleep time test expr printf`.
-- **IBM i bridges:** `system` (run CL), `qsh`, `db2` (in `/usr/bin`, so the name Silverlake uses is right, and its output layout is still unchecked), `dspmsg`, `catsplf`, `dataq`, `datarea`, `getjobid`, `setccsid`, `sysval`, `clrtmp`, `Rfile`.
+- **IBM i bridges:** `system` (run CL), `qsh`, `db2` (in `/usr/bin` and only runnable from QSH, and its output layout is still unchecked), `dspmsg`, `catsplf`, `dataq`, `datarea`, `getjobid`, `setccsid`, `sysval`, `clrtmp`, `Rfile`.
 - **Network and remote:** `ssh ssh-keygen ssh-copy-id ssh-keyscan ssh-agent scp sftp slogin rsync`, `dig host nslookup`, `ldapsearch`, and `sshd` in `/usr/sbin`.
 - **Runtimes:** `java javac jar`, and `node` and `npm`.
 - **Not there:** `whoami`, `who`, `curl`, `wget`, `nc`, `ping`.

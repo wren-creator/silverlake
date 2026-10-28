@@ -320,7 +320,28 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 ## Group E: PASE and the IFS
 
-### 16. The operations area nobody audited
+### 16. The transfer key in the data area
+
+**Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
+
+**Real-world parallel:** Data areas are the old place to keep a setting a program reads at run time, and people keep putting passwords and keys in them because nothing about one looks like a secret. The authority is on the object, so anyone who can reach the library and has *USE can read it, from a 5250 session with RTVDTAARA or from a shell with datarea.
+
+**Vulnerability:** APPLIB/PAYXFER is a data area with *PUBLIC *USE. Its text says what it is for, and its value holds the host, the user and the key of the payroll transfer.
+
+**MITRE ATT&CK:** T1552.001 Unsecured Credentials: Credentials In Files, T1083 File and Directory Discovery, T1005 Data from Local System
+
+**Exploit:**
+
+1. Sign on as STUDENT and CALL PGM(QP2TERM) (or ssh in).
+2. ls /QSYS.LIB/APPLIB.LIB lists the objects. PAYXFER.DTAARA is one of them.
+3. datarea only runs in QSH, so qsh -c 'datarea -r /QSYS.LIB/APPLIB.LIB/PAYXFER.DTAARA' prints the value. Running datarea straight from the shell says cannot execute.
+4. The key is in the value.
+
+**Consequence in the sim:** Anyone with a login can read the credentials the payroll transfer uses to reach the bank gateway.
+
+**Flag:** As STUDENT, find the data area in APPLIB that holds the payroll transfer settings and read the transfer key out of it.
+
+### 17. The operations area nobody audited
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
 
@@ -342,7 +363,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Flag:** As STUDENT, find everything under /QOpenSys/var/ops that anyone can write to. Submit the paths, sorted and joined by a comma with no spaces, or none if there are none.
 
-### 17. A writable directory at the front of the operator's PATH
+### 18. A writable directory at the front of the operator's PATH
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -364,7 +385,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Flag:** As STUDENT, get a copy of the payroll file into the IFS that STUDENT can read, by making the operator's own login do the copying. Then play the operator: sign on as OPERATOR and run CALL PGM(QP2TERM).
 
-### 18. The system profile that anyone can write and every login runs
+### 19. The system profile that anyone can write and every login runs
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -386,7 +407,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Flag:** As STUDENT, get a copy of the payroll file into the IFS that STUDENT can read, without STUDENT ever being allowed to read APPLIB/PAYROLL. Then play the security officer: open a second session as QSECOFR and run CALL PGM(QP2TERM).
 
-### 19. A clerk with no command line who can still open a shell over ssh
+### 20. A clerk with no command line who can still open a shell over ssh
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 
@@ -400,14 +421,14 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 1. Confirm at the 5250 that CLERK has no command line.
 2. ssh -p 2222 CLERK@127.0.0.1 and use CLERK as the password.
-3. cat /QSYS.LIB/APPLIB.LIB/DAILYOPS.FILE, or db2 "select * from applib.dailyops", or system 'DSPLIBL'.
+3. cat /QSYS.LIB/APPLIB.LIB/DAILYOPS.FILE, or qsh -c 'db2 "select * from applib.dailyops"', or system 'DSPLIBL'.
 4. Read the ticket.
 
 **Consequence in the sim:** The clerk who could not leave a menu has a shell, SQL and CL, all with the clerk's own authority.
 
 **Flag:** Use the clerk's own password over ssh to read the shell access review ticket in APPLIB/DAILYOPS.
 
-### 20. A key file anyone can write, and an ssh daemon that does not mind
+### 21. A key file anyone can write, and an ssh daemon that does not mind
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 

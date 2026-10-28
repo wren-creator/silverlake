@@ -1,10 +1,10 @@
 # PASE commands: the plan
 
-The simulated PASE shell has 36 commands. PUB400's real one has about 290 in `/QOpenSys/usr/bin` alone. This plan adds commands ten at a time, in the order that teaches the most for the least work, and says what will never be built. The checkable version is in [ROADMAP.md](../ROADMAP.md).
+The simulated PASE shell has 46 commands. PUB400's real one has about 290 in `/QOpenSys/usr/bin` alone. This plan adds commands ten at a time, in the order that teaches the most for the least work, and says what will never be built. The checkable version is in [ROADMAP.md](../ROADMAP.md).
 
 ## Where it stands
 
-Built (36): `pwd cd ls cat id echo env printenv export exit` and `mkdir touch rm cp mv chmod` and `system db2` and the read-only batch `uname hostname date logname ps head tail wc grep` and B2, `basename dirname which type test [ file rmdir umask du find` (`[` is `test`). The first ten are the first slice, the next sixteen came with the writing set, SQL and the PUB400 batch, and the last ten with B2.
+Built (46): `pwd cd ls cat id echo env printenv export exit` and `mkdir touch rm cp mv chmod` and `system db2` and the read-only batch `uname hostname date logname ps head tail wc grep` and B2, `basename dirname which type test [ file rmdir umask du find` (`[` is `test`), and B3, `qsh datarea dataq catsplf getjobid sysval getconf dspmsg setccsid Rfile` (not `clrtmp`, which deletes). The first ten are the first slice, the next sixteen came with the writing set, SQL and the PUB400 batch, and the last ten with B2.
 
 Built in P2: pipes, `<`, standard input for `cat head tail wc grep`, and backticks; no `$()`, because bsh has none (the P2 capture). Built in P1: exit statuses and `$?`, `;` `&&` `||`, and globbing (no `~`: bsh has no tilde expansion, as the P1 capture showed). `Shell.run` still returns a list of lines, and the status is read from `Shell.status`, so nothing that calls the shell changed. Not built, and it limits what the commands can do: pipes, input redirection, command substitution, and scripts with `if` or `for`. `head`, `tail`, `wc` and `grep` need a file name today because there is nothing to pipe into them.
 
@@ -37,7 +37,7 @@ The order follows what each batch needs. Text filters are useless without pipes,
 A batch ships a lesson only when it makes something findable that was not.
 
 - **B2**, `pase-find-writable`: `find / -perm -002` shows the world writable directories and files that make the PATH and profile lessons work. `umask` and `which` tie into the PATH lesson. Also gives the "I found it myself" path into the lessons already there.
-- **B3**: `sysval QPWDLVL` reads a system value from the shell (the same fact the sign-on server gave away), `catsplf` reads someone's spool file if the authority is loose, and `datarea` reads a secret from a data area. Two or three lessons, depending on what the object model can carry.
+- **B3**, built with `pase-datarea-secret` (a key in a data area, read through `qsh -c datarea`); the `sysval` and `catsplf` lessons are still open. `sysval QPWDLVL` reads a system value from the shell (the same fact the sign-on server gave away), `catsplf` reads someone's spool file if the authority is loose, and `datarea` reads a secret from a data area. Two or three lessons, depending on what the object model can carry.
 - **B4**, `pase-secrets-in-profile`: a password left in a `.profile` or a script, found with `grep`, `sed` and `cut`.
 - **B7**, `pase-key-hygiene`: a private key left in a readable directory, found with `find` and `ssh-keygen -l`.
 - **B5, B6 and B8** ship commands only.

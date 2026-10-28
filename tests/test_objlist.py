@@ -58,7 +58,7 @@ def test_only_libraries_you_can_use_and_objects_you_have_authority_to(store):
 
 def test_wrkobj_rejects_bad_names_and_unmodeled_types(store):
     assert "not valid" in run(store, "QSECOFR", "WRKOBJ OBJ(APPLIB/A*B)")
-    assert "not modeled" in run(store, "QSECOFR", "WRKOBJ OBJ(APPLIB/*ALL) OBJTYPE(*DTAARA)")
+    assert "not modeled" in run(store, "QSECOFR", "WRKOBJ OBJ(APPLIB/*ALL) OBJTYPE(*USRSPC)")
 
 
 def test_wrkobjown(store):

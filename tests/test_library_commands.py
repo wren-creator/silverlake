@@ -304,7 +304,7 @@ def test_revoke_authorization_list(store):
 def test_binder_refusals(store):
     assert "Required parameter OBJTYPE" in run(store, "QSECOFR", "DSPOBJAUT OBJ(APPLIB/CUSTOMERS)")
     assert "Required parameter OBJ" in run(store, "QSECOFR", "GRTOBJAUT")
-    assert "not modeled yet" in run(store, "QSECOFR", "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*DTAARA)")
+    assert "not modeled yet" in run(store, "QSECOFR", "DSPOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*USRSPC)")
     assert "Generic names" in run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/*ALL) OBJTYPE(*FILE) USER(STUDENT)")
     assert "Generic names" in run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUS*) OBJTYPE(*FILE) USER(STUDENT)")
     assert "AUT not valid" in run(store, "QSECOFR", "GRTOBJAUT APPLIB/CUSTOMERS *FILE STUDENT AUT(*BOGUS)")

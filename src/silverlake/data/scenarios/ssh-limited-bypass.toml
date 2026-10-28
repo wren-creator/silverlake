@@ -23,7 +23,7 @@ mitre = ["T1078 Valid Accounts", "T1021.004 Remote Services: SSH", "T1005 Data f
 steps = [
   "Confirm at the 5250 that CLERK has no command line.",
   "ssh -p 2222 CLERK@127.0.0.1 and use CLERK as the password.",
-  "cat /QSYS.LIB/APPLIB.LIB/DAILYOPS.FILE, or db2 \"select * from applib.dailyops\", or system 'DSPLIBL'.",
+  "cat /QSYS.LIB/APPLIB.LIB/DAILYOPS.FILE, or qsh -c 'db2 \"select * from applib.dailyops\"', or system 'DSPLIBL'.",
   "Read the ticket.",
 ]
 consequence = "The clerk who could not leave a menu has a shell, SQL and CL, all with the clerk's own authority."

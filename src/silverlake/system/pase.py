@@ -40,7 +40,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from fnmatch import fnmatchcase
 
-from . import ifs
+from . import ifs, pasei, spool
+from .authority import Auth, SecuredObject, SpecialAuthority
 from .profiles import Profile, ProfileStore
 
 BANNER = "Simulated PASE terminal. Not an AIX runtime: a few commands over a virtual IFS."
@@ -53,6 +54,9 @@ MAX_COMMANDS = 100                             # per line, so `;` cannot be used
 MAX_GLOB = 1000                                # names one pattern may produce, and directory entries it may look at
 SYSTEM_PATH = "/QOpenSys/usr/bin:/usr/bin"
 BUILTINS = frozenset({"cd", "pwd", "echo", "export", "exit", "logout"})
+QSH_ONLY = frozenset({"db2", "datarea", "dataq", "catsplf"})      # symlinks into QSYS.LIB programs: bsh says `cannot execute`
+JOB_PID = 872856                               # what getjobid and ps show for this shell, made up like PUB400's own numbers
+JOB_ID = "679199/QUSER/QP0ZSPWT"
 NODE_NAME = "SILVERLAKE"
 HOST_NAME = "SILVERLAKE.LOCALDOMAIN"
 MACHINE_ID = "0078000000A1"                    # made up: a real one is the machine's serial based id
@@ -79,6 +83,8 @@ class Shell:
     sub_errors: list = field(default_factory=list)   # what a backtick command printed to stderr, shown ahead of its line
     sub_depth: int = 0
     umask: int = 0o022                           # the mask new files and directories are made with (PUB400 started at 022)
+    qsh_level: int = 0
+    qsh: bool = False                            # inside `qsh -c`: the QSYS.LIB utilities run, and errors use QSH's wording
     batch: bool = False                          # a command run with no terminal (ssh host cmd): a failed cd or export ends it
     job: object = None
     clock: object = None                         # a callable giving "now" in UTC, for tests; None means the real time
@@ -254,12 +260,18 @@ class Shell:
                     return shown + [Err(f"bsh: {redir_in}: cannot open")]
         name, args = words[0], words[1:]
         script = None if name in BUILTINS else self.find_script(name)
-        fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[a-z][a-z0-9]*", name) else None
+        fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", name) else None
         if name == "[":
             fn = self.cmd_bracket
         if script is None and ("/" in name or fn is None):
+            if self.qsh:
+                self.status = 127
+                return shown + [Err(f"qsh: 001-0019 Error found searching for command {name}. No such path or directory.")]
             self.status = 1                                    # PUB400's bsh, not the 127 other shells give
             return shown + [Err(f"bsh: {name}: not found")]
+        if script is None and name in QSH_ONLY and not self.qsh:
+            self.status = 1
+            return shown + [Err(f"bsh: {name}: cannot execute")]
         before, self.stdin = self.stdin, (None if script is not None else stdin)
         try:
             out = self.run_script(script, name) if script is not None else fn(args)
@@ -540,6 +552,9 @@ class Shell:
         try:
             entry = ifs.lookup(self.store, self.actor, target)
         except ifs.IfsError as exc:
+            if self.qsh and exc.kind == "ENOENT":
+                self.status = 1
+                return [Err(f"cd: 001-0008 Error found changing to directory {given}.")]
             return self._abort([self._cd_error(exc, given)])
         if not entry.is_dir:
             return self._abort([f"{given}: Not a directory"])
@@ -575,6 +590,10 @@ class Shell:
                 entry = ifs.lookup(self.store, self.actor, target)
                 rows = ifs.listdir(self.store, self.actor, target) if entry.is_dir else [entry]
             except ifs.IfsError as exc:
+                if self.qsh and exc.kind == "ENOENT":
+                    out.append(Err(f"ls: 001-2113 Error found getting information for object {given}. No such path or directory."))
+                    self.status = 1
+                    continue
                 out.append(self._ls_error(exc, given))
                 self.status = 2
                 continue
@@ -732,7 +751,7 @@ class Shell:
         from ..net import textview
         if not args:
             self.status = 2
-            return [Err("system: 0653-401 usage: system 'CL command'")]
+            return [Err("Usage: system [-beEhiIkKnOpqsv] command")]      # PUB400's own line
         line = " ".join(args)
         outcome = commands.execute(self.store, self.actor, line, self._job())
         message = outcome.message
@@ -751,12 +770,269 @@ class Shell:
         """Run one SQL statement as the signed on profile, over the physical files (system/sql.py)."""
         from . import sql
         if not args:
-            self.status = 2
-            return [Err("db2: usage: db2 \"SQL statement\"")]
+            self.status = 4                          # the usage line went to stdout, status 4 (PUB400, qsh -c db2)
+            return ['  USAGE: CMD ¬-v| ¬-S| ¬-s| ¬-t ! -T<char> ! -d| ¬-r RDBNAME ¬-u USERNAME -p PASSWORD| | <"SQLSTMT" ! -i ! -f FILENAME DEFAULT_LIB>']
         result = sql.run(self.store, self.actor, self._job(), " ".join(args))
         if result.error:
             self.status = 4                          # the db2 command line returns 4 for an SQL error, from IBM's page, not seen here
         return [Err(l) for l in sql.render(result)] if result.error else sql.render(result)
+
+    # -- B3: the IBM i side, wording copied from PUB400 (ssh-pase-b3a, b3b, b3c, 2026-10-28) ---------------------------
+
+    def cmd_qsh(self, args: list[str]) -> list[str]:
+        """QSH, the other shell. `qsh -c 'line'` or a script on standard input. datarea, dataq, catsplf and db2 only run
+        inside it (bsh says `cannot execute`), and its errors read differently."""
+        if args[:1] == ["-c"] and len(args) >= 2:
+            lines = [args[1]]
+        elif not args and self.stdin is not None:
+            lines = list(self.stdin)
+        else:
+            self.status = 2
+            return [Err("qsh: 001-0019 Error found searching for command. Use qsh -c 'command'.")]
+        if self.qsh_level >= MAX_DEPTH:
+            self.status = 1
+            return [Err("qsh: too many nested shells")]
+        before = (self.qsh, self.done, self.leaving, self.stdin)
+        self.qsh, self.stdin = True, None
+        self.qsh_level += 1
+        out: list[str] = []
+        try:
+            for line in lines[:200]:
+                out += self.run(line)
+                if self.done or self.leaving:
+                    break
+        finally:
+            self.qsh_level -= 1
+            self.qsh, self.done, self.leaving, self.stdin = before
+        return out
+
+    def _usage(self, name: str, code: str, lines: list[str], missing: bool = False) -> list[str]:
+        self.status = 1
+        head = [Err(f"{name}: 001-0098 Required argument is not specified.")] if missing else []
+        return head + [Err(f"{name}: {code} usage:")] + [Err("    " + l) for l in lines]
+
+    DATAREA_USAGE = ["datarea -r [-l] [-s substring] data-area", "datarea -w [-l] [-s substring] data-area [data ...]"]
+    DATAQ_USAGE = ["dataq -c queue", "dataq -r [-lp] [-n number] [-t seconds] queue", "dataq -w [-l] [-n number] queue [data ...]"]
+
+    def _qsys_object(self, name: str, given: str, want: str, need):
+        """(object, None) or (None, error lines). `need` is the authority the use wants, from pasei.may."""
+        path = self.path(given)
+        found, why = pasei.find_object(self.store, self.actor, path, want)
+        if why == "must specify an object in the QSYS.LIB file system.":
+            self.status = 1
+            return None, [Err(f"{name}: 001-2242 Path name {given} must specify an object in the QSYS.LIB file system.")]
+        if found is None:
+            self.status = 1
+            return None, [Err(f"{name}: 001-2113 Error found getting information for object {path}. No such path or directory.")]
+        if not pasei.may(self.store, self.actor, found, need):
+            self.status = 1                              # not captured: the wording of a refusal here is a guess
+            return None, [Err(f"{name}: 001-2113 Error found getting information for object {path}. Permission denied.")]
+        return found, None
+
+    @staticmethod
+    def _options(args: list[str], with_value: str) -> tuple[set[str], dict[str, str], list[str]] | None:
+        """Single letter options, the ones in `with_value` taking the next word; None when one is missing its value."""
+        flags: set[str] = set()
+        values: dict[str, str] = {}
+        i = 0
+        while i < len(args) and args[i].startswith("-") and len(args[i]) > 1:
+            for n, ch in enumerate(args[i][1:]):
+                if ch in with_value:
+                    rest = args[i][n + 2:]
+                    if rest:
+                        values[ch] = rest
+                    elif i + 1 < len(args):
+                        i += 1
+                        values[ch] = args[i]
+                    else:
+                        return None
+                    break
+                flags.add(ch)
+            i += 1
+        return flags, values, args[i:]
+
+    def cmd_datarea(self, args: list[str]) -> list[str]:
+        parsed = self._options(args, "s")
+        if parsed is None or not ({"r", "w"} & parsed[0]) or not parsed[2]:
+            return self._usage("datarea", "001-3111", self.DATAREA_USAGE, missing=True)
+        flags, values, rest = parsed
+        write = "w" in flags and "r" not in flags
+        obj, err = self._qsys_object("datarea", rest[0], "*DTAARA", Auth.UPD if write else Auth.READ)
+        if err:
+            return err
+        if write:
+            pasei.area_set(self.store, obj, " ".join(rest[1:]), values.get("s"))
+            return []
+        return [pasei.area_text(obj, values.get("s")).rstrip()]
+
+    def cmd_dataq(self, args: list[str]) -> list[str]:
+        parsed = self._options(args, "nt")
+        if parsed is None or not ({"r", "w", "c"} & parsed[0]) or not parsed[2]:
+            return self._usage("dataq", "001-3110", self.DATAQ_USAGE, missing=True)
+        flags, values, rest = parsed
+        if "c" in flags:
+            key = pasei.parse_qsys_path(self.path(rest[0]))
+            lib = self.store.find_library(key[0]) if key and key[2] == "*DTAQ" else None
+            if lib is None:
+                return self._qsys_object("dataq", rest[0], "*DTAQ", Auth.READ)[1] or []
+            if (key[0], key[1], "*DTAQ") in self.store.objects:
+                self.status = 1
+                return [Err(f"dataq: 001-2113 Error found creating object {self.path(rest[0])}. Object already exists.")]
+            if Auth.ADD not in self.store.object_authority(self.actor, lib) and \
+                    SpecialAuthority.ALLOBJ not in self.store.special_authorities(self.actor):
+                self.status = 1
+                return [Err(f"dataq: 001-2113 Error found creating object {self.path(rest[0])}. Permission denied.")]
+            obj = SecuredObject(key[1], self.actor.name, library=key[0], type="*DTAQ", public=lib.public,
+                                data={"entries": [], "maxlen": 128})
+            self.store.objects[obj.key] = obj
+            self.store.on_change()
+            return []
+        write = "w" in flags and "r" not in flags
+        obj, err = self._qsys_object("dataq", rest[0], "*DTAQ", Auth.UPD if write else Auth.READ)
+        if err:
+            return err
+        entries: list[str] = obj.data.setdefault("entries", [])
+        if write:
+            entries.append(" ".join(rest[1:])[:int(obj.data.get("maxlen", 128))])
+            del entries[:-pasei.MAX_QUEUE]
+            self.store.on_change()
+            return []
+        count = int(values["n"]) if values.get("n", "").isdigit() else 1
+        taken = entries[:count]
+        if "p" not in flags:
+            del entries[:count]
+            self.store.on_change()
+        return taken
+
+    def cmd_catsplf(self, args: list[str]) -> list[str]:
+        usage = ["catsplf -j qualified-job [-aen] splfname splfnum", "catsplf -p pid [-aen] splfname splfnum"]
+        parsed = self._options(args, "jp")
+        if parsed is None or ("j" not in parsed[1] and "p" not in parsed[1]) or len(parsed[2]) != 2:
+            return self._usage("catsplf", "001-3113", usage, missing=True)
+        _, values, (name, number) = parsed
+        if "p" in values:
+            if values["p"] != str(JOB_PID):
+                self.status = 1
+                return [Err(f"catsplf: 001-2193 Error found getting job identifier for process identifier {values['p']}.")]
+            job = JOB_ID
+        else:
+            job = values["j"]
+        if not re.fullmatch(r"\d+|\*LAST|\*ONLY|\*ANY", number.upper()):
+            self.status = 1
+            return [Err(f"catsplf: 001-0032 Number {number} is not valid.")]      # a guess: the wording is getjobid's
+        parts = job.split("/")
+        known = len(parts) == 3 and (job == JOB_ID or any(f.job == job for f in self.store.spool))
+        if not known:
+            self.status = 1
+            return [Err(f"catsplf: 001-2373 Job {job} was not found.")]
+        found, why = spool.find(self.store, self.actor, name.upper(), (parts[2], parts[1], parts[0]), number)
+        if found is None:
+            self.status = 1                              # the wording below is a guess: only the missing job was captured
+            return [Err(f"catsplf: {why.text}" if why.id == "CPF3492" else
+                        f"catsplf: Spooled file {name} number {number} was not found in job {job}.")]
+        return list(found.lines)
+
+    def cmd_getjobid(self, args: list[str]) -> list[str]:
+        parsed = self._options(args, "")
+        if parsed is None or parsed[0] - set("jsv"):
+            self.status = 1
+            return [Err("getjobid: 001-3027 usage: getjobid [-jsv] [pid ...]")]
+        flags, _, pids = parsed
+        out: list[str] = []
+        for pid in pids:
+            if not pid.isdigit():
+                self.status = 1
+                return [Err(f"getjobid: 001-0032 Number {pid} is not valid.")]
+        if "v" in flags:
+            out.append("PID        PPID       PGRP       Status          Job Name")
+            out.append("---------- ---------- ---------- --------------- ----------------------------")
+        for pid in pids or [str(JOB_PID)]:
+            if not pid.isdigit():
+                self.status = 1
+                return out + [Err(f"getjobid: 001-0032 Number {pid} is not valid.")]
+            if int(pid) != JOB_PID:
+                self.status = 1
+                return out + [Err(f"getjobid: 001-2193 Error found getting job identifier for process identifier {pid}.")]
+            if "v" in flags:
+                out.append(f"{JOB_PID:>10} {JOB_PID - 1:>10} {JOB_PID - 1:>10} {'Running':<15} {JOB_ID}")
+            elif "s" in flags:
+                out.append(JOB_ID)
+            else:
+                out.append(f"Process identifier {pid} is {JOB_ID}")
+        return out
+
+    def cmd_sysval(self, args: list[str]) -> list[str]:
+        parsed = self._options(args, "")
+        if parsed is None or not parsed[2] or parsed[0] - set("np"):
+            self.status = 1
+            return [Err("sysval: 001-3049 usage:"), Err("    sysval [-p] systemValue ..."),
+                    Err("    sysval -n [-p] networkAttr ...")]
+        flags, _, names = parsed
+        out: list[str] = []
+        for name in names:
+            value = (pasei.NETATTRS.get(name.upper()) if "n" in flags else pasei.sysval(self.store, name))
+            if value is None:
+                self.status = 1
+                return out + [Err(f"sysval: 001-2219 System value {name.upper()} is not valid.")]
+            out.append(f"{name.upper()}={value}" if "p" in flags else value)
+        return out
+
+    def cmd_getconf(self, args: list[str]) -> list[str]:
+        if not args or args == ["-a"]:
+            self.status = 2
+            return [Err(l) for l in ("Usage: getconf [ -v specification ] system_var",
+                                     "       getconf [ -v specification ] path_var pathname",
+                                     "       getconf Device_var Device_Path", "       getconf -a")]
+        name = args[0].upper()
+        if name in pasei.GETCONF_PATH and len(args) == 2:
+            try:
+                ifs.lookup(self.store, self.actor, self.path(args[1]))
+            except ifs.IfsError:
+                self.status = 1
+                return [Err(f"getconf: {args[1]}: No such file or directory")]      # a guess: the missing path was not captured
+            return [pasei.GETCONF_PATH[name]]
+        if name in pasei.GETCONF and len(args) == 1:
+            return [pasei.GETCONF[name]]
+        self.status = 2
+        return [Err("getconf: specified variable is not valid on this system")]
+
+    def cmd_dspmsg(self, args: list[str]) -> list[str]:
+        """The AIX message catalog utility. PUB400 has no catalogs a login can name, so only the default text prints."""
+        text, self.status = pasei.dspmsg(args)
+        if self.status:
+            return [Err(text)]
+        return [text] if text else []
+
+    def cmd_Rfile(self, args: list[str]) -> list[str]:
+        """Reads and writes database file members. Only the usage line and `-r` were looked at: -r prints the records the
+        way `cat` does (a guess at the layout), and writing is not built."""
+        words = [a for a in args if not a.startswith("-")]
+        if "-r" not in args or not words:
+            self.status = 2
+            return [Err("usage: Rfile -r|-w|-h [-abKlqQs] [-c CL-command] [-C CL-command] file...")]
+        return self.cmd_cat(words)
+
+    def cmd_setccsid(self, args: list[str]) -> list[str]:
+        usage = "setccsid: 001-3047 usage: setccsid [-R [-H | -L | -P]] [-h] ccsid file ..."
+        words = [a for a in args if not a.startswith("-") or a == "-"]
+        if len(words) < 2:
+            self.status = 1
+            return [Err(usage)]
+        if not words[0].isdigit():
+            self.status = 1
+            return [Err(f"setccsid: 001-0032 Number {words[0]} is not valid.")]
+        out: list[str] = []
+        for given in words[1:]:
+            try:
+                entry = ifs.lookup(self.store, self.actor, self.path(given))
+            except ifs.IfsError:
+                out.append(Err(f"setccsid: 001-2113 Error found getting information for object {self.path(given)}. No such path or directory."))
+                self.status = 1
+                continue
+            if "w" not in entry.mode:                    # a guess: only a missing file was captured
+                out.append(Err(f"setccsid: 001-2113 Error found changing object {self.path(given)}. Permission denied."))
+                self.status = 1
+        return out                                       # the IFS keeps no CCSID, so a file that is there just succeeds
 
     # -- the small read-only batch, wording copied from PUB400 ------------------------------------------------------
 
@@ -906,9 +1182,9 @@ class Shell:
     def _system_path(self, name: str) -> str | None:
         """Where the system keeps a command the simulator provides, or None. Only `cd`, `pwd` and `echo` are known to
         have a program as well as a builtin (`which cd` printed one); `db2` lives in /usr/bin."""
-        if name in self.NOT_FILES or not re.fullmatch(r"[a-z][a-z0-9]*", name) or not hasattr(self, "cmd_" + name):
+        if name in self.NOT_FILES or not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", name) or not hasattr(self, "cmd_" + name):
             return None
-        return "/usr/bin/" + name if name == "db2" else "/QOpenSys/usr/bin/" + name
+        return "/usr/bin/" + name if name in QSH_ONLY else "/QOpenSys/usr/bin/" + name
 
     def _where(self, name: str) -> str | None:
         """The program a name means, as `which` finds it: along PATH, an executable stream file first and then the

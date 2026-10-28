@@ -208,7 +208,7 @@ def test_system_runs_cl_as_the_signed_on_profile_and_nothing_more(store):
     sh = shell(store)
     assert "STUDENT" in " ".join(sh.run("system 'DSPUSRPRF USRPRF(STUDENT)'"))
     assert sh.run("system 'NOSUCHCMD'")[0].startswith("CPD") or "not found" in sh.run("system 'NOSUCHCMD'")[0]
-    assert sh.run("system") == ["system: 0653-401 usage: system 'CL command'"]
+    assert sh.run("system") == ["Usage: system [-beEhiIkKnOpqsv] command"]
     assert sh.run("system 'CRTUSRPRF USRPRF(EVIL) PASSWORD(X) SPCAUT(*ALLOBJ)'") and "EVIL" not in store.profiles
 
 
@@ -764,3 +764,104 @@ def test_pase_find_writable_lists_what_anyone_can_write_and_the_fix_closes_it(st
     assert flags.FACTS["world_writable_ops"](store) == "none" and sh.run(f"find {base} -perm -002") == []
     assert sh.run(f"echo more >> {base}/jobs.conf")[0].startswith("bsh:")
     assert sh.run(f"touch {base}/spool/x")[0].startswith("touch:")
+
+
+# -- B3: the IBM i side, wording from the PUB400 run of 2026-10-28 --------------------------------------------------
+
+def test_qsh_only_programs_cannot_execute_in_bsh_and_work_inside_qsh(store):
+    sh = shell(store)
+    for name in ("db2", "datarea", "dataq", "catsplf"):
+        assert sh.run(name) == [f"bsh: {name}: cannot execute"] and sh.status == 1
+    assert sh.run("which datarea dataq catsplf db2") == ["/usr/bin/datarea", "/usr/bin/dataq", "/usr/bin/catsplf", "/usr/bin/db2"]
+    assert sh.run("qsh -c 'nosuchcmd'; echo $?") == ["qsh: 001-0019 Error found searching for command nosuchcmd. No such path or directory.", "127"]
+    assert sh.run("qsh -c 'ls /nosuchdir'") == ["ls: 001-2113 Error found getting information for object /nosuchdir. No such path or directory."]
+    assert sh.run("qsh -c 'cd /nosuchdir'") == ["cd: 001-0008 Error found changing to directory /nosuchdir."]
+    assert sh.run("qsh -c 'exit 3'; echo $?") == ["3"] and not sh.done, "exit ends QSH, not the outer shell"
+    assert sh.run("echo \"pwd\" | qsh") == ["/home/STUDENT"], "a script on standard input"
+    assert sh.run("qsh") [0].startswith("qsh:") and sh.status == 2
+    assert sh.run("echo hi; db2") == ["hi", "bsh: db2: cannot execute"], "and the mode ends with the command"
+
+
+def test_datarea_reads_and_writes_with_the_authority_of_the_profile(store):
+    sh = shell(store)
+    path = "/QSYS.LIB/APPLIB.LIB/PAYXFER.DTAARA"
+    out = sh.run(f"qsh -c 'datarea -r {path}'")
+    assert len(out) == 1 and "KEY=" in out[0] and sh.status == 0
+    assert sh.run(f"qsh -c 'datarea -r -s 1,4 {path}'") == ["HOST"]
+    assert sh.run(f"qsh -c 'datarea -w {path} nope'")[0].startswith("datarea: 001-2113"), "*USE does not change it"
+    assert sh.run("qsh -c 'datarea'") == [
+        "datarea: 001-0098 Required argument is not specified.", "datarea: 001-3111 usage:",
+        "    datarea -r [-l] [-s substring] data-area", "    datarea -w [-l] [-s substring] data-area [data ...]"]
+    assert sh.run("qsh -c 'datarea -r nosuchlib/nosuch'") == [
+        "datarea: 001-2242 Path name nosuchlib/nosuch must specify an object in the QSYS.LIB file system."]
+    assert sh.run("qsh -c 'datarea -r /QSYS.LIB/NOSUCHLIB.LIB/NOSUCH.DTAARA'") == [
+        "datarea: 001-2113 Error found getting information for object /QSYS.LIB/NOSUCHLIB.LIB/NOSUCH.DTAARA. No such path or directory."]
+    boss = shell(store, "QSECOFR")
+    assert boss.run(f"qsh -c 'datarea -w -s 1,4 {path} PROD'") == [] and boss.run(f"qsh -c 'datarea -r -s 1,6 {path}'") == ["PROD=b"]
+    assert len(store.objects[("APPLIB", "PAYXFER", "*DTAARA")].data["value"]) == 80, "writes keep the length"
+
+
+def test_the_fix_for_pase_datarea_secret_locks_the_area(store):
+    from silverlake import scenarios
+    sh = shell(store)
+    scenarios.apply(store, scenarios.registry()["pase-datarea-secret"], "secure")
+    assert sh.run("qsh -c 'datarea -r /QSYS.LIB/APPLIB.LIB/PAYXFER.DTAARA'")[0].startswith("datarea: 001-2113")
+    assert "PAYXFER.DTAARA" not in sh.run("ls /QSYS.LIB/APPLIB.LIB")
+
+
+def test_dataq_creates_writes_and_reads_in_order(store):
+    boss = shell(store, "QSECOFR")
+    q = "/QSYS.LIB/APPLIB.LIB/JOBS.DTAQ"
+    assert boss.run(f"qsh -c 'dataq -c {q}'") == [] and boss.run(f"qsh -c 'dataq -c {q}'")[0].startswith("dataq: 001-2113")
+    boss.run(f"qsh -c 'dataq -w {q} first'")
+    boss.run(f"qsh -c 'dataq -w {q} second entry'")
+    assert boss.run(f"qsh -c 'dataq -r -p {q}'") == ["first"], "-p looks without taking"
+    assert boss.run(f"qsh -c 'dataq -r {q}'") == ["first"] and boss.run(f"qsh -c 'dataq -r {q}'") == ["second entry"]
+    assert boss.run(f"qsh -c 'dataq -r {q}'") == []
+    assert boss.run("qsh -c 'dataq'")[1] == "dataq: 001-3110 usage:"
+    assert shell(store).run(f"qsh -c 'dataq -w {q} x'")[0].startswith("dataq: 001-2113"), "STUDENT has no authority"
+
+
+def test_catsplf_reads_a_spooled_file_by_job_and_says_what_it_could_not_find(store):
+    from silverlake.system import spool
+    f = store.spool[0]
+    sh = shell(store, "QSECOFR")
+    out = sh.run(f"qsh -c 'catsplf -j {f.job} {f.name} {f.file_no}'")
+    assert out == list(f.lines) and sh.status == 0
+    assert sh.run("qsh -c 'catsplf -j 1/NOSUCH/NOSUCH nosuch 1'") == ["catsplf: 001-2373 Job 1/NOSUCH/NOSUCH was not found."]
+    assert sh.run("qsh -c 'catsplf -p 1 nosuch 1'") == ["catsplf: 001-2193 Error found getting job identifier for process identifier 1."]
+    assert sh.run("qsh -c 'catsplf'")[:2] == ["catsplf: 001-0098 Required argument is not specified.", "catsplf: 001-3113 usage:"]
+    assert sh.status == 1
+
+
+def test_getjobid_sysval_getconf_dspmsg_setccsid_and_rfile(store):
+    sh = shell(store)
+    assert sh.run("getjobid") == ["Process identifier 872856 is 679199/QUSER/QP0ZSPWT"]
+    assert sh.run("getjobid -s") == ["679199/QUSER/QP0ZSPWT"] and sh.run("getjobid -j") == sh.run("getjobid")
+    verbose = sh.run("getjobid -v")
+    assert verbose[0].startswith("PID ") and verbose[2].split()[-1] == "679199/QUSER/QP0ZSPWT" and len(verbose[1]) == 77
+    assert sh.run("getjobid 1") == ["getjobid: 001-2193 Error found getting job identifier for process identifier 1."]
+    assert sh.run("getjobid nosuch") == ["getjobid: 001-0032 Number nosuch is not valid."]
+    assert sh.run("getjobid -?") == ["getjobid: 001-3027 usage: getjobid [-jsv] [pid ...]"] and sh.status == 1
+    store.system.qpwdlvl, store.system.qmaxsign = 3, 5
+    assert sh.run("sysval qpwdlvl QMAXSIGN QCCSID") == ["3", "000005", "273"]
+    assert sh.run("sysval -p QPWDLVL") == ["QPWDLVL=3"] and sh.run("sysval -n SYSNAME") == ["SILVERLAKE"]
+    assert sh.run("sysval NOSUCHVAL") == ["sysval: 001-2219 System value NOSUCHVAL is not valid."] and sh.status == 1
+    assert sh.run("sysval")[0] == "sysval: 001-3049 usage:" and sh.status == 1
+    assert sh.run("getconf PAGESIZE; getconf ARG_MAX; getconf NAME_MAX /tmp") == ["4096", "4194304", "255"]
+    assert sh.run("getconf NOSUCH; echo $?") == ["getconf: specified variable is not valid on this system", "2"]
+    assert sh.run("getconf")[0].startswith("Usage: getconf") and sh.status == 2
+    assert sh.run("dspmsg nosuchfile 1 'hello %s' world") == ["hello world"]
+    assert sh.run("dspmsg nosuchfile 1") == ["dspmsg: missing default message"] and sh.status == 1
+    assert sh.run("dspmsg")[0].startswith("Usage: dspmsg") and sh.status == 1
+    assert sh.run("setccsid 819 notes.txt") == [] and sh.run("setccsid 819 /nosuchfile")[0].startswith("setccsid: 001-2113")
+    assert sh.run("setccsid")[0].startswith("setccsid: 001-3047 usage:")
+    assert sh.run("Rfile")[0].startswith("usage: Rfile -r|-w|-h") and sh.status == 2
+
+
+def test_b3_review_fixes(store):
+    sh = shell(store)
+    assert sh.run("getjobid -v abc") == ["getjobid: 001-0032 Number abc is not valid."], "no table before the error"
+    boss = shell(store, "QSECOFR")
+    f = store.spool[0]
+    assert boss.run(f"qsh -c 'catsplf -j {f.job} {f.name} xyz'")[0].startswith("catsplf: 001-0032")

@@ -74,10 +74,14 @@ def test_call_qcmdexc_runs_cl_as_the_same_profile(store):
 
 def test_db2_in_the_shell_prints_the_result(store):
     sh = pase.Shell(store, store.profiles["OPERATOR"])
+    assert sh.run("db2 'select 1 from applib.payroll'") == ["bsh: db2: cannot execute"] and sh.status == 1, "bsh cannot run it"
+    sh.qsh = True                                # db2 runs inside QSH, as `qsh -c` does
     out = sh.run('db2 "select name from applib.payroll where empno = 10003"')
     assert out[0] == "NAME" and "Chen, Priya" in out[2] and out[-1].endswith("record(s) selected.")
-    assert pase.Shell(store, store.profiles["STUDENT"]).run('db2 "select * from applib.payroll"')[0].startswith("SQL0551")
-    assert sh.run("db2") == ['db2: usage: db2 "SQL statement"']
+    student = pase.Shell(store, store.profiles["STUDENT"])
+    student.qsh = True
+    assert student.run('db2 "select * from applib.payroll"')[0].startswith("SQL0551")
+    assert sh.run("db2")[0].startswith("  USAGE: CMD") and sh.status == 4
     assert sh.run('echo "select 1 from applib.payroll" > q') == []
 
 
