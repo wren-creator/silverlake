@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 
 log = logging.getLogger("silverlake.tls")
+LESSON = "console-cert-audit"
+WEAK_DAYS = 3650
 
 ROOT = Path(__file__).resolve().parents[3]
 DAYS = 825
@@ -33,11 +35,35 @@ def paths(directory: Path | None = None) -> tuple[Path, Path]:
     return d / "cert.pem", d / "key.pem"
 
 
+def weak_path(directory: Path | None = None) -> Path:
+    return (directory or cert_dir()) / "console-weak.pem"
+
+
+def make_weak(directory: Path | None = None) -> bool:
+    """The console's other certificate, for lesson console-cert-audit: self-signed with the same key, ten years long, the
+    wrong name in its subject, and the lesson's flag in its organizational unit. Needs the key from make()."""
+    from .. import flags
+    _, key = paths(directory)
+    exe = shutil.which("openssl")
+    if exe is None or not key.exists():
+        return False
+    run = subprocess.run(
+        [exe, "req", "-x509", "-new", "-key", str(key), "-sha256", "-days", str(WEAK_DAYS), "-out", str(weak_path(directory)),
+         "-subj", f"/CN=SYSTEM1.LOCAL/O=Silverlake range/OU={flags.flag(LESSON)}",
+         "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1"],
+        capture_output=True, text=True)
+    if run.returncode != 0:
+        log.warning("openssl could not make the console certificate: %s", run.stderr.strip()[:200])
+        return False
+    return True
+
+
 def make(directory: Path | None = None, force: bool = False) -> bool:
-    """Make the certificate and key with openssl. False if openssl is missing or fails."""
+    """Make the certificate and key with openssl, and the console's weak one beside them. False if openssl is missing or
+    fails."""
     cert, key = paths(directory)
     if cert.exists() and key.exists() and not force:
-        return True
+        return weak_path(directory).exists() or make_weak(directory)
     exe = shutil.which("openssl")
     if exe is None:
         return False
@@ -51,7 +77,7 @@ def make(directory: Path | None = None, force: bool = False) -> bool:
         log.warning("openssl could not make a certificate: %s", run.stderr.strip()[:200])
         return False
     key.chmod(0o600)
-    return True
+    return make_weak(directory)
 
 
 def minimum_version(env: dict[str, str] | None = None) -> ssl.TLSVersion:
@@ -74,10 +100,32 @@ def server_context(directory: Path | None = None) -> ssl.SSLContext | None:
     return ctx
 
 
+def console_context(store_of, directory: Path | None = None) -> ssl.SSLContext | None:
+    """The console's context. It serves cert.pem, or the weak certificate while the system's `console_cert` setting says
+    `weak`; the choice is made at each handshake, so lesson console-cert-audit flips with no restart. A client that sends
+    no server name (a connection to an IP address) is covered too: the callback runs either way."""
+    base = server_context(directory)
+    weak_file = weak_path(directory)
+    if base is None or not weak_file.exists():
+        return base
+    _, key = paths(directory)
+    weak = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    weak.minimum_version = minimum_version()
+    weak.load_cert_chain(weak_file, key)
+
+    def choose(sock, server_name, original):
+        if store_of().system.console_cert == "weak":
+            sock.context = weak
+    base.sni_callback = choose
+    return base
+
+
 def client_context(directory: Path | None = None) -> ssl.SSLContext:
-    """What a test or a trainee's script uses to trust the range's certificate."""
+    """What a test or a trainee's script uses to trust the range's certificates (the weak console one too)."""
     cert, _ = paths(directory)
     ctx = ssl.create_default_context(cafile=str(cert))
+    if weak_path(directory).exists():
+        ctx.load_verify_locations(cafile=str(weak_path(directory)))
     return ctx
 
 

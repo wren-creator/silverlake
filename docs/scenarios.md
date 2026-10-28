@@ -276,7 +276,32 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 ## Group D: Network services (start with ./start.sh --services)
 
-### 12. Which services take a password in clear text
+### 12. The console certificate nobody looked at
+
+**Where:** console TLS port 127.0.0.1:2010 (start the range with ./start.sh --services and run ./setup.sh for the certificates)
+
+**Real-world parallel:** TLS only protects a sign-on if the certificate is worth trusting. Reviews find the same things again and again: a validity far past what browsers accept, a name that is not the system's, a key reused for everything, and the private key left in a directory anyone can read. People who click through the browser warning never see any of it.
+
+**Vulnerability:** Port 2010 serves a self-signed certificate valid for ten years with the subject CN=SYSTEM1.LOCAL, which is not this system. The private key behind it is copied to /QOpenSys/QIBM/UserData/ICSS/Cert/Server/DEFAULT.KEY, readable by every profile.
+
+**MITRE ATT&CK:** T1552.004 Unsecured Credentials: Private Keys, T1557 Adversary-in-the-Middle, T1040 Network Sniffing
+
+**Exploit:**
+
+1. openssl s_client -connect 127.0.0.1:2010 -showcerts < /dev/null shows the certificate. curl -k hides the same facts, which is why it is the wrong way to test.
+2. Pipe the certificate to openssl x509 -noout -subject -dates. The subject names SYSTEM1.LOCAL, the validity runs ten years, and the OU holds the audit tag.
+3. In a shell, ls -l /QOpenSys/QIBM/UserData/ICSS/Cert/Server shows DEFAULT.KEY with a read bit for everyone.
+4. Submit the audit tag.
+
+**Consequence in the sim:** Someone who reads the key can stand in for the console, and a client that learned to ignore the warning will not notice.
+
+**Flag:** Inspect the certificate the console serves on its TLS port and read the audit tag out of its subject.
+
+**Fix:** Serve a certificate issued for this system with a validity of a year or less (the secure state serves the range's normal one), and take read away from the key file for everyone but the owner. Replace a key that was exposed. (`./scenario.sh set console-cert-audit secure`)
+
+**Reference:** CA/Browser Forum baseline requirements on validity; CWE-295 Improper Certificate Validation; CWE-321 and CWE-732 for key handling; IBM i Digital Certificate Manager.
+
+### 13. Which services take a password in clear text
 
 **Where:** FTP 127.0.0.1:2121 and 2990, console 127.0.0.1:2001 and 2010 (start the range with ./start.sh --services)
 
@@ -292,7 +317,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 2. ftp 127.0.0.1 2121, USER STUDENT, PASS STUDENT. It signs on. The password crossed the loopback in clear.
 3. curl -i -u STUDENT:STUDENT http://127.0.0.1:2001/HTTPAdmin. The console answers with the page. Basic is only base64, so the password is as readable as the FTP one.
 4. Optional, needs root: run tcpdump -i lo0 -A port 2121 (lo on Linux) and repeat the FTP login to see PASS STUDENT on the wire.
-5. Repeat both on the TLS ports (explicit AUTH TLS on 2121, or 2990, and https on 2010 with --cacert .tls/cert.pem) and confirm the sign-on works there and the capture shows nothing readable.
+5. Repeat both on the TLS ports (explicit AUTH TLS on 2121, or 2990, and https on 2010 with curl -k, since the console certificate is the subject of another lesson, console-cert-audit) and confirm the sign-on works there and the capture shows nothing readable.
 6. Submit the names of the services that signed you on without TLS.
 
 **Consequence in the sim:** Anyone able to see the traffic reads a profile name and password and signs on as that person, with all their authority. A limited profile is still limited, but a powerful one is not.
@@ -303,7 +328,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CIS controls on encrypting data in transit; CISA CPG on encrypted network traffic; IBM i Security Reference, network services.
 
-### 13. A clerk with no command line who can still use FTP
+### 14. A clerk with no command line who can still use FTP
 
 **Where:** FTP server, 127.0.0.1:2121 (start the range with ./start.sh --services)
 
@@ -328,7 +353,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, limited capability and FTP exit points; CIS controls on network services; CISA CPG on encrypting data in transit.
 
-### 14. The sign-on server that says how passwords are checked
+### 15. The sign-on server that says how passwords are checked
 
 **Where:** Host server mapper 127.0.0.1:4449 and sign-on server 127.0.0.1:8476 (start the range with ./start.sh --services)
 
@@ -353,7 +378,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, QPWDLVL; CIS controls on password policy; CISA CPG on reducing network exposure.
 
-### 15. A web console that runs commands found in a description
+### 16. A web console that runs commands found in a description
 
 **Where:** HTTP Server Administration console, 127.0.0.1:2001 (start the range with ./start.sh --services)
 
@@ -380,7 +405,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 ## Group E: PASE and the IFS
 
-### 16. The transfer key in the data area
+### 17. The transfer key in the data area
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
 
@@ -405,7 +430,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-312 Cleartext Storage of Sensitive Information; IBM i Security Reference, object authority; MITRE ATT&CK T1552.
 
-### 17. The operations area nobody audited
+### 18. The operations area nobody audited
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
 
@@ -431,7 +456,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-732 Incorrect Permission Assignment for Critical Resource; CIS Benchmarks on world writable files; MITRE ATT&CK T1222.
 
-### 18. A writable directory at the front of the operator's PATH
+### 19. A writable directory at the front of the operator's PATH
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -457,7 +482,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-426 Untrusted Search Path; CIS Benchmarks on PATH and world writable directories; MITRE ATT&CK T1574.007.
 
-### 19. The system profile that anyone can write and every login runs
+### 20. The system profile that anyone can write and every login runs
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -483,7 +508,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i PASE documentation on shell startup files; CIS Benchmarks for AIX and Linux on profile file permissions; MITRE ATT&CK T1546.004.
 
-### 20. The password typed into the script
+### 21. The password typed into the script
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
 
@@ -508,7 +533,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-798 Use of Hard-coded Credentials; CWE-312 Cleartext Storage of Sensitive Information; MITRE ATT&CK T1552.001.
 
-### 21. A clerk with no command line who can still open a shell over ssh
+### 22. A clerk with no command line who can still open a shell over ssh
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 
@@ -533,7 +558,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, limited capability; OpenSSH sshd_config(5), DenyUsers and AllowUsers; CIS Benchmarks for SSH server configuration.
 
-### 22. A key file anyone can write, and an ssh daemon that does not mind
+### 23. A key file anyone can write, and an ssh daemon that does not mind
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 

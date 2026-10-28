@@ -24,7 +24,7 @@ steps = [
   "ftp 127.0.0.1 2121, USER STUDENT, PASS STUDENT. It signs on. The password crossed the loopback in clear.",
   "curl -i -u STUDENT:STUDENT http://127.0.0.1:2001/HTTPAdmin. The console answers with the page. Basic is only base64, so the password is as readable as the FTP one.",
   "Optional, needs root: run tcpdump -i lo0 -A port 2121 (lo on Linux) and repeat the FTP login to see PASS STUDENT on the wire.",
-  "Repeat both on the TLS ports (explicit AUTH TLS on 2121, or 2990, and https on 2010 with --cacert .tls/cert.pem) and confirm the sign-on works there and the capture shows nothing readable.",
+  "Repeat both on the TLS ports (explicit AUTH TLS on 2121, or 2990, and https on 2010 with curl -k, since the console certificate is the subject of another lesson, console-cert-audit) and confirm the sign-on works there and the capture shows nothing readable.",
   "Submit the names of the services that signed you on without TLS.",
 ]
 consequence = "Anyone able to see the traffic reads a profile name and password and signs on as that person, with all their authority. A limited profile is still limited, but a powerful one is not."

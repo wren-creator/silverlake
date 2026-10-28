@@ -204,3 +204,43 @@ def test_5250_over_tls_starts_the_normal_negotiation(store, tls_dir):
 
     first = run_with_services(store, env, work)
     assert first[:2] == bytes([0xFF, 0xFD])                    # IAC DO, the telnet negotiation opens
+
+
+def test_the_weak_console_certificate_is_ten_years_misnamed_and_carries_the_tag(tls_dir):
+    import subprocess
+    from silverlake import flags
+    weak = certs.weak_path()
+    assert weak.exists() and (certs.paths()[1].stat().st_mode & 0o777) == 0o600
+    shown = subprocess.run(["openssl", "x509", "-in", str(weak), "-noout", "-subject", "-enddate"],
+                           capture_output=True, text=True).stdout
+    assert "SYSTEM1.LOCAL" in shown and flags.flag("console-cert-audit") in shown
+    key_of = lambda f: subprocess.run(["openssl", "x509", "-in", str(f), "-noout", "-pubkey"], capture_output=True, text=True).stdout
+    assert key_of(weak) == key_of(certs.paths()[0]), "the same key, as asked"
+    cert_before = certs.paths()[0].read_text()
+    weak.unlink()
+    assert certs.make() and weak.exists() and certs.paths()[0].read_text() == cert_before, "a missing weak cert is added without touching the rest"
+
+
+def test_the_console_serves_the_weak_certificate_until_the_lesson_is_fixed(store, tls_dir):
+    from silverlake import scenarios
+    from silverlake.net import httpd
+
+    def fetch():
+        ctx = certs.client_context()
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as raw, ctx.wrap_socket(raw, server_hostname="127.0.0.1") as tls:
+            return dict(x[0] for x in tls.getpeercert()["subject"])["commonName"]
+
+    async def go():
+        server = await httpd.serve("127.0.0.1", 0, lambda: store, ssl_context=certs.console_context(lambda: store))
+        nonlocal port
+        port = server.sockets[0].getsockname()[1]
+        loop = asyncio.get_running_loop()
+        first = await loop.run_in_executor(None, fetch)
+        scenarios.apply(store, scenarios.registry()["console-cert-audit"], "secure")
+        second = await loop.run_in_executor(None, fetch)
+        server.close()
+        await server.wait_closed()
+        return first, second
+
+    port = 0
+    assert asyncio.run(go()) == ("SYSTEM1.LOCAL", "SILVERLAKE"), "flipped live, with no restart, and both verify against the trusted files"

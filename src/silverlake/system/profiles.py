@@ -72,6 +72,7 @@ class System:
     qpwdlmtajc: int = 0      # QPWDLMTAJC: 1 means no two adjacent digits
     qpwdlmtrep: int = 0      # QPWDLMTREP: 1 no repeated character at all, 2 not twice in a row
     qpwdrqddif: int = 0      # QPWDRQDDIF: 0 off, 1 to 8 are the IBM steps (32 down to 4 remembered passwords)
+    console_cert: str = "weak"   # weak: the console's TLS port serves the long-lived, wrongly named certificate (lesson console-cert-audit); strong: the range's normal one
     require_tls: str = "no"   # yes: FTP and the console take no sign-on until the connection is TLS (on a real system an exit program or the server's own setting does this)
 
 
@@ -408,6 +409,7 @@ def load(path: Path | str | None = None) -> ProfileStore:
         qpwdlmtrep=int(sysdata.get("qpwdlmtrep", 0)),
         qpwdrqddif=int(sysdata.get("qpwdrqddif", 0)),
         require_tls=str(sysdata.get("require_tls", "no")),
+        console_cert=str(sysdata.get("console_cert", "weak")),
     )
     if system.qsecurity not in QSECURITY_LEVELS:
         raise SeedError(f"qsecurity must be one of {QSECURITY_LEVELS}, not {system.qsecurity}")
@@ -417,6 +419,8 @@ def load(path: Path | str | None = None) -> ProfileStore:
         raise SeedError(f"qpwdrqddif must be 0 to 8, not {system.qpwdrqddif}")
     if system.require_tls not in ("no", "yes"):
         raise SeedError(f"require_tls must be no or yes, not {system.require_tls}")
+    if system.console_cert not in ("weak", "strong"):
+        raise SeedError(f"console_cert must be weak or strong, not {system.console_cert}")
     if system.qpwdminlen > system.qpwdmaxlen:
         raise SeedError("qpwdminlen cannot be more than qpwdmaxlen")
 

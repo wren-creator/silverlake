@@ -1,0 +1,39 @@
+id = "console-cert-audit"
+title = "The console certificate nobody looked at"
+group = "D"
+summary = "The web console's TLS port serves a ten year certificate with the wrong name on it, and a copy of its private key sits readable by everyone."
+
+[[change]]
+target = "system"
+field = "console_cert"
+vulnerable = "weak"
+secure = "strong"
+
+[[change]]
+target = "ifs:/QOpenSys/QIBM/UserData/ICSS/Cert/Server/DEFAULT.KEY"
+field = "public"
+vulnerable = "r--"
+secure = "---"
+
+[cleanup]
+remove_new_ifs = true
+
+[flag]
+kind = "text"
+planted = "certificate"      # in the console certificate ./setup.sh makes, not in the seed (see net/certs.py)
+task = "Inspect the certificate the console serves on its TLS port and read the audit tag out of its subject."
+
+[doc]
+where = "console TLS port 127.0.0.1:2010 (start the range with ./start.sh --services and run ./setup.sh for the certificates)"
+parallel = "TLS only protects a sign-on if the certificate is worth trusting. Reviews find the same things again and again: a validity far past what browsers accept, a name that is not the system's, a key reused for everything, and the private key left in a directory anyone can read. People who click through the browser warning never see any of it."
+vulnerability = "Port 2010 serves a self-signed certificate valid for ten years with the subject CN=SYSTEM1.LOCAL, which is not this system. The private key behind it is copied to /QOpenSys/QIBM/UserData/ICSS/Cert/Server/DEFAULT.KEY, readable by every profile."
+mitre = ["T1552.004 Unsecured Credentials: Private Keys", "T1557 Adversary-in-the-Middle", "T1040 Network Sniffing"]
+steps = [
+  "openssl s_client -connect 127.0.0.1:2010 -showcerts < /dev/null shows the certificate. curl -k hides the same facts, which is why it is the wrong way to test.",
+  "Pipe the certificate to openssl x509 -noout -subject -dates. The subject names SYSTEM1.LOCAL, the validity runs ten years, and the OU holds the audit tag.",
+  "In a shell, ls -l /QOpenSys/QIBM/UserData/ICSS/Cert/Server shows DEFAULT.KEY with a read bit for everyone.",
+  "Submit the audit tag.",
+]
+consequence = "Someone who reads the key can stand in for the console, and a client that learned to ignore the warning will not notice."
+fix = "Serve a certificate issued for this system with a validity of a year or less (the secure state serves the range's normal one), and take read away from the key file for everyone but the owner. Replace a key that was exposed."
+reference = "CA/Browser Forum baseline requirements on validity; CWE-295 Improper Certificate Validation; CWE-321 and CWE-732 for key handling; IBM i Digital Certificate Manager."

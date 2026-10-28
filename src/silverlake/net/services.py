@@ -67,7 +67,8 @@ async def start(host: str, store_of: Callable[[], ProfileStore], env: dict[str, 
                                        tls_port=chosen["signon_tls"], ssl_context=tls)
         log.info("host server mapper on %s:%d, sign-on server on %s:%d", host, chosen["mapper"], host, chosen["signon"])
         if tls is not None:
-            servers.append(await httpd.serve(host, chosen["httpadmin_tls"], store_of, ssl_context=tls, state=web_state))
+            servers.append(await httpd.serve(host, chosen["httpadmin_tls"], store_of, state=web_state,
+                                             ssl_context=certs.console_context(store_of) or tls))
             servers.append(await ftpd.serve(host, chosen["ftp_tls"], store_of, ssl_context=tls, implicit=True))
             if make_controller is not None:
                 servers.append(await telnet.serve(host, chosen["tls5250"], make_controller, ssl_context=tls))

@@ -221,3 +221,38 @@ owner = "OPERATOR"
 owner_mode = "rwx"
 public = "r-x"
 content = "#!/QOpenSys/usr/bin/bsh\n# push the nightly extract to the bank gateway\nHOST=bank-gw.example.com\nFTP_USER=payxfer\nFTP_PASS=@@FLAG:pase-secrets-in-profile@@\necho sending extract to $HOST as $FTP_USER\n"
+
+# Lesson console-cert-audit: where an IBM i keeps the web server's certificate and key. The key file here is a stand in, the
+# real key never goes in the seed; what the lesson teaches is that the public may read it.
+[[node]]
+path = "/QOpenSys/QIBM"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/QIBM/UserData"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/QIBM/UserData/ICSS"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/QIBM/UserData/ICSS/Cert"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/QIBM/UserData/ICSS/Cert/Server"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/QIBM/UserData/ICSS/Cert/Server/DEFAULT.KEY"
+kind = "file"
+owner = "QSECOFR"
+owner_mode = "rw-"
+public = "r--"
+content = "# copy of the console key, kept for the nightly backup job\n-----BEGIN PRIVATE KEY-----\nU2lsdmVybGFrZSB0cmFpbmluZyBwbGFjZWhvbGRlcg==\n-----END PRIVATE KEY-----\n"
