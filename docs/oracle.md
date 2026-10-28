@@ -180,6 +180,10 @@ Taken from PUB400 on 2026-10-27, read only (`auth-pdm`). It opens the PDM menu, 
 - **CRTBNDRPG on a missing member** says "Unable to open member NOPGM of file QRPGLESRC in library NOSUCH." even when the library is the thing that is missing.
 - **The prompts.** CRTBNDRPG: PGM (*CTLSPEC, library *CURLIB), SRCFILE (QRPGLESRC, *LIBL), SRCMBR (*PGM), SRCSTMF, GENLVL 10, TEXT (*SRCMBRTXT), DFTACTGRP (*YES), then F10 for more. CRTPF: FILE, SRCFILE QDDSSRC, SRCMBR *FILE, RCDLEN, GENLVL 20, FLAG 0, FILETYPE *DATA, MBR *FILE, TEXT. CRTDSPF and CRTPRTF both showed SRCFILE `*NONE` where IBM's default is QDDSSRC (a local default on that host). CRTSRCPF: FILE, RCDLEN 92, MBR *NONE, TEXT *BLANK. Enter with FILE empty says "Parameter FILE required." and a roll key at the end says "Already at bottom of area."
 
+## PASE terminal (`auth-qp2term`), tried 2026-10-27, nothing captured
+
+`CALL PGM(QP2TERM)` on PUB400 never produced a screen the client could read. The first run died on `ESC 02` (Save Screen), which the decoder now handles. The next two runs, at 15 and then 45 seconds per screen (`--timeout`), got no record at all after the call. So the guess that the start was only slow is wrong, and no further runs were made: it is a shared host. Likely causes, none confirmed: PUB400 steers PASE users to SSH on port 2222 and blocks the 5250 route, or the terminal waits on something this client does not send. The PASE items in docs/pase.md stay unverified.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.
