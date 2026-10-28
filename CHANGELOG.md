@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A plan for the rest of the PASE commands, ten at a time: `docs/pase-commands-plan.md` and a nested list in the roadmap. The order is shell features first (exit statuses, then pipes), then files and lookup, the IBM i commands, the text filters, and the rest, with a never list (runtimes, editors, real network) and a lesson tied to each batch that earns one.
+
 - PASE: the small read-only batch, wording copied from a third read-only PUB400 run. `uname` (`OS400`, `-a` as node, release, version and machine id), `hostname`, `date` (`Wed Oct 28 01:14:40 UTC 2026`), `logname` (`getlogin failed` without a terminal), `printenv`, `ps` (the header and nothing under it), and `head`, `tail`, `wc` and `grep` on files, with PUB400's own wording for a missing file. With no pipes or input, those four print nothing when given no file. The run's `grep x` with no file waited and timed out, which is why. The ssh test that needed a command that is not there now uses `curl`.
 
 - PASE now speaks like PUB400. A read-only ssh run against PUB400 (2026-10-27) showed the shell is `bsh` and what it says, so the simulator copies it: `X not found` from `ls`, `cat: cannot open X`, `cd` saying `X: No such file or directory`, `bsh: name: not found`, and `id` as `uid=N(name) gid=0` with the name in lower case. `whoami` is gone because the real shell has none. Single quotes now stop `$VAR` expanding. The tighter seeded permissions stay on purpose, as does a PATH without a dot. `docs/pase.md` records what was seen and what is still a guess (the write commands, `ls` on a directory you may not read).
