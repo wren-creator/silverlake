@@ -104,7 +104,7 @@ def _value(raw):
         return flags.fill((DATA / "rpg" / raw[5:]).read_text())
     if isinstance(raw, str) and raw.startswith("secret:"):
         return flags.password(raw[7:])
-    return raw
+    return flags.fill(raw) if isinstance(raw, str) else raw      # a flag placeholder may sit in a plain value too
 
 
 def _from_object(obj, path: str):

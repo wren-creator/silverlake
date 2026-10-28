@@ -41,6 +41,7 @@ from datetime import datetime, timezone
 from fnmatch import fnmatchcase
 
 from . import ifs, pasei, spool
+from .textfilters import Err, Filters
 from .authority import Auth, SecuredObject, SpecialAuthority
 from .profiles import Profile, ProfileStore
 
@@ -64,13 +65,8 @@ MAX_DEPTH = 5
 SYSTEM_PROFILE = "/QOpenSys/etc/profile"
 
 
-class Err(str):
-    """A line meant for stderr. It is still a str, so callers and tests see plain text, but a pipe or a `>` leaves it out and
-    the terminal still shows it, in order."""
-
-
 @dataclass
-class Shell:
+class Shell(Filters):
     store: ProfileStore
     actor: Profile
     cwd: str = ""

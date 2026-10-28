@@ -483,7 +483,32 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i PASE documentation on shell startup files; CIS Benchmarks for AIX and Linux on profile file permissions; MITRE ATT&CK T1546.004.
 
-### 20. A clerk with no command line who can still open a shell over ssh
+### 20. The password typed into the script
+
+**Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
+
+**Real-world parallel:** People type a password into a script to make a job run unattended and never take it out. Anyone who can read the script reads the password. The search an attacker runs is the filters: find the files, grep for a word like pass, cut the value out.
+
+**Vulnerability:** /QOpenSys/var/ops/ftp-push.sh is readable by every profile and sets FTP_PASS to the real password for the bank gateway.
+
+**MITRE ATT&CK:** T1552.001 Unsecured Credentials: Credentials In Files, T1083 File and Directory Discovery
+
+**Exploit:**
+
+1. Sign on as STUDENT and CALL PGM(QP2TERM) (or ssh in).
+2. find /QOpenSys/var -type f lists the files without opening them.
+3. find /QOpenSys/var -type f | xargs grep -i pass shows every line that mentions a password.
+4. Cut the value out: find /QOpenSys/var -type f | xargs grep -i pass | cut -d= -f2, or sed 's/.*=//'.
+
+**Consequence in the sim:** Anyone with a login can use the credentials a job runs with, and the bank gateway cannot tell them apart from the operator.
+
+**Flag:** As STUDENT, find the password written in a script under /QOpenSys/var and read it out without opening the files one at a time.
+
+**Fix:** Keep passwords out of scripts: read them from a protected store at run time (the secure state does), take read away from everyone but the owner where a secret must live in a file, and rotate a password that was exposed. (`./scenario.sh set pase-secrets-in-profile secure`)
+
+**Reference:** CWE-798 Use of Hard-coded Credentials; CWE-312 Cleartext Storage of Sensitive Information; MITRE ATT&CK T1552.001.
+
+### 21. A clerk with no command line who can still open a shell over ssh
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 
@@ -508,7 +533,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, limited capability; OpenSSH sshd_config(5), DenyUsers and AllowUsers; CIS Benchmarks for SSH server configuration.
 
-### 21. A key file anyone can write, and an ssh daemon that does not mind
+### 22. A key file anyone can write, and an ssh daemon that does not mind
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 

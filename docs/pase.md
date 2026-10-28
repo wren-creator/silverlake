@@ -34,6 +34,20 @@ The lesson **pase-datarea-secret** (group E) uses it: `APPLIB/PAYXFER` is a data
 
 **Not built: `clrtmp`.** It deletes, so it was never run on the shared host, and there is nothing in Silverlake for it to clean.
 
+## The text filters (B4)
+
+Wording, usage lines and statuses come from a seventh read-only PUB400 run on 2026-10-28 (`ssh-pase-b4`, 83 commands, nothing written, kept local). Ten commands: `sort uniq cut tr sed nl fold rev tee xargs`, 56 in all. They read a file or the pipe, so `find ... | xargs grep ... | cut` works.
+
+- **`sort`** does `-r -n -u -f -b -k N[,M] -t C -c`; byte order, so a blank line comes first and `#` before letters. A missing file is `sort: can't open X` (status 2); `-c` says `sort: disorder: LINE` (status 1). **`uniq`** does `-c` (a width of four, then a space, `   2 a`), `-d`, `-u`, `-f`, `-s`; a missing file is `uniq: cannot open X` (status 1). **`rev`**: `rev: cannot open X` (1).
+- **`cut`** does `-c`, `-b` (same as `-c` here), `-f`, `-d`, `-s` with lists like `1,3`, `2-4`, `2-`. A line with no delimiter prints whole unless `-s`; a field past the end prints an empty line (status 0). No list prints the usage line (status 1). **`tr`** does sets with ranges, `\n`, octal and `[:upper:]` style classes, `-d` and `-s`; `-c` with a translation changed nothing on PUB400 and does not here. No arguments print its four usage lines (status 1).
+- **`sed`** does `s` (any delimiter, `g`, `p`, `&`, `\1` to `\9`), `d`, `p` and `q`, addresses `N`, `N,M`, `$` and `/re/`, `-n`, and several `-e`. It is a subset: no `y`, `a`, `i`, `c`, `-f` or `-i`. Patterns are basic regular expressions; a pattern that repeats a group is refused as unparseable, because that is where matching can run away. Unparseable is `sed: Function s/l/L cannot be parsed.` and an unknown command `sed: z is not a recognized function.`, both status 2; no script is the usage (status 1).
+- **`nl`** numbers non-blank lines, six wide then a tab (`-ba` all lines, `-s` the separator, `-w` the width); a missing file is `CANNOT OPEN FILE X`. **`fold`** does `-w`, `-s` (break after a blank, keeping it on the first line) and `-b`; a missing file is `Cannot open file X` (2). **`tee`** copies the pipe to standard output and to the files named (`-a` appends; `/dev/null` is a sink).
+- **`xargs`** runs one of the shell's own commands with what it read as arguments: `-n N` per run, `-I X` one line per run, `-t` echoes each command to stderr (with a trailing space), `-p` is refused (`xargs: can't read from tty for -p`, status 1). Arguments are quoted, so input is always data and never shell syntax. Empty input runs nothing. A command that does not exist is `xargs: X: No such file or directory` (127); one that fails makes `xargs` exit 123 (the usual rule, not seen). At most 200 runs and 20000 input lines.
+
+**Guesses:** the wording for an unknown option on `rev`, `sed` and `sort` (only `sort -z`, `cut -z`, `uniq -z` and `fold -z` were run), how `nl` prints a blank line, a missing file on `cut` and `sed`, and `-b` on `cut`. `xargs` with no input and no terminal hung on PUB400 for 20 seconds; here it prints nothing.
+
+Lesson **pase-secrets-in-profile** (group E): `/QOpenSys/var/ops/ftp-push.sh` is readable by everyone and has the gateway password in it. `find /QOpenSys/var -type f | xargs grep -i pass | cut -d= -f2` finds it without opening a file. The fix keeps the password out of the script.
+
 ## The virtual IFS
 
 A node is data: a directory or a stream file, with an owner, owner bits, public bits, optional private entries per profile, and (for files) text. It is kept in the store and saved with the rest of the state, from the seed in `src/silverlake/data/ifs.toml`. `/QSYS.LIB` is not stored but mapped onto the library and object store that the 5250 side uses.

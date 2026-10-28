@@ -865,3 +865,86 @@ def test_b3_review_fixes(store):
     boss = shell(store, "QSECOFR")
     f = store.spool[0]
     assert boss.run(f"qsh -c 'catsplf -j {f.job} {f.name} xyz'")[0].startswith("catsplf: 001-0032")
+
+
+# -- B4: the text filters, wording from the PUB400 run of 2026-10-28 (ssh-pase-b4) -----------------------------------
+
+def test_sort_uniq_rev_and_tr_match_what_pub400_printed(store):
+    sh = shell(store)
+    assert sh.run("echo b a c | tr ' ' '\\n' | sort") == ["a", "b", "c"]
+    assert sh.run("echo b a c | tr ' ' '\\n' | sort -r") == ["c", "b", "a"]
+    assert sh.run("echo 3 20 100 | tr ' ' '\\n' | sort -n") == ["3", "20", "100"]
+    assert sh.run("echo b a b a | tr ' ' '\\n' | sort -u") == ["a", "b"]
+    assert sh.run("echo b a b a | tr ' ' '\\n' | sort | uniq -c") == ["   2 a", "   2 b"]
+    assert sh.run("echo b a b a c | tr ' ' '\\n' | sort | uniq -u") == ["c"]
+    assert sh.run("echo b a b a | tr ' ' '\\n' | sort | uniq -d") == ["a", "b"]
+    assert sh.run("echo abc | rev") == ["cba"]
+    assert sh.run("echo hello | tr a-z A-Z") == ["HELLO"] and sh.run("echo hello | tr -d l") == ["heo"]
+    assert sh.run("echo aabbcc | tr -s a-c") == ["abc"] and sh.run("echo hello | tr -c l X") == ["hello"]
+    assert sh.run("sort /nosuchfile; echo $?") == ["sort: can't open /nosuchfile", "2"]
+    assert sh.run("rev /nosuchfile; echo $?") == ["rev: cannot open /nosuchfile", "1"]
+    assert sh.run("uniq /nosuchfile; echo $?") == ["uniq: cannot open /nosuchfile", "1"]
+    assert sh.run("tr")[0] == "tr: Invalid combination of options and Strings." and sh.status == 1
+    assert sh.run("echo a | sort -z; echo $?")[-1] == "2" and sh.run("echo a | uniq -z; echo $?")[-1] == "1"
+    assert sh.run("echo a | sort -c; echo $?") == ["0"], "one line is in order"
+
+
+def test_cut_nl_fold_and_tee_match_what_pub400_printed(store):
+    sh = shell(store)
+    assert sh.run("echo a:b:c | cut -d: -f2") == ["b"] and sh.run("echo a:b:c | cut -d: -f1,3") == ["a:c"]
+    assert sh.run("echo abcdef | cut -c2-4") == ["bcd"] and sh.run("echo a b c | cut -d' ' -f2-") == ["b c"]
+    assert sh.run("echo a:b:c | cut -f2") == ["a:b:c"], "no tab in the line, so the whole line"
+    assert sh.run("echo a:b:c | cut -d: -f4; echo $?") == ["", "0"]
+    assert sh.run("cut; echo $?") == ["Usage: cut {-b <list> [-n] | -c <list> | -f <list> [-d <char>] [-s]} file ...", "1"]
+    assert sh.run("echo a | cut -z; echo $?")[0] == "cut: illegal option -- z"
+    sh.run("echo one > two.txt")
+    assert sh.run("nl two.txt") == ["     1\tone"] and sh.run("nl -s: two.txt") == ["     1:one"]
+    assert sh.run("nl /nosuchfile; echo $?") == ["CANNOT OPEN FILE /nosuchfile", "1"]
+    assert sh.run("echo abcdefghij | fold -w 4") == ["abcd", "efgh", "ij"]
+    assert sh.run("echo 'aa bb cc dd' | fold -s -w 6") == ["aa bb ", "cc dd"]
+    assert sh.run("fold /nosuchfile; echo $?") == ["Cannot open file /nosuchfile", "2"]
+    assert sh.run("echo hello | tee") == ["hello"] and sh.run("echo hello | tee /dev/null") == ["hello"]
+    assert sh.run("echo hi | tee out.txt out2.txt") == ["hi"] and sh.run("cat out2.txt") == ["hi"]
+    assert sh.run("echo more | tee -a out.txt") == ["more"] and sh.run("cat out.txt") == ["hi", "more"]
+
+
+def test_sed_does_substitute_delete_print_and_says_what_it_could_not_parse(store):
+    sh = shell(store)
+    assert sh.run("echo hello | sed 's/l/L/'") == ["heLlo"] and sh.run("echo hello | sed 's/l/L/g'") == ["heLLo"]
+    assert sh.run("echo hello | sed 's,l,L,'") == ["heLlo"] and sh.run("echo hello | sed 's/l/&&/'") == ["helllo"]
+    assert sh.run("echo hello | sed 's/\\(h\\)\\(e\\)/\\2\\1/'") == ["ehllo"]
+    assert sh.run("echo hello | sed -e 's/h/H/' -e 's/o/O/'") == ["HellO"]
+    assert sh.run("echo hello | sed d") == [] and sh.run("echo hello | sed p") == ["hello", "hello"]
+    assert sh.run("echo hello | sed -n p") == ["hello"] and sh.run("echo hello | sed 1d") == []
+    assert sh.run("echo hello | sed /hell/d") == [] and sh.run("echo hello | sed /nosuch/d") == ["hello"]
+    assert sh.run("echo hello | sed 's/l/L'; echo $?") == ["sed: Function s/l/L cannot be parsed.", "2"]
+    assert sh.run("echo hello | sed z; echo $?") == ["sed: z is not a recognized function.", "2"]
+    assert sh.run("sed; echo $?")[-1] == "1" and sh.run("sed")[0] == "Usage:\tsed [-n] [-u] Script [File ...]"
+    sh.run("echo a > f1; echo b >> f1; echo c >> f1")
+    assert sh.run("sed -n 1,2p f1") == ["a", "b"] and sh.run("sed 2q f1") == ["a", "b"] and sh.run("sed '$d' f1") == ["a", "b"]
+    assert sh.run("echo aaaa | sed 's/\\(a*\\)*b/x/'")[0].startswith("sed: Function"), "a repeated group is refused, not run"
+
+
+def test_xargs_runs_the_shells_own_commands_in_batches(store):
+    sh = shell(store)
+    assert sh.run("echo a b c | xargs echo") == ["a b c"] and sh.run("echo a b c | xargs -n 1 echo") == ["a", "b", "c"]
+    assert sh.run("echo a b c | xargs -n 2 echo") == ["a b", "c"] and sh.run("echo a b c | xargs -I X echo X!") == ["a b c!"]
+    assert sh.run("echo | xargs echo hi") == [] and sh.run("echo a | xargs") == ["a"]
+    assert sh.run("echo a | xargs nosuchcmd; echo $?") == ["xargs: nosuchcmd: No such file or directory", "127"]
+    assert sh.run("echo a b | xargs -t echo") == ["echo a b ", "a b"]
+    assert sh.run("echo a b | xargs -p echo; echo $?") == ["xargs: can't read from tty for -p", "1"]
+    assert sh.run("echo x | xargs exit; echo $?") == ["xargs: exit: No such file or directory", "127"] and not sh.done
+    assert sh.run("echo '; echo pwned' | xargs echo") == ["; echo pwned"], "arguments are data, never shell syntax"
+    assert sh.run("echo /QOpenSys/etc | xargs ls") == sh.run("ls /QOpenSys/etc")
+    assert sh.run("echo db2 | xargs db2; echo $?") == ["bsh: db2: cannot execute", "123"], "a failed command makes xargs say 123"
+
+
+def test_the_filters_find_the_password_in_the_script_and_the_fix_removes_it(store):
+    from silverlake import flags, scenarios
+    sh = shell(store)
+    found = sh.run("find /QOpenSys/var -type f | xargs grep -i pass | cut -d= -f2")
+    assert found == [flags.flag("pase-secrets-in-profile")]
+    scenarios.apply(store, scenarios.registry()["pase-secrets-in-profile"], "secure")
+    assert flags.flag("pase-secrets-in-profile") not in " ".join(sh.run("cat /QOpenSys/var/ops/ftp-push.sh"))
+    scenarios.apply(store, scenarios.registry()["pase-secrets-in-profile"], "vulnerable")
+    assert sh.run("grep FTP_PASS /QOpenSys/var/ops/ftp-push.sh") == [f"FTP_PASS={flags.flag('pase-secrets-in-profile')}"]

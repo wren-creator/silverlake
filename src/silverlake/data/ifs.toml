@@ -211,3 +211,13 @@ owner = "OPERATOR"
 owner_mode = "rw-"
 public = "r--"
 content = "backup.sh and jobs.conf were opened up so the night shift could edit them. Close them again.\n"
+
+# Lesson pase-secrets-in-profile: a script the operators read and run, with the transfer password typed into it. The secure
+# state swaps the line for one that asks for the password at run time.
+[[node]]
+path = "/QOpenSys/var/ops/ftp-push.sh"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rwx"
+public = "r-x"
+content = "#!/QOpenSys/usr/bin/bsh\n# push the nightly extract to the bank gateway\nHOST=bank-gw.example.com\nFTP_USER=payxfer\nFTP_PASS=@@FLAG:pase-secrets-in-profile@@\necho sending extract to $HOST as $FTP_USER\n"
