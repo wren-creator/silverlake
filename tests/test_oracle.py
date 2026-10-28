@@ -605,3 +605,13 @@ def test_the_pase_scenario_only_reads():
     assert fills[0] == "CALL PGM(QP2TERM)" and fills[-1] == "SIGNOFF"
     assert {c.split()[0] for c in fills[1:-1]} <= {"pwd", "id", "ls", "cat", "echo"}
     assert not any(ch in c for c in fills[1:-1] for ch in "|&;<>`")
+
+
+def test_save_and_restore_screen_are_decoded_not_refused():
+    t = Terminal()
+    t.apply(render(Screen([Text(1, 2, "kept")])))
+    assert t.apply(bytes([ds.ESC, 0x02])) == []                    # Save Screen, as QP2TERM opens with
+    t.apply(bytes([ds.ESC, ds.CMD_CLEAR_UNIT]))
+    assert t.snapshot()["runs"] == []
+    assert t.apply(bytes([ds.ESC, 0x12])) == []                    # Restore Screen
+    assert t.snapshot()["runs"][0]["text"] == "kept"

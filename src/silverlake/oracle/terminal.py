@@ -68,6 +68,7 @@ class Terminal:
     cursor: int | None = None     # set by IC; None means "home to first input"
     read_command: int | None = None
     error_line: str = ""
+    _saved: tuple | None = None   # Save Screen (ESC 02) keeps a copy here for Restore Screen (ESC 12)
 
     def __post_init__(self) -> None:
         if not self.cells:
@@ -107,6 +108,12 @@ class Terminal:
                 self.read_command = cmd
                 i += 2  # CC1, CC2
                 events.append(Event("read", f"0x{cmd:02X}"))
+            elif cmd == CMD_SAVE_SCREEN:
+                self._saved = (self.rows, self.cols, [Cell(**vars(c)) for c in self.cells], self.cursor)
+            elif cmd == CMD_RESTORE_SCREEN:
+                if self._saved is not None:
+                    self.rows, self.cols, cells, self.cursor = self._saved
+                    self.cells = [Cell(**vars(c)) for c in cells]
             elif cmd == CMD_WSF:
                 i = self._write_structured_field(body, i, events)
             else:
