@@ -23,6 +23,15 @@ Two services cannot share a port, and `start.sh` and the server both say so. The
 
 The 5250 TLS port, the console TLS port, the FTP implicit port and the sign-on TLS port start only when a certificate exists (see below), and only with `--services`.
 
+Moving a port is an environment variable in front of `start.sh`, and you can set several:
+
+```
+SILVERLAKE_FTP_PORT=3131 ./start.sh --services
+SILVERLAKE_FTP_PORT=3131 SILVERLAKE_HTTPADMIN_PORT=3001 ./start.sh --services
+```
+
+The banner `start.sh` prints shows the ports in use, so check it. Moving the FTP port does not move the implicit TLS one (`SILVERLAKE_FTP_TLS_PORT`). The lesson steps are written for the default ports, so if you moved one, use yours where a step says `2121` or another number from the table.
+
 Things to know when you point a tool at it:
 
 - **The real numbers.** `./start.sh --services --real-ports` (or `SILVERLAKE_REAL_PORTS=1`) uses 23, 992, 21, 990, 449 and 22 where they differ, and keeps the ones that already match (2001, 2010, 8476, 9476). A `SILVERLAKE_*_PORT` you set yourself still wins. Those ports are below 1024, so the account has to be allowed to bind them: root (and then the files in `state/` and `.venv/` should not be created by root, so start it as your user where you can), or on Linux `sudo sysctl net.ipv4.ip_unprivileged_port_start=0`. Recent macOS lets a normal user bind a low port on loopback, but that has not been checked here. If the bind fails the server says which port and nothing else starts. `./status.sh` and the loopback guard still apply, so the ports stay on 127.0.0.1.
