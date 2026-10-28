@@ -4,12 +4,19 @@ set -euo pipefail
 cd "$(dirname "$0")"
 source ./lib.sh
 
-command -v python3 >/dev/null || { bad "python3 not found"; exit 1; }
-python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))' \
-  || { bad "Python 3.12 or newer required"; exit 1; }
+# PYTHON=/path/to/python overrides. Otherwise the first of python3.14 .. python3.12, then python3, that is new enough.
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+  for c in python3.14 python3.13 python3.12 python3; do
+    if command -v "$c" >/dev/null && "$c" -c 'import sys; sys.exit(sys.version_info < (3, 12))'; then PY="$c"; break; fi
+  done
+fi
+[ -n "$PY" ] && command -v "$PY" >/dev/null || { bad "Python 3.12 or newer not found (set PYTHON=/path/to/python)"; exit 1; }
+"$PY" -c 'import sys; sys.exit(sys.version_info < (3, 12))' \
+  || { bad "$PY is older than 3.12 (set PYTHON=/path/to/python)"; exit 1; }
 
 info "creating .venv"
-python3 -m venv .venv
+"$PY" -m venv .venv
 .venv/bin/pip install --quiet --upgrade pip
 .venv/bin/pip install --quiet -e '.[dev]'
 

@@ -30,7 +30,7 @@ Everything binds to `127.0.0.1` and `start.sh` refuses to launch otherwise. A de
 ## Quick start
 
 ```
-./setup.sh      # make a venv and install
+./setup.sh      # make a venv and install (needs Python 3.12+; PYTHON=/path/to/python ./setup.sh if python3 is older)
 ./start.sh      # listen on 127.0.0.1:5250
 ./start.sh --port 5251   # or another port, if 5250 is taken
 ./status.sh     # is it up, is it loopback only
