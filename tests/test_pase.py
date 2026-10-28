@@ -948,3 +948,12 @@ def test_the_filters_find_the_password_in_the_script_and_the_fix_removes_it(stor
     assert flags.flag("pase-secrets-in-profile") not in " ".join(sh.run("cat /QOpenSys/var/ops/ftp-push.sh"))
     scenarios.apply(store, scenarios.registry()["pase-secrets-in-profile"], "vulnerable")
     assert sh.run("grep FTP_PASS /QOpenSys/var/ops/ftp-push.sh") == [f"FTP_PASS={flags.flag('pase-secrets-in-profile')}"]
+
+
+def test_sed_addresses_and_semicolons_inside_s_and_a_huge_number_in_sort(store):
+    sh = shell(store)
+    assert sh.run("echo 'a;b' | sed '1s/;/:/'") == ["a:b"] and sh.run("echo 'a;b' | sed '/a/s/;/:/g'") == ["a:b"]
+    sh.run("echo a > g; echo b >> g; echo c >> g; echo d >> g")
+    assert sh.run("sed '2,/c/d' g") == ["a", "d"] and sh.run("sed -n '/b/,/c/p' g") == ["b", "c"]
+    assert sh.run("echo 1 > n; echo " + "9" * 400 + " >> n; echo 2 >> n; sort -n n | head -1") == ["1"]
+    assert sh.run("sort -n n | tail -1") == ["9" * 400]

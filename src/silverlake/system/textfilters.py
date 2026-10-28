@@ -106,6 +106,9 @@ def bre(pattern: str) -> str:
     return "".join(out)
 
 
+ADDR = r"(\d+|\$|/(?:[^/\\]|\\.)*/)"
+
+
 class SedError(Exception):
     pass
 
@@ -119,7 +122,7 @@ def sed_compile(script: str):
         text = text.strip()
         if not text:
             continue
-        m = re.match(r"(\d+|\$|/(?:[^/\\]|\\.)*/)?(?:,(\d+|\$))?\s*", text)
+        m = re.match(rf"{ADDR}?(?:,{ADDR})?\s*", text)
         addr = (m[1], m[2]) if m and m[1] else None
         rest = text[m.end():] if m else text
         if not rest:
@@ -155,7 +158,7 @@ def _split_script(script: str) -> list[str]:
             cur += script[i:i + 2]
             i += 2
             continue
-        if cur.lstrip()[:1] == "s" and delim_stack is None and len(cur.lstrip()) == 1:
+        if delim_stack is None and re.fullmatch(rf"\s*(?:{ADDR}(?:,{ADDR})?)?\s*s", cur):
             delim_stack = [c, 1]
         elif delim_stack is not None and c == delim_stack[0]:
             delim_stack[1] += 1
@@ -271,7 +274,10 @@ def sort_key(line: str, key: tuple[int, int | None] | None, sep: str | None, num
         text = text.lstrip()
     if numeric:
         m = re.match(r"\s*(-?\d+(?:\.\d+)?)", text)
-        return (float(m[1]) if m else 0.0, line)
+        try:
+            return (float(m[1]) if m else 0.0, line)
+        except OverflowError:                       # a number with hundreds of digits: far past any other
+            return (float("-inf") if m[1].startswith("-") else float("inf"), line)
     return ((text.lower() if fold else text), line)
 
 
