@@ -1227,3 +1227,49 @@ def test_grep_l_and_q_are_posix_and_not_taken_from_pub400(store):
     assert sh.run("grep -l a f1 f2") == ["f1"] and sh.run("grep -l z f1 f2; echo $?") == ["1"]
     assert sh.run("grep -q a f1; echo $?") == ["0"] and sh.run("grep -q z f1; echo $?") == ["1"] and sh.run("grep -q a f1") == []
     assert sh.run("echo a | grep -l a") == ["(standard input)"]
+
+
+# -- B8: process control, wording from the PUB400 run of 2026-10-28 (ssh-pase-b8) ------------------------------------
+
+def test_b8_wording_and_statuses_match_pub400(store):
+    sh = shell(store)
+    names = "kill jobs ulimit nice nohup wait fg bg alias unalias"
+    assert sh.run("which " + names) == [f"/QOpenSys/usr/bin/{n}" for n in names.split()]
+    assert sh.run("type ulimit wait kill") == ["ulimit is a shell builtin", "wait is a shell builtin", "kill is /QOpenSys/usr/bin/kill"]
+    assert sh.run("kill; echo $?") == ["usage: kill [ -signal | -s signal] pid ...", "usage: kill -l [exit_status]", "2"]
+    signals = sh.run("kill -l")
+    assert len(signals) == 3 and signals[0].startswith("NULL HUP INT QUIT") and signals[0].endswith("URG ") and signals[2].endswith("SOUND SAK")
+    assert sh.run("kill 99999; echo $?") == ["kill: 99999: no such process", "2"] and sh.run("kill -9 99999; echo $?") == ["kill: 99999: no such process", "2"]
+    assert sh.run("kill -0 $$; echo $?") == ["0"] and sh.run("kill -l 137") == ["KILL"] and sh.run("kill -l 9") == ["KILL"]
+    assert sh.run("jobs; echo $?") == ["0"] and sh.run("wait; echo $?") == ["0"] and sh.run("fg; echo $?") == ["1"] and sh.run("bg; echo $?") == ["1"]
+    assert sh.run("unalias nosuch; echo $?") == ["1"] and sh.run("unalias") == ["/QOpenSys/usr/bin/unalias[53]: unalias: bad argument count"]
+    aliases = sh.run("alias")
+    assert aliases[0] == "autoload='typeset -fu'" and "type='whence -v'" in aliases and sh.run("alias ll='ls -l'; ll /") == ["bsh: ll: not found"]
+    assert sh.run("ulimit") == ["cputime \tunlimited", "filesize \tunlimited", "datasize \tunlimited", "stacksize \tunlimited",
+                                "coredumpsize \tunlimited", "memory \t\tunlimited", "threads \tunlimited", "processes \tunlimited"]
+    usage = "bsh: Usage: ulimit [-H | -S] [ -c | -d | -f | -m | -r | -s | -t | -u] [limit]"
+    assert sh.run("ulimit -a; echo $?") == [usage, "1"] and sh.run("ulimit -n; echo $?") == [usage, "1"]
+    assert sh.run("nice; echo $?") == ["usage: nice [-n increment] command [argument...]", "usage: nice [-increment] command [argument...]", "2"]
+    assert sh.run("nice echo hi") == ["hi"] and sh.run("nice -n 5 echo hi") == ["hi"] and sh.run("nice -5 echo hi") == ["hi"]
+    assert sh.run("nohup; echo $?") == ["usage: nohup { -p pid | command [arg ...] }", "127"] and sh.run("nohup echo hi; echo $?") == ["hi", "0"]
+
+
+def test_ps_has_the_pub400_layouts_and_kill_can_only_end_this_shell(store):
+    sh = shell(store)
+    assert sh.run("ps; echo $?") == ["    PID    TTY  TIME CMD", "1"] and sh.run("ps -o pid,ppid,comm; echo $?") == ["   PID   PPID COMMAND", "1"]
+    pid = sh.run("echo $$")[0]
+    assert pid.isdigit() and sh.run(f"ps -p {pid}") == ["    PID    TTY  TIME CMD", f"{int(pid):>7}      -  0:00 bsh"]
+    assert sh.run("ps -p 99999; echo $?") == ["    PID    TTY  TIME CMD", "1"]
+    mine = sh.run("ps -u STUDENT")
+    assert mine[0] == "      UID    PID    TTY  TIME CMD" and len(mine) == 3 and mine[1].split()[1] == pid and mine[2].endswith(" ps")
+    assert mine[1].split()[0].isdigit() and sh.run("ps -u 99999; echo $?") == ["      UID    PID    TTY  TIME CMD", "1"]
+    every = sh.run("ps -ef")
+    assert every[0] == "     UID    PID   PPID   C    STIME    TTY  TIME CMD" and any(l.endswith("[sshd]") for l in every)
+    assert any(" student " in l and l.endswith(" bsh") for l in every) and all(len(l.split()) >= 8 for l in every[1:])
+    assert sh.run("ps -o user,pid,comm -p " + pid) == ["USER        PID COMMAND", f"{'student':<8} {int(pid):>6} bsh"], "-o layouts are ours, a guess"
+    assert sh.run("ps -o nosuch; echo $?")[-1] == "1"
+    assert sh.run("kill 63; echo $?") == ["kill: 63: Not owner", "2"], "STUDENT does not own the sshd row"
+    assert sh.run("kill -15 $$; echo $?") == ["0"] and not sh.done, "a login shell shrugs off TERM"
+    assert sh.run("kill -9 $$") == [] and sh.done, "KILL ends this shell and nothing else"
+    boss = shell(store, "QSECOFR")
+    assert boss.run("kill -9 63; echo $?") == ["0"] and not boss.done and "[sshd]" in " ".join(boss.run("ps -ef")), "nothing real is signalled"

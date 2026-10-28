@@ -43,6 +43,7 @@ from fnmatch import fnmatchcase
 from . import ifs, pasei, spool
 from .archives import Archives
 from .heavyfilters import Heavy
+from .procs import Procs
 from .sshtools import SshTools
 from .textfilters import Err, Filters
 from .authority import Auth, SecuredObject, SpecialAuthority
@@ -57,7 +58,7 @@ SUB_LIMIT = 64 * 1024                          # characters one substitution may
 MAX_COMMANDS = 100                             # per line, so `;` cannot be used to loop the work
 MAX_GLOB = 1000                                # names one pattern may produce, and directory entries it may look at
 SYSTEM_PATH = "/QOpenSys/usr/bin:/usr/bin"
-BUILTINS = frozenset({"cd", "pwd", "echo", "export", "exit", "logout"})
+BUILTINS = frozenset({"cd", "pwd", "echo", "export", "exit", "logout", "ulimit", "wait"})
 QSH_ONLY = frozenset({"db2", "datarea", "dataq", "catsplf", "ldapsearch"})      # symlinks into QSYS.LIB programs: bsh says `cannot execute`
 JOB_PID = 872856                               # what getjobid and ps show for this shell, made up like PUB400's own numbers
 JOB_ID = "679199/QUSER/QP0ZSPWT"
@@ -69,7 +70,7 @@ SYSTEM_PROFILE = "/QOpenSys/etc/profile"
 
 
 @dataclass
-class Shell(Filters, Heavy, Archives, SshTools):
+class Shell(Filters, Heavy, Archives, SshTools, Procs):
     store: ProfileStore
     actor: Profile
     cwd: str = ""
@@ -408,11 +409,11 @@ class Shell(Filters, Heavy, Archives, SshTools):
 
     def dollar(self, text: str, i: int) -> tuple[str, int]:
         """The value of the `$` expression at text[i], and where the text goes on. A lone `$` is itself."""
-        m = re.compile(r"\$(\?|\w+)|\$\{(\w+)\}").match(text, i)
+        m = re.compile(r"\$(\?|\$|\w+)|\$\{(\w+)\}").match(text, i)
         if not m:
             return "$", i + 1
         name = m.group(1) or m.group(2)
-        return (str(self.status) if name == "?" else self.env.get(name, "")), m.end()
+        return (str(self.status) if name == "?" else str(JOB_PID) if name == "$" else self.env.get(name, "")), m.end()
 
     def glob(self, word: str, mask: str) -> list[str]:
         """`word` itself, or the names that match it when it has a `*`, `?` or `[...]` that was not quoted. A
@@ -1061,10 +1062,6 @@ class Shell(Filters, Heavy, Archives, SshTools):
             return self.cmd_env([])
         self.status = 0 if args[0] in self.env else 1
         return [self.env[a] for a in args[:1] if a in self.env]
-
-    def cmd_ps(self, args: list[str]) -> list[str]:
-        self.status = 1                                   # and PUB400 exited 1 with it, there being nothing to list
-        return ["    PID    TTY  TIME CMD"]               # PUB400 listed no process for the login, and neither do we
 
     def _lines_of(self, name: str, given: str) -> tuple[list[str] | None, str]:
         if given == "-":
