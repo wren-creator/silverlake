@@ -1120,3 +1120,102 @@ def test_b6_commands_obey_the_ifs_permissions_and_their_caps(store):
     assert sh.run("tar cf t.tar /nosuch; echo $?") == ["tar: /nosuch: No such file or directory", "2"]
     assert sh.run("time " * 8 + "echo hi")[0] == "hi"
     assert any("too many nested" in l for l in sh.run("time " * 20 + "echo hi"))
+
+
+# -- B7: keys and names, wording from the PUB400 run of 2026-10-28 (ssh-pase-b7) ------------------------------------
+
+def test_b7_wording_and_statuses_match_pub400(store):
+    sh = shell(store)
+    assert sh.run("which ssh-keygen ssh-keyscan ssh scp sftp openssl ldapsearch") == [
+        "/QOpenSys/usr/bin/ssh-keygen", "/QOpenSys/usr/bin/ssh-keyscan", "/QOpenSys/usr/bin/ssh", "/QOpenSys/usr/bin/scp",
+        "/QOpenSys/usr/bin/sftp", "/QOpenSys/usr/bin/openssl", "/usr/bin/ldapsearch"]
+    assert sh.run("which dig; echo $?")[0].startswith("no dig in ")
+    assert sh.run("dig localhost; echo $?") == ["bsh: dig: execute permission denied", "1"]
+    assert sh.run("nslookup localhost") == ["bsh: nslookup: execute permission denied"] and sh.run("host") == ["bsh: host: execute permission denied"]
+    assert sh.run("ldapsearch; echo $?") == ["bsh: ldapsearch: cannot execute", "1"]
+    assert sh.run("ssh -V; echo $?") == ["OpenSSH_9.6p1, OpenSSL 3.0.10 1 Aug 2023", "0"]
+    usage = sh.run("ssh; echo $?")
+    assert usage[0].startswith("usage: ssh [-46AaCfGgKkMNnqsTtVvXxYy]") and len(usage) == 9 and usage[-1] == "255"
+    assert sh.run("scp")[0].startswith("usage: scp [-346ABCOpqRrsTv]") and sh.run("sftp")[0].startswith("usage: sftp [-46AaCfNpqrv]")
+    assert sh.run("ssh-keyscan")[0].startswith("usage: ssh-keyscan [-46cDHv]") and sh.run("ssh-keyscan; echo $?")[-1] == "1"
+    assert sh.run("scp /nonexistent /tmp/x; echo $?") == ["cp: /nonexistent: No such file or directory", "1"], "scp ran cp on PUB400"
+    assert sh.run("openssl version") == ["OpenSSL 3.0.10 1 Aug 2023 (Library: OpenSSL 3.0.10 1 Aug 2023)"]
+    assert sh.run("openssl help")[0] == "help:" and "x509" in " ".join(sh.run("openssl help"))
+    assert sh.run("openssl s_client; echo $?")[-2:] == ["connect:errno=79", "1"]
+    assert sh.run("openssl nosuch; echo $?") == ["Invalid command 'nosuch'; type \"help\" for a list.", "1"]
+    out = sh.run("openssl x509 -in /nonexistent -noout; echo $?")
+    assert out[0] == "Could not open file or uri for loading certificate from /nonexistent" and out[-2:] == ["Unable to load certificate", "1"]
+    assert "calling stat(/nonexistent)" in out[2]
+
+
+def test_ssh_keygen_makes_real_keys_and_wording_matches_pub400(store):
+    pytest.importorskip("asyncssh")
+    sh = shell(store)
+    assert sh.run("ssh-keygen -l -f /nonexistent; echo $?") == ["ssh-keygen: /nonexistent: No such file or directory", "255"]
+    assert sh.run("ssh-keygen -y -f /nonexistent; echo $?") == ["/nonexistent: No such file or directory", "255"]
+    assert sh.run("ssh-keygen -t rsa -f /nonexistent/k -N ''; echo $?") == [
+        "Generating public/private rsa key pair.", 'Saving key "/nonexistent/k" failed: No such file or directory', "1"]
+    out = sh.run("ssh-keygen -t ed25519 -f k -N ''")
+    assert out[0] == "Generating public/private ed25519 key pair." and out[1:3] == [
+        "Your identification has been saved in k", "Your public key has been saved in k.pub"]
+    assert out[5] == "The key's randomart image is:" and out[6] == "+--[ED25519 256]--+" and out[-1] == "+----[SHA256]-----+" and len(out) == 17
+    assert sh.run("ls -l k k.pub")[0].startswith("-rw-------") and sh.run("ls -l k k.pub")[1].startswith("-rw-r--r--")
+    fp = sh.run("ssh-keygen -l -f k")[0]
+    assert fp.startswith("256 SHA256:") and fp.endswith("student@SILVERLAKE.LOCALDOMAIN (ED25519)") and sh.run("ssh-keygen -l -f k.pub") == [fp]
+    assert out[4].split()[0] == fp.split()[1] and sh.run("ssh-keygen -y -f k") == sh.run("cat k.pub")
+    assert sh.run("ssh-keygen -t ed25519 -f k -N ''; echo $?")[-3:] == ["k already exists.", "Overwrite (y/n)? ", "1"]
+    assert sh.run("ssh-keygen -l -f notes.txt; echo $?") == ["notes.txt is not a public key file.", "255"]
+    assert sh.run("ssh-keygen -q -t rsa -b 2048 -f r -N ''") == [] and sh.run("ssh-keygen -l -f r")[0].startswith("2048 SHA256:")
+
+
+def test_randomart_and_fingerprint_match_a_real_ssh_keygen():
+    asyncssh = pytest.importorskip("asyncssh")
+    from silverlake.system import sshtools
+    # a public key and what OpenSSH's own `ssh-keygen -lv` printed for it (macOS, OpenSSH_9.x)
+    key = asyncssh.import_public_key('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILNB8Z1J4j3ScR81j96px+VLDA0nXf6ZDefbTSFH5V/N me@x')
+    assert sshtools.randomart(key) == ['+--[ED25519 256]--+', '|/&*=.. o+o       |', '|*OB.o .o=        |', '|o+*  +.o         |', '|o+ +  o..        |', '|. =   ooS        |', '| o . o oo.       |', '|. . .   ..       |', '| .E.             |', '| ..              |', '+----[SHA256]-----+']
+    assert f"{sshtools._bits(key)[1]} {key.get_fingerprint()} {key.get_comment()} (ED25519)" == '256 SHA256:tqAVZZnE5j5ADhhQDAOBOS28WSVywi4YlAFzvmOxems me@x (ED25519)'
+
+
+def test_ssh_to_the_simulator_checks_keys_modes_and_authorized_keys(store):
+    pytest.importorskip("asyncssh")
+    sh = shell(store)
+    sh.run("ssh-keygen -q -t ed25519 -f k -N ''")
+    assert sh.run("ssh -i k DEVELOPER@localhost id; echo $?") == ["DEVELOPER@localhost: Permission denied (publickey,password).", "255"]
+    sh.run(f"echo '{sh.run('cat k.pub')[0]}' >> /home/DEVELOPER/.ssh/authorized_keys")
+    assert sh.run("ssh -i k DEVELOPER@localhost id") == ["uid=505(developer) gid=0"] and sh.status == 0
+    assert sh.run("ssh -p 2222 -i k DEVELOPER@127.0.0.1 cat /home/DEVELOPER/secret.txt")[0].startswith("Deploy token ")
+    assert sh.run("ssh -i k DEVELOPER@localhost false; echo $?")[-1] == "1", "the remote status comes back"
+    sh.run("cp k k2; chmod 644 k2")
+    out = sh.run("ssh -i k2 DEVELOPER@localhost id")
+    assert "WARNING: UNPROTECTED PRIVATE KEY FILE!" in out[1] and "Permissions 0644 for 'k2' are too open." in out and out[-1].startswith("DEVELOPER@")
+    assert sh.run("ssh -i nosuch DEVELOPER@localhost id")[0] == "Warning: Identity file nosuch not accessible: No such file or directory."
+    assert sh.run("ssh -i k NOSUCH@localhost id")[-1] == "NOSUCH@localhost: Permission denied (publickey,password)."
+    assert sh.run("ssh nosuch.invalid true; echo $?") == ["ssh: Could not resolve hostname nosuch.invalid: Name or service not known", "255"]
+    assert sh.run("ssh -p 80 localhost id; echo $?") == ["ssh: connect to host localhost port 80: Connection refused", "255"]
+    assert sh.run("scp k localhost:k; echo $?") == ["subsystem request failed on channel 0", "scp: Connection closed", "255"]
+    assert sh.run("sftp localhost; echo $?") == ["subsystem request failed on channel 0", "Connection closed", "255"]
+    scan = sh.run("ssh-keyscan localhost")
+    assert scan[0] == "# localhost:22 SSH-2.0-OpenSSH_9.6" and scan[1].startswith("localhost ssh-ed25519 AAAA")
+    assert sh.run("ssh-keyscan nosuch.invalid") == ["getaddrinfo nosuch.invalid: Name or service not known"]
+
+
+def test_openssl_x509_reads_a_certificate_from_the_ifs(store, tmp_path):
+    pytest.importorskip("cryptography")
+    import shutil
+    import subprocess
+    exe = shutil.which("openssl")
+    if exe is None:
+        pytest.skip("no openssl to make a certificate")
+    pem = tmp_path / "c.pem"
+    subprocess.run([exe, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(tmp_path / "k.pem"), "-out", str(pem),
+                    "-days", "30", "-subj", "/CN=SYSTEM1.LOCAL/OU=lab"], check=True, capture_output=True)
+    sh = shell(store)
+    ifs.write(store, store.profiles["STUDENT"], "/home/STUDENT/c.pem", pem.read_text())
+    assert sh.run("openssl x509 -in c.pem -noout -subject") == ["subject=CN = SYSTEM1.LOCAL, OU = lab"]
+    assert sh.run("openssl x509 -in c.pem -noout -issuer") == ["issuer=CN = SYSTEM1.LOCAL, OU = lab"]
+    dates = sh.run("openssl x509 -in c.pem -noout -dates")
+    assert dates[0].startswith("notBefore=") and dates[1].startswith("notAfter=") and dates[1].endswith(" GMT")
+    assert sh.run("openssl x509 -in c.pem -noout -fingerprint")[0].startswith("SHA1 Fingerprint=") and sh.run("openssl x509 -in c.pem")[0] == "-----BEGIN CERTIFICATE-----"
+    assert sh.run("openssl x509 -in notes.txt -noout; echo $?")[-2:] == ["Unable to load certificate", "1"]
+    assert sh.run("cat c.pem | openssl x509 -noout -subject") == ["subject=CN = SYSTEM1.LOCAL, OU = lab"]

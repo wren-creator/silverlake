@@ -43,6 +43,7 @@ from fnmatch import fnmatchcase
 from . import ifs, pasei, spool
 from .archives import Archives
 from .heavyfilters import Heavy
+from .sshtools import SshTools
 from .textfilters import Err, Filters
 from .authority import Auth, SecuredObject, SpecialAuthority
 from .profiles import Profile, ProfileStore
@@ -57,7 +58,7 @@ MAX_COMMANDS = 100                             # per line, so `;` cannot be used
 MAX_GLOB = 1000                                # names one pattern may produce, and directory entries it may look at
 SYSTEM_PATH = "/QOpenSys/usr/bin:/usr/bin"
 BUILTINS = frozenset({"cd", "pwd", "echo", "export", "exit", "logout"})
-QSH_ONLY = frozenset({"db2", "datarea", "dataq", "catsplf"})      # symlinks into QSYS.LIB programs: bsh says `cannot execute`
+QSH_ONLY = frozenset({"db2", "datarea", "dataq", "catsplf", "ldapsearch"})      # symlinks into QSYS.LIB programs: bsh says `cannot execute`
 JOB_PID = 872856                               # what getjobid and ps show for this shell, made up like PUB400's own numbers
 JOB_ID = "679199/QUSER/QP0ZSPWT"
 NODE_NAME = "SILVERLAKE"
@@ -68,7 +69,7 @@ SYSTEM_PROFILE = "/QOpenSys/etc/profile"
 
 
 @dataclass
-class Shell(Filters, Heavy, Archives):
+class Shell(Filters, Heavy, Archives, SshTools):
     store: ProfileStore
     actor: Profile
     cwd: str = ""
@@ -258,7 +259,7 @@ class Shell(Filters, Heavy, Archives):
                     return shown + [Err(f"bsh: {redir_in}: cannot open")]
         name, args = words[0], words[1:]
         script = None if name in BUILTINS else self.find_script(name)
-        fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", name) else None
+        fn = getattr(self, "cmd_" + name.replace("-", "_"), None) if re.fullmatch(r"[A-Za-z][A-Za-z0-9-]*", name) else None
         if name == "[":
             fn = self.cmd_bracket
         if script is None and ("/" in name or fn is None):
@@ -1175,12 +1176,12 @@ class Shell(Filters, Heavy, Archives):
 
     # -- B2: files and lookup, wording copied from PUB400 (ssh-pase-b2, 2026-10-28) -------------------------------
 
-    NOT_FILES = frozenset({"export", "exit", "logout", "bracket"})      # shell words with no program of that name
+    NOT_FILES = frozenset({"export", "exit", "logout", "bracket", "dig", "nslookup", "host"})      # shell words with no program of that name
 
     def _system_path(self, name: str) -> str | None:
         """Where the system keeps a command the simulator provides, or None. Only `cd`, `pwd` and `echo` are known to
         have a program as well as a builtin (`which cd` printed one); `db2` lives in /usr/bin."""
-        if name in self.NOT_FILES or not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", name) or not hasattr(self, "cmd_" + name):
+        if name in self.NOT_FILES or not re.fullmatch(r"[A-Za-z][A-Za-z0-9-]*", name) or not hasattr(self, "cmd_" + name.replace("-", "_")):
             return None
         return "/usr/bin/" + name if name in QSH_ONLY else "/QOpenSys/usr/bin/" + name
 

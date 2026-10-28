@@ -49,7 +49,7 @@ The lessons are written up in [docs/scenarios.md](docs/scenarios.md) (instructor
 
 The network services (the HTTP Admin console, FTP and the host servers) are opt in: `./start.sh --services`. Ports are not all the standard ones: 5250 for the 5250 session (real: 23), 2001 for the console (same), 2121 for FTP (real: 21), 4449 for the host server mapper (real: 449) 8476 for the sign-on server (same) and 2222 for ssh into the PASE shell (real: 22, needs `./setup.sh --ssh`), with TLS on 5992, 2010, 2990 and 9476 once `./setup.sh` has made a certificate. All are loopback only and can be moved, see the table in [docs/services.md](docs/services.md#ports).
 
-PASE is simulated: `CALL PGM(QP2TERM)` (or ssh on 2222 with `./setup.sh --ssh`) opens a small shell over a virtual IFS, with a writable IFS, scripts, `$PATH` lookup, `system` for CL, `db2` for SQL (inside `qsh -c`, as on the real host), 75 commands in all from `sort` and `sed` to `awk`, `diff` and `tar`, and seven lessons built on it. No host process is ever started. See [docs/pase.md](docs/pase.md).
+PASE is simulated: `CALL PGM(QP2TERM)` (or ssh on 2222 with `./setup.sh --ssh`) opens a small shell over a virtual IFS, with a writable IFS, scripts, `$PATH` lookup, `system` for CL, `db2` for SQL (inside `qsh -c`, as on the real host), 85 commands in all from `sort` and `sed` to `awk`, `tar` and `ssh-keygen`, and seven lessons built on it. No host process is ever started. See [docs/pase.md](docs/pase.md).
 
 Teaching it? [instructor/](instructor/) has the agenda, answer key, rubric, setup runbook and session slides.
 
