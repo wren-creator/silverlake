@@ -576,3 +576,191 @@ def test_pipelines_and_substitutions_are_capped(store):
         assert len(sh.run("echo `cat big`")[0]) == 50
     finally:
         module.SUB_LIMIT = 64 * 1024
+
+
+# -- B2: files and lookup (ssh-pase-b2 capture, 2026-10-28) --------------------------------------------------------------
+
+def test_basename_and_dirname_follow_pub400(store):
+    sh = shell(store)
+    assert sh.run("basename /a/b/c.txt") == ["c.txt"] and sh.run("basename /a/b/c.txt .txt") == ["c"]
+    assert sh.run("basename /a/b/") == ["b"] and sh.run("basename /") == ["/"]
+    assert sh.run("basename c.txt txt") == ["c."], "the suffix is a plain string, not an extension"
+    assert sh.run("basename c.txt c.txt") == ["c.txt"], "a suffix that is the whole name stays"
+    assert sh.run("basename") == ["Usage: basename string [suffix]"] and sh.status == 1
+    assert sh.run("dirname /a/b/c") == ["/a/b"] and sh.run("dirname c") == ["."] and sh.run("dirname /") == ["/"]
+    assert sh.run("dirname /a") == ["/"] and sh.run("dirname /a/b/") == ["/a"]
+    assert sh.run("dirname") == ["."] and sh.status == 0, "PUB400 printed a dot and exited 0"
+    assert sh.run("echo `dirname /x/y/z`/`basename /x/y/z`") == ["/x/y/z"]
+
+
+def test_which_and_type_look_along_path_in_order(store):
+    sh = shell(store)
+    assert sh.run("which ls") == ["/QOpenSys/usr/bin/ls"] and sh.run("which cd") == ["/QOpenSys/usr/bin/cd"]
+    assert sh.run("which ls cat") == ["/QOpenSys/usr/bin/ls", "/QOpenSys/usr/bin/cat"]
+    assert sh.run("which db2") == ["/usr/bin/db2"]
+    assert sh.run("which nosuchcmd; echo $?") == ["no nosuchcmd in /QOpenSys/usr/bin /usr/bin", "1"]
+    assert sh.run("which export") == ["no export in /QOpenSys/usr/bin /usr/bin"], "a shell word with no program"
+    assert sh.run("type ls") == ["ls is /QOpenSys/usr/bin/ls"]
+    assert sh.run("type cd") == ["cd is a shell builtin"] and sh.run("type echo") == ["echo is a shell builtin"]
+    assert sh.run("type nosuchcmd; echo $?") == ["nosuchcmd not found ", "1"], "to stdout, with PUB400's trailing space"
+    # a planted program in a directory earlier on PATH is what the shell and `which` both find
+    sh.run("mkdir /tmp/early")
+    sh.run("echo 'echo hijacked' > /tmp/early/id")
+    sh.run("chmod 755 /tmp/early/id")
+    sh.run("PATH=/tmp/early:/QOpenSys/usr/bin")
+    assert sh.run("which id") == ["/tmp/early/id"] and sh.run("type id") == ["id is /tmp/early/id"] and sh.run("id") == ["hijacked"]
+    assert sh.run("which ls") == ["/QOpenSys/usr/bin/ls"]
+
+
+def test_test_and_bracket_answer_in_the_status(store):
+    sh = shell(store)
+    def t(line):
+        sh.run(line)
+        return sh.status
+    assert t("test -f /QOpenSys/etc/motd") == 0 and t("test -d /QOpenSys/etc") == 0 and t("test -d /QOpenSys/etc/motd") == 1
+    assert t("test -e /nosuch") == 1 and t("test -r /QOpenSys/etc/motd") == 0 and t("test -w /QOpenSys/etc/motd") == 1
+    assert t("test -s /QOpenSys/etc/motd") == 0 and t("test -s /nosuch") == 1
+    assert t("test -x /QOpenSys/usr/bin/ls") == 0, "the simulator's own commands count as programs"
+    assert t("test -z ''") == 0 and t("test -n x") == 0 and t("test -n ''") == 1
+    assert t("test a = a") == 0 and t("test a = b") == 1 and t("test a != b") == 0
+    assert t("test 3 -lt 5") == 0 and t("test 5 -lt 3") == 1 and t("test 3 -lt x") == 1, "not a number is false, with no message"
+    assert t("test ! -f /nosuch") == 0 and t("test -f /QOpenSys/etc/motd -a -d /QOpenSys/etc") == 0
+    assert t("test -f /nosuch -o -d /QOpenSys/etc") == 0 and t("test -f /nosuch -a -d /QOpenSys/etc") == 1
+    assert t("test") == 1 and t("test x") == 0 and t("test ''") == 1
+    assert t("[ -f /QOpenSys/etc/motd ]") == 0 and t("[ 2 -gt 3 ]") == 1
+    assert sh.run("test -f /QOpenSys/etc/motd && echo yes || echo no") == ["yes"]
+    assert sh.run("[ -d /tmp ] && echo dir") == ["dir"]
+
+
+def test_a_test_with_a_missing_operand_ends_a_shell_with_no_terminal(store):
+    sh = shell(store)
+    assert sh.run("test -f; echo $?") == ["bsh: test: argument expected", "1"] and not sh.done, "at a prompt it carries on"
+    assert sh.run("[ -f /QOpenSys/etc/motd; echo $?") == ["bsh: test: ] missing", "1"]
+    batch = shell(store)
+    batch.batch = True
+    assert batch.run("test -f; echo $?") == ["bsh: test: argument expected"] and batch.done and batch.status == 1
+    again = shell(store)
+    again.batch = True
+    assert again.run("[ -f /QOpenSys/etc/motd; echo $?") == ["bsh: test: ] missing"] and again.done
+
+
+def test_file_says_what_pub400_said(store):
+    sh = shell(store)
+    assert sh.run("file /QOpenSys/etc/motd") == ["/QOpenSys/etc/motd: ascii text"]
+    assert sh.run("file /QOpenSys/etc") == ["/QOpenSys/etc: directory"]
+    assert sh.run("file /nosuchfile; echo $?") == ["file: cannot open /nosuchfile", "0"], "to stdout, exit 0"
+    sh.run("touch /tmp/empty")
+    assert sh.run("file /tmp/empty") == ["/tmp/empty: empty"]
+
+
+def test_rmdir_removes_only_an_empty_directory_the_profile_may_change(store):
+    sh = shell(store)
+    assert sh.run("rmdir; echo $?") == ["Usage: rmdir [-p] Directory ...", "2"]
+    assert sh.run("rmdir /nosuchdir; echo $?") == ["rmdir: /nosuchdir not removed.", "Permission denied", "2"], "the parent / is not STUDENT's"
+    assert sh.run("rmdir /QOpenSys/etc/motd; echo $?")[-1] == "2"
+    sh.run("mkdir /tmp/d1")
+    sh.run("touch /tmp/d1/f")
+    assert sh.run("rmdir /tmp/d1")[0] == "rmdir: /tmp/d1 not removed." and "/tmp/d1" in store.ifs, "not empty"
+    sh.run("rm /tmp/d1/f")
+    assert sh.run("rmdir /tmp/d1") == [] and "/tmp/d1" not in store.ifs
+    assert sh.run("rmdir /tmp/nowhere")[1] == "No such file or directory"
+    sh.run("touch /tmp/afile")
+    assert sh.run("rmdir /tmp/afile")[1] == "A path name is not a directory" and "/tmp/afile" in store.ifs, "a file is never removed by rmdir"
+    sh.run("mkdir -p /tmp/p/q/r")
+    assert sh.run("rmdir -p /tmp/p/q/r") == [] and "/tmp/p" not in store.ifs
+    assert sh.run("rmdir /QSYS.LIB/APPLIB.LIB; echo $?")[-1] == "2"
+
+
+def test_umask_sets_the_permissions_new_files_get(store):
+    sh = shell(store)
+    assert sh.run("umask") == ["022"]
+    sh.run("touch /tmp/u1")
+    sh.run("mkdir /tmp/u1d")
+    n = store.ifs["/tmp/u1"]
+    assert (n.owner_mode, n.public) == ("rw-", "r--") and store.ifs["/tmp/u1d"].public == "r-x"
+    assert sh.run("umask 077; umask") == ["077"]
+    sh.run("touch /tmp/u2")
+    sh.run("echo hi > /tmp/u3")
+    sh.run("mkdir /tmp/u2d")
+    assert store.ifs["/tmp/u2"].public == "---" and store.ifs["/tmp/u3"].public == "---" and store.ifs["/tmp/u2d"].public == "---"
+    assert store.ifs["/tmp/u2"].owner_mode == "rw-"
+    sh.run("umask 000")
+    sh.run("touch /tmp/u4")
+    sh.run("mkdir /tmp/u4d")
+    assert store.ifs["/tmp/u4"].public == "rw-" and store.ifs["/tmp/u4d"].public == "rwx", "a mask of 0 opens it to everyone"
+    sh.run("umask 027")
+    assert sh.run("umask") == ["027"]
+    assert sh.run("umask -S; echo $?") == ["0"] and sh.run("umask 99; echo $?") == ["0"], "PUB400 ignored both, silently"
+    assert sh.run("umask") == ["027"]
+    assert shell(store).run("umask") == ["022"], "each shell starts at 022"
+
+
+def test_du_counts_blocks_the_way_pub400_did(store):
+    sh = shell(store)
+    sh.run("cd /tmp")
+    sh.run("echo small > f1")
+    assert sh.run("du -s f1") == ["8\tf1"] and sh.run("du -k f1") == ["4\tf1"], "512 byte blocks, 4 KB units"
+    sh.run("echo " + "x" * 5000 + " > f2")
+    assert sh.run("du -s f2") == ["16\tf2"]
+    sh.run("mkdir -p tree/a/b")
+    sh.run("echo hi > tree/a/b/f")
+    assert sh.run("du tree") == ["16\ttree/a/b", "24\ttree/a", "32\ttree"], "directories, deepest first, each with what is below"
+    assert sh.run("du -s tree") == ["32\ttree"] and sh.run("du -sk tree") == ["16\ttree"]
+    assert sh.run("du -a tree")[0] == "8\ttree/a/b/f"
+    assert sh.run("du /nosuchdir; echo $?") == ["du: /nosuchdir: No such file or directory", "2"]
+    assert sh.run("du /home/OPERATOR; echo $?")[-1] == "2"
+
+
+def test_find_walks_a_tree_under_the_profiles_view_of_it(store):
+    sh = shell(store)
+    assert sh.run("find /QOpenSys/etc/motd") == ["/QOpenSys/etc/motd"]
+    assert sh.run("find /nosuchdir; echo $?") == ["find: bad status-- /nosuchdir", "1"]
+    assert sh.run("find /QOpenSys/etc -name 'mo*'") == ["/QOpenSys/etc/motd"]
+    assert sh.run("find /QOpenSys/etc -name motd -type f") == ["/QOpenSys/etc/motd"]
+    assert sh.run("find /QOpenSys/etc -name motd -type d") == [] and "/QOpenSys/etc/ssh" in sh.run("find /QOpenSys/etc -type d")
+    assert sh.run("find /QOpenSys/etc -name motd -print") == ["/QOpenSys/etc/motd"]
+    assert sh.run("find /QOpenSys/etc -name 'mo*' -o -name 'pro*'") == ["/QOpenSys/etc/motd", "/QOpenSys/etc/profile"]
+    assert sh.run("find /QOpenSys/etc -maxdepth 1; echo $?") == ["find: bad option -maxdepth", "1"]
+    assert sh.run("find /QOpenSys/etc -user nosuchuser; echo $?") == ["find: cannot find -user name", "1"]
+    assert sh.run("find /QOpenSys/etc -user qsys -name motd") == ["/QOpenSys/etc/motd"]
+    sh.run("cd /QOpenSys/etc")
+    assert sh.run("find . -name motd") == ["./motd"] and sh.run("find ssh -name '*.conf'")[0].startswith("ssh/sshd_config.d/")
+    assert sh.run("find") == ["Usage: find path-list [predicate-list]"] and sh.status == 1
+
+
+def test_find_perm_is_how_a_student_finds_what_anyone_can_write(store):
+    sh = shell(store)
+    wide = sh.run("find / -perm -002")
+    assert "/tmp" in wide and "/tmp/opsbin" in wide and "/QOpenSys/etc/profile" in wide
+    assert "/QOpenSys/etc/motd" not in wide and "/QOpenSys/var/ops/README" not in wide
+    assert sh.run("find /QOpenSys/etc -perm 644") == ["/QOpenSys/etc/motd"] or "/QOpenSys/etc/motd" in sh.run("find /QOpenSys/etc -perm 644")
+    assert "/QOpenSys/etc/motd" in sh.run("find /QOpenSys/etc -perm -004") and "/QOpenSys/etc/motd" not in sh.run("find /QOpenSys/etc -perm -040 -type d")
+    assert sh.run("find /QOpenSys/etc -perm 9") and sh.status == 1
+    # it only lists what the profile may list
+    assert "/home/OPERATOR/.profile" not in sh.run("find /home -name .profile")
+
+
+def test_find_and_du_stop_at_a_cap(store):
+    from silverlake.system import pase as module
+    sh = shell(store)
+    module.MAX_FIND = 5
+    try:
+        out = sh.run("find / -name '*'")
+        assert out[-1].startswith("find: stopped after 5 entries") and sh.status == 1
+    finally:
+        module.MAX_FIND = 5000
+
+
+def test_pase_find_writable_lists_what_anyone_can_write_and_the_fix_closes_it(store):
+    from silverlake import flags, scenarios
+    base = "/QOpenSys/var/ops"
+    want = f"{base}/backup.sh,{base}/jobs.conf,{base}/spool"
+    assert flags.FACTS["world_writable_ops"](store) == want
+    sh = shell(store)
+    assert ",".join(sh.run(f"find {base} -perm -002")) == want, "what find shows is the answer"
+    assert f"{base}/README" not in want and f"{base}/notes.txt" not in want
+    assert sh.run(f"echo more >> {base}/jobs.conf") == [] and "more" in store.ifs[f"{base}/jobs.conf"].content
+    scenarios.apply(store, scenarios.registry()["pase-find-writable"], "secure")
+    assert flags.FACTS["world_writable_ops"](store) == "none" and sh.run(f"find {base} -perm -002") == []
+    assert sh.run(f"echo more >> {base}/jobs.conf")[0].startswith("bsh:")
+    assert sh.run(f"touch {base}/spool/x")[0].startswith("touch:")

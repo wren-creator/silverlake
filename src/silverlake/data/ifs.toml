@@ -162,3 +162,52 @@ owner = "DEVELOPER"
 owner_mode = "rw-"
 public = "---"
 content = "Deploy token @@FLAG:ssh-strictmodes@@\n"
+
+# The operations area: a few files and a directory the operator set up, some of which anyone can write. Lesson
+# pase-find-writable is about finding which, and the secure state takes the write bit off the ones listed there.
+[[node]]
+path = "/QOpenSys/var"
+owner = "QSYS"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/var/ops"
+owner = "OPERATOR"
+public = "r-x"
+
+[[node]]
+path = "/QOpenSys/var/ops/README"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rw-"
+public = "r--"
+content = "Operations area. Nightly job settings and the scripts it runs. Ask the operator before changing anything.\n"
+
+[[node]]
+path = "/QOpenSys/var/ops/backup.sh"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rwx"
+public = "rwx"
+content = "#!/QOpenSys/usr/bin/bsh\n# nightly backup of the payroll library\necho saving APPLIB\n"
+
+[[node]]
+path = "/QOpenSys/var/ops/jobs.conf"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rw-"
+public = "rw-"
+content = "# job schedule\nbackup   02:00   /QOpenSys/var/ops/backup.sh\nreport   06:30   /QOpenSys/var/ops/report.sh\n"
+
+[[node]]
+path = "/QOpenSys/var/ops/spool"
+owner = "OPERATOR"
+public = "rwx"
+
+[[node]]
+path = "/QOpenSys/var/ops/notes.txt"
+kind = "file"
+owner = "OPERATOR"
+owner_mode = "rw-"
+public = "r--"
+content = "backup.sh and jobs.conf were opened up so the night shift could edit them. Close them again.\n"

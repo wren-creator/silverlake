@@ -52,6 +52,7 @@ A name is found the way a shell finds it. A word with a slash is a path. `cd`, `
 That is what makes two seeded weaknesses real. Both are lessons in group E (docs/scenarios.md):
 
 - **pase-profile-plant.** `/QOpenSys/etc/profile` is writable by everyone. Whoever logs in next runs what was appended, with their own authority.
+- **pase-find-writable.** A directory and two files in the operations area (`/QOpenSys/var/ops`) are writable by everyone, and `notes.txt` says they were opened for the night shift and never closed. `find /QOpenSys/var/ops -perm -002` lists them. The flag is a fact: the three paths, sorted and joined by commas, or `none` once fixed. The same `find` over `/` also lists `/tmp`, `/tmp/opsbin` and `/QOpenSys/etc/profile`, which are the other two lessons, so it doubles as the way to find them without being told.
 - **pase-path-hijack.** OPERATOR's `.profile` puts `/tmp/opsbin` first on `PATH` and runs `id`. `/tmp/opsbin` is writable by everyone, so a planted `id` runs as OPERATOR.
 
 In both, the victim is a second session: the trainee signs on as QSECOFR or OPERATOR in another 5250 window and runs `CALL PGM(QP2TERM)`.
@@ -130,6 +131,21 @@ A fifth read-only ssh run (thirty-four commands, one connection, nothing written
 - `echo a | echo b` prints `b`, `cat -` reads standard input, and `echo a | grep a FILE` searches the file and ignores the pipe.
 
 Guesses: a trailing `|` in a line with other commands swallows the whole line, `/dev/null` works as a sink and as empty input, and a `cd` inside a pipeline stage still changes the shell's directory (a real shell runs the stage in a subshell).
+
+## The files and lookup run (2026-10-28)
+
+A sixth read-only ssh run against PUB400 (sixty-six commands, nothing written, `find` and `du` kept inside `/QOpenSys/etc` and `rmdir` pointed only at a missing path and a file; capture `ssh-pase-b2.json`, local and gitignored) set B2's wording. Replaying it through the simulator matches on every command that does not depend on the host's own data (its longer `PATH`, the files in `/QOpenSys/etc`, their sizes and permissions). What it showed:
+
+- **`basename`** strips trailing slashes, `basename /` is `/`, a suffix is a plain string (`basename c.txt txt` is `c.`), and no argument is `Usage: basename string [suffix]` on stderr, exit 1. **`dirname`** with no argument prints `.` and exits 0, `dirname /a` is `/`, `dirname /a/b/` is `/a`.
+- **`which`** is the csh style one: it prints the path, or `no NAME in DIR DIR ...` on stderr (the `PATH` directories, space separated, `.` included when it is there) and exits 1. `which cd` printed `/QOpenSys/usr/bin/cd`, so `cd`, `pwd` and `echo` exist as programs as well as builtins; `export`, `exit` and `logout` do not. **`type`** says `ls is /QOpenSys/usr/bin/ls`, `cd is a shell builtin`, and for a miss prints `nosuchcmd not found ` on **stdout** with a trailing space, exit 1.
+- **`test`**: no arguments is false, one argument is true when it is not empty, `-f -d -e -r -w -x -s -z -n`, `= !=`, `-eq -ne -lt -le -gt -ge`, `!`, `-a`, `-o`. A number test on something that is not a number is false and says nothing. `test -f` with nothing after it is `bsh: test: argument expected` and, like `cd` and `export`, **ends a shell with no terminal** (the `echo $?` after it never ran). `[ -f x` without the bracket is `bsh: test: ] missing`, same effect.
+- **`file`** says `PATH: ascii text` or `PATH: directory`, and for a path that is not there prints `file: cannot open PATH` on **stdout** and exits 0. **Guesses:** `empty` for an empty file, and nothing for a program, because the simulator's commands are not files in the virtual IFS (`test -x` and `which` know about them, `file` and `ls` do not).
+- **`rmdir`** prints `rmdir: PATH not removed.` and then the reason on a second line, exit 2, and `Usage: rmdir [-p] Directory ...` with no argument. On PUB400 a missing path and a file in `/QOpenSys/etc` both said `Permission denied`, because the parent directory was not the profile's to change. Silverlake checks the parent first for the same reason. The other reasons (`No such file or directory`, `A path name is not a directory`, `File exists` for a directory that is not empty) are guesses.
+- **`umask`** printed `022` and then `077` after `umask 077`. `umask -S` and `umask 99` printed nothing and exited 0, so Silverlake ignores them too. The mask is applied to new files and directories (666 and 777 less the mask, the group digit dropped because the group bits are not kept).
+- **`du`** printed `8` for the 433 byte profile (512 byte blocks, 4 KB units) and `4` with `-k`; a missing path is `du: PATH: No such file or directory` on stderr, exit 2. Directory totals, `-a` and the unreadable-directory message are not from the capture.
+- **`find`**: a missing start is `find: bad status-- PATH`, exit 1; `-name`, `-type`, `-perm` (`-002` means "these bits set"), `-print` and `-o` work; `-maxdepth` is `find: bad option -maxdepth`; `-user` with a name it cannot find is `find: cannot find -user name`, exit 1. PUB400 lists in directory order and Silverlake in name order. One oddity is not copied: `find /QOpenSys/etc -name profile -type f` printed nothing there, presumably because the file is a link.
+
+Guesses elsewhere: the usage line for `find` with no arguments, `find: cannot open DIR` for a directory it may not list, and `du` on a directory it may not read.
 
 ## What is not confirmed on a real system
 

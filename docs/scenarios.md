@@ -380,7 +380,33 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 ## Group E: PASE and the IFS
 
-### 16. A writable directory at the front of the operator's PATH
+### 16. The operations area nobody audited
+
+**Where:** PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222
+
+**Real-world parallel:** Most privilege escalation on a Unix style system starts with a permission nobody remembers granting: a script run by a scheduler that anyone can edit, a config file opened up for a night shift and never closed, a world writable directory. The audit is one command, find with -perm -002, and an attacker runs it before anything else.
+
+**Vulnerability:** backup.sh (an operator script the nightly job runs), jobs.conf (its schedule) and the spool directory are writable by every profile. notes.txt says why and that it should be undone.
+
+**MITRE ATT&CK:** T1083 File and Directory Discovery, T1222.002 File and Directory Permissions Modification, T1574.010 Hijack Execution Flow: Services File Permissions Weakness
+
+**Exploit:**
+
+1. Sign on as STUDENT, CALL PGM(QP2TERM), and cd /QOpenSys/var/ops. ls -l shows the permission strings.
+2. find /QOpenSys/var/ops -perm -002 lists what anyone can write: backup.sh, jobs.conf and spool. README and notes.txt are not in the list.
+3. Run find / -perm -002 to see the rest of the system's world writable paths. /tmp, /tmp/opsbin and /QOpenSys/etc/profile are on it too, and they are other lessons.
+4. cat notes.txt. The reason is written down, and nobody closed it.
+5. Submit /QOpenSys/var/ops/backup.sh,/QOpenSys/var/ops/jobs.conf,/QOpenSys/var/ops/spool as the answer.
+
+**Consequence in the sim:** Anyone who can sign on can change what the operator's nightly job runs and when. The next run is theirs.
+
+**Flag:** As STUDENT, find everything under /QOpenSys/var/ops that anyone can write to. Submit the paths, sorted and joined by a comma with no spaces, or none if there are none.
+
+**Fix:** Take the write bit off for everyone but the owner (the secure state does: chmod 755 backup.sh and spool, 644 jobs.conf), set a umask of 022 or 077 so new files are not opened up by accident, and audit with find -perm -002 on a schedule. (`./scenario.sh set pase-find-writable secure`)
+
+**Reference:** CWE-732 Incorrect Permission Assignment for Critical Resource; CIS Benchmarks on world writable files; MITRE ATT&CK T1222.
+
+### 17. A writable directory at the front of the operator's PATH
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -406,7 +432,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** CWE-426 Untrusted Search Path; CIS Benchmarks on PATH and world writable directories; MITRE ATT&CK T1574.007.
 
-### 17. The system profile that anyone can write and every login runs
+### 18. The system profile that anyone can write and every login runs
 
 **Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
 
@@ -432,7 +458,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i PASE documentation on shell startup files; CIS Benchmarks for AIX and Linux on profile file permissions; MITRE ATT&CK T1546.004.
 
-### 18. A clerk with no command line who can still open a shell over ssh
+### 19. A clerk with no command line who can still open a shell over ssh
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 
@@ -457,7 +483,7 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 
 **Reference:** IBM i Security Reference, limited capability; OpenSSH sshd_config(5), DenyUsers and AllowUsers; CIS Benchmarks for SSH server configuration.
 
-### 19. A key file anyone can write, and an ssh daemon that does not mind
+### 20. A key file anyone can write, and an ssh daemon that does not mind
 
 **Where:** ssh listener, 127.0.0.1:2222 (start the range with ./start.sh --services, with asyncssh installed)
 

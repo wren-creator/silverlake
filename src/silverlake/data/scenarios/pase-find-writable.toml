@@ -1,0 +1,46 @@
+id = "pase-find-writable"
+title = "The operations area nobody audited"
+group = "E"
+summary = "A directory and two files in the operations area are writable by everyone, and nothing says so until someone runs find."
+
+[[change]]
+target = "ifs:/QOpenSys/var/ops/backup.sh"
+field = "public"
+vulnerable = "rwx"
+secure = "r-x"
+
+[[change]]
+target = "ifs:/QOpenSys/var/ops/jobs.conf"
+field = "public"
+vulnerable = "rw-"
+secure = "r--"
+
+[[change]]
+target = "ifs:/QOpenSys/var/ops/spool"
+field = "public"
+vulnerable = "rwx"
+secure = "r-x"
+
+[cleanup]
+remove_new_ifs = true
+
+[flag]
+kind = "fact"
+fact = "world_writable_ops"
+task = "As STUDENT, find everything under /QOpenSys/var/ops that anyone can write to. Submit the paths, sorted and joined by a comma with no spaces, or none if there are none."
+
+[doc]
+where = "PASE terminal, CALL PGM(QP2TERM) or ssh to 127.0.0.1:2222"
+parallel = "Most privilege escalation on a Unix style system starts with a permission nobody remembers granting: a script run by a scheduler that anyone can edit, a config file opened up for a night shift and never closed, a world writable directory. The audit is one command, find with -perm -002, and an attacker runs it before anything else."
+vulnerability = "backup.sh (an operator script the nightly job runs), jobs.conf (its schedule) and the spool directory are writable by every profile. notes.txt says why and that it should be undone."
+mitre = ["T1083 File and Directory Discovery", "T1222.002 File and Directory Permissions Modification", "T1574.010 Hijack Execution Flow: Services File Permissions Weakness"]
+steps = [
+  "Sign on as STUDENT, CALL PGM(QP2TERM), and cd /QOpenSys/var/ops. ls -l shows the permission strings.",
+  "find /QOpenSys/var/ops -perm -002 lists what anyone can write: backup.sh, jobs.conf and spool. README and notes.txt are not in the list.",
+  "Run find / -perm -002 to see the rest of the system's world writable paths. /tmp, /tmp/opsbin and /QOpenSys/etc/profile are on it too, and they are other lessons.",
+  "cat notes.txt. The reason is written down, and nobody closed it.",
+  "Submit /QOpenSys/var/ops/backup.sh,/QOpenSys/var/ops/jobs.conf,/QOpenSys/var/ops/spool as the answer.",
+]
+consequence = "Anyone who can sign on can change what the operator's nightly job runs and when. The next run is theirs."
+fix = "Take the write bit off for everyone but the owner (the secure state does: chmod 755 backup.sh and spool, 644 jobs.conf), set a umask of 022 or 077 so new files are not opened up by accident, and audit with find -perm -002 on a schedule."
+reference = "CWE-732 Incorrect Permission Assignment for Critical Resource; CIS Benchmarks on world writable files; MITRE ATT&CK T1222."

@@ -135,7 +135,15 @@ def _cleartext_signon_services(store) -> str:
     return "none" if store.system.require_tls == "yes" else "ftp,httpadmin"
 
 
-FACTS = {"release_and_pwdlevel": _release_and_pwdlevel, "cleartext_signon_services": _cleartext_signon_services}
+def _world_writable_ops(store) -> str:
+    """The paths under /QOpenSys/var/ops that the public may write, sorted and joined by commas, or none."""
+    base = "/QOpenSys/var/ops"
+    found = sorted(p for p, n in store.ifs.items() if p.startswith(base + "/") and "w" in n.public)
+    return ",".join(found) or "none"
+
+
+FACTS = {"release_and_pwdlevel": _release_and_pwdlevel, "cleartext_signon_services": _cleartext_signon_services,
+         "world_writable_ops": _world_writable_ops}
 
 CHECKS = {"new_privileged_profile": _new_privileged_profile, "salary_raised": _salary_raised,
           "student_reads_payroll": _student_reads_payroll, "readable_copy": _readable_copy,

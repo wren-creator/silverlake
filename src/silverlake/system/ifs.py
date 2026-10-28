@@ -293,23 +293,25 @@ def _parent(store: ProfileStore, actor: Profile, path: str) -> tuple[str, Entry]
     return parent, entry
 
 
-def make(store: ProfileStore, actor: Profile, path: str, kind: str, content: str = "") -> Node:
-    """A new directory or file owned by the actor. A new directory is rwx for the owner and r-x for everyone;
-    a file is rw- for the owner and r-- for everyone (a umask of 022)."""
+def make(store: ProfileStore, actor: Profile, path: str, kind: str, content: str = "", umask: int = 0o022) -> Node:
+    """A new directory or file owned by the actor. With the usual umask of 022 a directory is rwx for the owner and
+    r-x for everyone, and a file rw- and r--. The umask takes bits off 777 for a directory and 666 for a file; the
+    group digit is dropped, because the group bits are not kept."""
     _parent(store, actor, path)
     if path in store.ifs:
         raise IfsError("EEXIST", path)
-    node = Node(path, kind, actor.name, "rwx" if kind == "dir" else "rw-", "r-x" if kind == "dir" else "r--",
+    base = 0o7 if kind == "dir" else 0o6
+    node = Node(path, kind, actor.name, _from_octal(base & ~((umask >> 6) & 7)), _from_octal(base & ~(umask & 7)),
                 {}, content)
     store.ifs[path] = node
     store.on_change()
     return node
 
 
-def write(store: ProfileStore, actor: Profile, path: str, text: str, append: bool = False) -> None:
+def write(store: ProfileStore, actor: Profile, path: str, text: str, append: bool = False, umask: int = 0o022) -> None:
     """Replace or extend a stream file, making it if it is not there (what `>` and `>>` do)."""
     if path not in store.ifs:
-        make(store, actor, path, "file", text)
+        make(store, actor, path, "file", text, umask)
         return
     entry = lookup(store, actor, path)
     if entry.is_dir:
@@ -332,6 +334,15 @@ def remove(store: ProfileStore, actor: Profile, path: str, recursive: bool = Fal
         del store.ifs[p]
     del store.ifs[path]
     store.on_change()
+
+
+def rmdir(store: ProfileStore, actor: Profile, path: str) -> None:
+    """Remove an empty directory. The directory above it needs `w` and `x` first, as for any removal, so a path in a
+    directory the profile may not change is a permission error whether or not the path exists."""
+    _parent(store, actor, path)
+    if not lookup(store, actor, path).is_dir:
+        raise IfsError("ENOTDIR", path)
+    remove(store, actor, path)
 
 
 def copy(store: ProfileStore, actor: Profile, src: str, dst: str) -> None:

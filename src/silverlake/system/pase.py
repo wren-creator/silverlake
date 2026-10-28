@@ -16,7 +16,8 @@ were given; with no file and no input they print nothing, where a real one would
 
 Built: pwd, cd, ls (-l -a), cat, id, echo ($VAR), env, export, exit, and the writing set: mkdir (-p),
 touch, rm (-r -f), cp, mv, chmod, `> file` and `>> file` at the end of a command, and `system 'CL command'`,
-which runs through the CL dispatcher as the signed on profile. A line may hold several commands joined by `;`,
+which runs through the CL dispatcher as the signed on profile. B2 (captured 2026-10-28) added basename, dirname,
+which, type, test and [, file, rmdir, umask, du and find. A line may hold several commands joined by `;`,
 `&&` and `||`, read left to right; every command leaves an exit status in `status`, which `$?` shows and which
 `&&` and `||` act on. Words may use `*`, `?` and `[...]` (matched against the directories the profile can list,
 a pattern with no match stays as typed). There is no `~` expansion, because bsh has none. A line that does not
@@ -33,15 +34,18 @@ captured and is still a guess, see docs/pase.md."""
 
 from __future__ import annotations
 
+import posixpath
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from fnmatch import fnmatchcase
 
 from . import ifs
 from .profiles import Profile, ProfileStore
 
 BANNER = "Simulated PASE terminal. Not an AIX runtime: a few commands over a virtual IFS."
 NOT_AVAILABLE = "bsh: that syntax is not available in the simulator (no &, subshells or here documents)."
+MAX_FIND = 5000                                # entries find or du will look at
 MAX_STAGES = 20                                # commands in one pipeline
 MAX_SUB = 5                                    # backticks inside backticks
 SUB_LIMIT = 64 * 1024                          # characters one substitution may bring back
@@ -74,6 +78,7 @@ class Shell:
     stdin: list[str] | None = None               # what the command now running was piped, or None when it has no input
     sub_errors: list = field(default_factory=list)   # what a backtick command printed to stderr, shown ahead of its line
     sub_depth: int = 0
+    umask: int = 0o022                           # the mask new files and directories are made with (PUB400 started at 022)
     batch: bool = False                          # a command run with no terminal (ssh host cmd): a failed cd or export ends it
     job: object = None
     clock: object = None                         # a callable giving "now" in UTC, for tests; None means the real time
@@ -250,6 +255,8 @@ class Shell:
         name, args = words[0], words[1:]
         script = None if name in BUILTINS else self.find_script(name)
         fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[a-z][a-z0-9]*", name) else None
+        if name == "[":
+            fn = self.cmd_bracket
         if script is None and ("/" in name or fn is None):
             self.status = 1                                    # PUB400's bsh, not the 127 other shells give
             return shown + [Err(f"bsh: {name}: not found")]
@@ -267,7 +274,7 @@ class Shell:
             return errors
         try:
             ifs.write(self.store, self.actor, target, "".join(l + "\n" for l in out if not isinstance(l, Err)),
-                      append=redir_out[0] == ">>")
+                      append=redir_out[0] == ">>", umask=self.umask)
         except ifs.IfsError as exc:
             return errors + [self._write_error("bsh", exc, redir_out[1])]
         return errors
@@ -655,9 +662,9 @@ class Shell:
                     for part in [p for p in target.split("/") if p]:
                         walk += "/" + part
                         if walk not in self.store.ifs:
-                            ifs.make(self.store, self.actor, walk, "dir")
+                            ifs.make(self.store, self.actor, walk, "dir", umask=self.umask)
                     continue
-                ifs.make(self.store, self.actor, target, "dir")
+                ifs.make(self.store, self.actor, target, "dir", umask=self.umask)
             except ifs.IfsError as exc:
                 out.append(self._write_error("mkdir", exc, given))
         return out
@@ -668,7 +675,7 @@ class Shell:
             target = self.path(given)
             try:
                 if target not in self.store.ifs:
-                    ifs.make(self.store, self.actor, target, "file")
+                    ifs.make(self.store, self.actor, target, "file", umask=self.umask)
                 else:
                     ifs.lookup(self.store, self.actor, target)
             except ifs.IfsError as exc:
@@ -891,3 +898,362 @@ class Shell:
                 out += [f"{prefix}{str(n) + ':' if 'n' in flags else ''}{l}" for n, l in hits]
         self.status = 2 if failed else (0 if matched else 1)            # 1 for no match and 2 for a file it could not open, as PUB400 did
         return out
+
+    # -- B2: files and lookup, wording copied from PUB400 (ssh-pase-b2, 2026-10-28) -------------------------------
+
+    NOT_FILES = frozenset({"export", "exit", "logout", "bracket"})      # shell words with no program of that name
+
+    def _system_path(self, name: str) -> str | None:
+        """Where the system keeps a command the simulator provides, or None. Only `cd`, `pwd` and `echo` are known to
+        have a program as well as a builtin (`which cd` printed one); `db2` lives in /usr/bin."""
+        if name in self.NOT_FILES or not re.fullmatch(r"[a-z][a-z0-9]*", name) or not hasattr(self, "cmd_" + name):
+            return None
+        return "/usr/bin/" + name if name == "db2" else "/QOpenSys/usr/bin/" + name
+
+    def _where(self, name: str) -> str | None:
+        """The program a name means, as `which` finds it: along PATH, an executable stream file first and then the
+        simulator's own command if that directory is the one it lives in."""
+        if "/" in name:
+            found = self.find_script(name)
+            return self.path(name) if found else None
+        home = self._system_path(name)
+        for d in [d for d in self.env.get("PATH", "").split(":") if d]:
+            candidate = ifs.normalize(d + "/" + name, self.cwd, self.env["HOME"])
+            try:
+                entry = ifs.lookup(self.store, self.actor, candidate)
+            except ifs.IfsError:
+                entry = None
+            if entry is not None and not entry.is_dir and "x" in entry.mode and candidate in self.store.ifs:
+                return candidate
+            if home is not None and candidate == home:
+                return home
+        return None
+
+    def cmd_basename(self, args: list[str]) -> list[str]:
+        if not args:
+            self.status = 1
+            return [Err("Usage: basename string [suffix]")]
+        name = args[0].rstrip("/") if args[0].strip("/") else ("/" if args[0] else "")
+        base = name.rsplit("/", 1)[-1] if name != "/" else "/"
+        suffix = args[1] if len(args) > 1 else ""
+        if suffix and base.endswith(suffix) and base != suffix:
+            base = base[:-len(suffix)]
+        return [base]
+
+    def cmd_dirname(self, args: list[str]) -> list[str]:
+        if not args:
+            return ["."]                                       # PUB400 printed a dot and exited 0
+        path = args[0]
+        if not path.strip("/"):
+            return ["/" if path else "."]
+        head = path.rstrip("/")
+        if "/" not in head:
+            return ["."]
+        return [head.rsplit("/", 1)[0].rstrip("/") or "/"]
+
+    def cmd_which(self, args: list[str]) -> list[str]:
+        out: list[str] = []
+        for name in args:
+            found = self._where(name)
+            if found:
+                out.append(found)
+            else:
+                self.status = 1
+                out.append(Err(f"no {name} in " + " ".join(d for d in self.env.get("PATH", "").split(":") if d)))
+        return out
+
+    def cmd_type(self, args: list[str]) -> list[str]:
+        out: list[str] = []
+        for name in args:
+            found = None if name in BUILTINS else self._where(name)
+            if name in BUILTINS:
+                out.append(f"{name} is a shell builtin")
+            elif found:
+                out.append(f"{name} is {found}")
+            else:
+                self.status = 1
+                out.append(f"{name} not found ")               # to stdout, with the trailing space, as PUB400 did
+        return out
+
+    UNARY_TESTS = frozenset("-f -d -e -r -w -x -s -z -n -L -h -p -b -c -u -g -k -t".split())
+    BINARY_TESTS = frozenset("= != -eq -ne -lt -le -gt -ge".split())
+
+    def cmd_test(self, args: list[str]) -> list[str]:
+        """test, and [ ]. A missing operand ends a shell with no terminal, as PUB400's bsh did
+        (`test -f; echo $?` printed one error and no status)."""
+        pos = 0
+
+        def peek() -> str | None:
+            return args[pos] if pos < len(args) else None
+
+        def primary() -> bool:
+            nonlocal pos
+            tok = peek()
+            if tok is None:
+                raise ValueError("argument expected")
+            if tok == "!":
+                pos += 1
+                return not primary()
+            if tok in self.UNARY_TESTS and not (pos + 2 < len(args) + 0 and args[pos + 1] in self.BINARY_TESTS):
+                if pos + 1 >= len(args):
+                    raise ValueError("argument expected")
+                operand = args[pos + 1]
+                pos += 2
+                return self._test_unary(tok, operand)
+            if pos + 2 < len(args) + 0 and args[pos + 1] in self.BINARY_TESTS:
+                left, op, right = args[pos:pos + 3]
+                pos += 3
+                return self._test_binary(left, op, right)
+            pos += 1
+            return tok != ""
+
+        def conj() -> bool:
+            nonlocal pos
+            value = primary()
+            while peek() == "-a":
+                pos += 1
+                value = primary() and value
+            return value
+
+        def disj() -> bool:
+            nonlocal pos
+            value = conj()
+            while peek() == "-o":
+                pos += 1
+                value = conj() or value
+            return value
+
+        if not args:
+            self.status = 1
+            return []
+        try:
+            result = disj()
+            if pos < len(args):
+                raise ValueError("argument expected")
+        except ValueError as exc:
+            return self._abort([f"bsh: test: {exc}"])
+        self.status = 0 if result else 1
+        return []
+
+    def cmd_bracket(self, args: list[str]) -> list[str]:
+        if not args or args[-1] != "]":
+            return self._abort(["bsh: test: ] missing"])
+        return self.cmd_test(args[:-1])
+
+    def _test_unary(self, op: str, operand: str) -> bool:
+        if op == "-z":
+            return operand == ""
+        if op == "-n":
+            return operand != ""
+        target = self.path(operand)
+        if self._system_path(posixpath.basename(target)) == target:            # the simulator's own commands count as programs
+            return op in ("-e", "-f", "-r", "-x", "-s")
+        try:
+            entry = ifs.lookup(self.store, self.actor, target)
+        except ifs.IfsError:
+            return False
+        return {"-e": True, "-f": not entry.is_dir, "-d": entry.is_dir, "-r": "r" in entry.mode, "-w": "w" in entry.mode,
+                "-x": "x" in entry.mode, "-s": entry.size > 0}.get(op, False)
+
+    @staticmethod
+    def _test_binary(left: str, op: str, right: str) -> bool:
+        if op == "=":
+            return left == right
+        if op == "!=":
+            return left != right
+        try:
+            a, b = int(left), int(right)
+        except ValueError:
+            return False                                       # `test 3 -lt x` printed 1 on PUB400, with no message
+        return {"-eq": a == b, "-ne": a != b, "-lt": a < b, "-le": a <= b, "-gt": a > b, "-ge": a >= b}[op]
+
+    def cmd_file(self, args: list[str]) -> list[str]:
+        out: list[str] = []
+        for given in args:
+            try:
+                entry = ifs.lookup(self.store, self.actor, self.path(given))
+            except ifs.IfsError:
+                out.append(f"file: cannot open {given}")        # to stdout, exit 0, as on PUB400
+                continue
+            kind = "directory" if entry.is_dir else ("ascii text" if entry.size else "empty")      # "empty" is a guess
+            out.append(f"{given}: {kind}")
+        return out
+
+    def cmd_rmdir(self, args: list[str]) -> list[str]:
+        parents = "-p" in args
+        names = [a for a in args if a != "-p"]
+        if not names:
+            self.status = 2
+            return [Err("Usage: rmdir [-p] Directory ...")]
+        why = {"EACCES": "Permission denied", "ENOENT": "No such file or directory", "ENOTDIR": "A path name is not a directory",
+               "ENOTEMPTY": "File exists"}                       # only the permission case was seen; the rest are guesses
+        out: list[str] = []
+        for given in names:
+            target = first = self.path(given)
+            while True:
+                try:
+                    ifs.rmdir(self.store, self.actor, target)
+                except ifs.IfsError as exc:
+                    if target == first:                      # with -p, stopping at a parent that cannot go is not an error
+                        out += [Err(f"rmdir: {given} not removed."), Err(why.get(exc.kind, exc.kind))]
+                        self.status = 2
+                    break
+                target = posixpath.dirname(target)
+                if not parents or target in ("", "/"):
+                    break
+        return out
+
+    def cmd_umask(self, args: list[str]) -> list[str]:
+        """`umask` prints the mask, `umask 077` sets it. PUB400 ignored `-S` and `umask 99`, saying nothing and exiting 0, so
+        anything that is not octal digits is ignored here too."""
+        if not args:
+            return [f"{self.umask:03o}"]
+        if re.fullmatch(r"[0-7]{1,4}", args[0]):
+            self.umask = int(args[0], 8)
+        return []
+
+    @staticmethod
+    def _blocks(entry: ifs.Entry) -> int:
+        """512 byte blocks, from 4 KB allocation units as PUB400's 433 byte file showed (8 blocks, 4 KB)."""
+        return 8 if entry.is_dir else -(-entry.size // 4096) * 8
+
+    def cmd_du(self, args: list[str]) -> list[str]:
+        flags = "".join(a[1:] for a in args if a.startswith("-") and len(a) > 1)
+        summary, kilo, every = "s" in flags, "k" in flags, "a" in flags
+        shown = lambda blocks: -(-blocks // 2) if kilo else blocks
+        out: list[str] = []
+        seen = 0
+
+        def walk(path: str, given: str, top: bool) -> int:
+            nonlocal seen
+            seen += 1
+            entry = ifs.lookup(self.store, self.actor, path)
+            total = self._blocks(entry)
+            if entry.is_dir and seen < MAX_FIND:
+                try:
+                    children = ifs.listdir(self.store, self.actor, path)
+                except ifs.IfsError:
+                    children = []
+                    out.append(Err(f"du: {given}: Permission denied"))               # a guess at the wording
+                    self.status = 2
+                for child in children:
+                    total += walk(child.path, given.rstrip("/") + "/" + child.path.rsplit("/", 1)[-1], False)
+            if (top or not summary) and (entry.is_dir or every or top):
+                out.append(f"{shown(total)}\t{given}")
+            return total
+
+        for given in [a for a in args if not a.startswith("-")] or ["."]:
+            try:
+                walk(self.path(given), given, True)
+            except ifs.IfsError as exc:
+                out.append(Err(f"du: {given}: " + ("Permission denied" if exc.kind == "EACCES" else "No such file or directory")))
+                self.status = 2
+        return out
+
+    def cmd_find(self, args: list[str]) -> list[str]:
+        """find path... [-name pattern] [-type f|d] [-perm [-]mode] [-user name] [-print] [-o]. What PUB400's find
+        refused is refused the same way (`-maxdepth`, `-user` with a name it cannot find). It lists in sorted order."""
+        starts = []
+        i = 0
+        while i < len(args) and not args[i].startswith("-") and args[i] not in ("!", "("):
+            starts.append(args[i])
+            i += 1
+        if not starts:
+            self.status = 1
+            return [Err("Usage: find path-list [predicate-list]")]            # a guess
+        groups: list[list] = [[]]
+        printed = False
+        while i < len(args):
+            tok = args[i]
+            if tok == "-o":
+                groups.append([])
+                i += 1
+            elif tok in ("-a", ):
+                i += 1
+            elif tok == "-print":
+                printed = True
+                i += 1
+            elif tok in ("-name", "-type", "-perm", "-user"):
+                if i + 1 >= len(args):
+                    self.status = 1
+                    return [Err(f"find: missing argument to {tok}")]            # a guess
+                value = args[i + 1]
+                if tok == "-user" and value.upper() not in self.store.profiles:
+                    self.status = 1
+                    return [Err("find: cannot find -user name")]
+                if tok == "-perm" and not re.fullmatch(r"-?[0-7]{1,4}", value):
+                    self.status = 1
+                    return [Err(f"find: bad option {value}")]                    # a guess
+                groups[-1].append((tok, value))
+                i += 2
+            else:
+                self.status = 1
+                return [Err(f"find: bad option {tok}")]
+            if not groups[-1] and tok != "-o" and len(groups) > 1 and i >= len(args):
+                self.status = 1
+                return [Err("find: missing argument")]                           # a guess
+        out: list[str] = []
+        visited = 0
+
+        def matches(entry: ifs.Entry, given: str) -> bool:
+            name = given.rstrip("/").rsplit("/", 1)[-1] or "/"
+            octal = self._octal(entry)
+            for group in groups:
+                ok = True
+                for tok, value in group:
+                    if tok == "-name":
+                        ok = fnmatchcase(name, value)
+                    elif tok == "-type":
+                        ok = value == ("d" if entry.is_dir else "f")
+                    elif tok == "-user":
+                        ok = entry.owner == value.upper()
+                    else:
+                        want = int(value.lstrip("-"), 8)
+                        ok = (octal & want) == want if value.startswith("-") else octal == want
+                    if not ok:
+                        break
+                if ok:
+                    return True
+            return False
+
+        def walk(path: str, given: str) -> None:
+            nonlocal visited
+            visited += 1
+            if visited > MAX_FIND:
+                return
+            try:
+                entry = ifs.lookup(self.store, self.actor, path)
+            except ifs.IfsError:
+                return
+            if matches(entry, given):
+                out.append(given)
+            if entry.is_dir:
+                try:
+                    children = ifs.listdir(self.store, self.actor, path)
+                except ifs.IfsError:
+                    out.append(Err(f"find: cannot open {given}"))                # a guess
+                    self.status = 1
+                    return
+                for child in children:
+                    walk(child.path, given.rstrip("/") + "/" + child.path.rsplit("/", 1)[-1])
+
+        for given in starts:
+            target = self.path(given)
+            try:
+                ifs.lookup(self.store, self.actor, target)
+            except ifs.IfsError:
+                out.append(Err(f"find: bad status-- {given}"))
+                self.status = 1
+                continue
+            walk(target, given)
+        if visited > MAX_FIND:
+            out.append(Err(f"find: stopped after {MAX_FIND} entries (the simulator's limit)"))
+            self.status = 1
+        return out
+
+    @staticmethod
+    def _octal(entry: ifs.Entry) -> int:
+        """The mode as a number. The group digit repeats the public one, as the long listing does."""
+        def digit(m: str) -> int:
+            return (4 if "r" in m else 0) + (2 if "w" in m else 0) + (1 if "x" in m else 0)
+        return digit(entry.owner_mode) << 6 | digit(entry.public) << 3 | digit(entry.public)
