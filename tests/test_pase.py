@@ -1063,3 +1063,60 @@ def test_the_b5_commands_are_found_by_which_and_cannot_be_used_to_loop(store):
         f"/QOpenSys/usr/bin/{n}" for n in "awk diff cmp comm join paste od strings split pr".split()]
     assert sh.run("echo a | awk 'BEGIN { for (i = 0; i < 100000000; i++) s += i }'; echo $?")[-1] == "2"
     assert sh.run("echo a | awk 'BEGIN { x = 1 / 0 }'; echo $?")[-1] == "2"
+
+
+# -- B6: archives and odds and ends, wording from the PUB400 run of 2026-10-28 (ssh-pase-b6) ---------------------------
+
+def test_b6_wording_and_statuses_match_pub400(store):
+    sh = shell(store)
+    assert sh.run("which tar zcat compress uncompress pax ar more sleep time") == [
+        f"/QOpenSys/usr/bin/{n}" for n in "tar zcat compress uncompress pax ar more sleep time".split()]
+    usage = sh.run("tar; echo $?")
+    assert usage[0].startswith("Usage: tar -{c|r|t|u|x}") and len(usage) == 7 and usage[-1] == "1"
+    assert sh.run("tar --help")[0] == "tar: illegal option -- -" and sh.run("tar xOf a")[0].startswith("Usage: tar"), "a key form has no 'illegal' line"
+    assert sh.run("tar tf /nonexistent; echo $?") == ["tar: /nonexistent: No such file or directory", "1"]
+    assert sh.run("zcat /nonexistent; echo $?") == ["/nonexistent.Z: No such file or directory", "1"]
+    assert sh.run("uncompress /nonexistent; echo $?") == ["/nonexistent.Z: No such file or directory", "1"]
+    assert sh.run("compress /nonexistent; echo $?") == ["/nonexistent: No such file or directory", "1"]
+    assert sh.run("pax -r < /dev/null; echo $?") == ["pax: No input", "1"]
+    assert sh.run("ar; echo $?")[0].startswith("Usage: ar [-X{32|64|32_64|d64|any}]") and sh.run("ar; echo $?")[-1] == "1"
+    assert sh.run("ar t /nonexistent; echo $?") == ["ar: 0707-100 /nonexistent does not exist.", "1"]
+    assert sh.run("echo hi | tar cf - -; echo $?") == ["tar: -: No such file or directory", "2"]
+    assert sh.run("echo hello | compress | zcat") == ["hello"]
+    assert sh.run("sleep; echo $?") == ["usage: sleep time", "2"] and sh.run("sleep abc; echo $?") == ["sleep: bad character in argument", "2"]
+    assert sh.run("sleep 1; echo $?") == ["0"]
+    assert sh.run("time; echo $?") == ["usage: time [-p] utility [argument...]", "1"]
+    assert sh.run("time echo hi") == ["hi", "", "real   0.03", "user   0.00", "sys    0.00"]
+    assert sh.run("time -p echo hi") == ["hi", "real 0.03", "user 0.00", "sys 0.00"]
+    assert sh.run("time false; echo $?")[-1] == "1" and sh.run("more /nonexistent; echo $?") == ["/nonexistent: No such file or directory", "1"]
+    assert sh.run("echo hi | more") == ["hi"]
+
+
+def test_tar_ar_pax_and_compress_round_trip_through_the_virtual_ifs(store):
+    sh = shell(store)
+    sh.run("mkdir d; echo a > d/x; echo b > y; chmod 755 y")
+    assert sh.run("tar cvf t.tar d y") == ["a d, 0 media blocks.", "a d/x, 2 bytes, 1 media blocks.", "a y, 2 bytes, 1 media blocks."]
+    assert sh.run("tar tf t.tar") == ["d/", "d/x", "y"] and sh.run("tar tf t.tar y") == ["y"]
+    assert sh.run("tar tvf t.tar")[2].startswith("-rwxr-xr-x") and sh.run("tar tvf t.tar")[0].startswith("drwxr-xr-x")
+    sh.run("rm -r d y")
+    assert sh.run("tar xf t.tar; cat d/x y") == ["a", "b"] and "x" in sh.run("ls -l y")[0].split()[0]
+    assert sh.run("tar cf - y | tar tf -") == ["y"] and sh.run("echo x > bad; tar tf bad; echo $?") == [
+        "tar: This is not a valid tar archive file.", "1"]
+    assert sh.run("compress y; ls y.Z") == ["y.Z"] and sh.run("ls y; echo $?")[-1] == "2" and sh.run("zcat y.Z") == ["b"]
+    assert sh.run("zcat y; uncompress y.Z; cat y") == ["b", "b"] and sh.run("ls y.Z; echo $?")[-1] == "2"
+    assert sh.run("compress -c y | zcat") == ["b"] and sh.run("cat y") == ["b"]
+    assert sh.run("ar rv lib.a y d/x") == ["a - y", "a - x"] and sh.run("ar t lib.a") == ["y", "x"] and sh.run("ar p lib.a y") == ["b"]
+    assert sh.run("ar d lib.a y; ar t lib.a") == ["x"] and sh.run("ar r lib.a y; ar t lib.a") == ["x", "y"]
+    assert sh.run("rm y; ar x lib.a y; cat y") == ["b"] and sh.run("ar t t.tar; echo $?")[-1] == "1"
+    assert sh.run("pax -w y d | pax") == ["y", "d/", "d/x"] and sh.run("echo d | pax -w -f p.pax; rm -r d; pax -r -f p.pax; ls d") == ["x"]
+
+
+def test_b6_commands_obey_the_ifs_permissions_and_their_caps(store):
+    sh = shell(store)
+    sh.run("echo b > y")
+    out = sh.run("tar cf /QOpenSys/etc/t.tar y; echo $?")
+    assert out[-1] == "1" and "Permission denied" in out[0], "STUDENT cannot write in /QOpenSys/etc"
+    assert sh.run("tar cf t.tar /home/CLERK/notes.txt; echo $?")[-1] == "2", "an unreadable file is not archived"
+    assert sh.run("tar cf t.tar /nosuch; echo $?") == ["tar: /nosuch: No such file or directory", "2"]
+    assert sh.run("time " * 8 + "echo hi")[0] == "hi"
+    assert any("too many nested" in l for l in sh.run("time " * 20 + "echo hi"))

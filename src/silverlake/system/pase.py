@@ -41,6 +41,7 @@ from datetime import datetime, timezone
 from fnmatch import fnmatchcase
 
 from . import ifs, pasei, spool
+from .archives import Archives
 from .heavyfilters import Heavy
 from .textfilters import Err, Filters
 from .authority import Auth, SecuredObject, SpecialAuthority
@@ -67,7 +68,7 @@ SYSTEM_PROFILE = "/QOpenSys/etc/profile"
 
 
 @dataclass
-class Shell(Filters, Heavy):
+class Shell(Filters, Heavy, Archives):
     store: ProfileStore
     actor: Profile
     cwd: str = ""

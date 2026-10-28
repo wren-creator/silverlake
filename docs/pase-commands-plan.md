@@ -1,10 +1,10 @@
 # PASE commands: the plan
 
-The simulated PASE shell has 66 commands. PUB400's real one has about 290 in `/QOpenSys/usr/bin` alone. This plan adds commands ten at a time, in the order that teaches the most for the least work, and says what will never be built. The checkable version is in [ROADMAP.md](../ROADMAP.md).
+The simulated PASE shell has 75 commands. PUB400's real one has about 290 in `/QOpenSys/usr/bin` alone. This plan adds commands ten at a time, in the order that teaches the most for the least work, and says what will never be built. The checkable version is in [ROADMAP.md](../ROADMAP.md).
 
 ## Where it stands
 
-Built (66): `pwd cd ls cat id echo env printenv export exit` and `mkdir touch rm cp mv chmod` and `system db2` and the read-only batch `uname hostname date logname ps head tail wc grep` and B2, `basename dirname which type test [ file rmdir umask du find` (`[` is `test`), and B3, `qsh datarea dataq catsplf getjobid sysval getconf dspmsg setccsid Rfile` (not `clrtmp`, which deletes), and B4, `sort uniq cut tr sed nl fold rev tee xargs`, and B5, `awk diff cmp comm join paste od strings split pr`. The first ten are the first slice, the next sixteen came with the writing set, SQL and the PUB400 batch, and the last ten with B2.
+Built (75): `pwd cd ls cat id echo env printenv export exit` and `mkdir touch rm cp mv chmod` and `system db2` and the read-only batch `uname hostname date logname ps head tail wc grep` and B2, `basename dirname which type test [ file rmdir umask du find` (`[` is `test`), and B3, `qsh datarea dataq catsplf getjobid sysval getconf dspmsg setccsid Rfile` (not `clrtmp`, which deletes), and B4, `sort uniq cut tr sed nl fold rev tee xargs`, and B5, `awk diff cmp comm join paste od strings split pr`, and B6, `tar zcat compress uncompress pax ar more sleep time` (`qsh` came with B3). The first ten are the first slice, the next sixteen came with the writing set, SQL and the PUB400 batch, and the last ten with B2.
 
 Built in P2: pipes, `<`, standard input for `cat head tail wc grep`, and backticks; no `$()`, because bsh has none (the P2 capture). Built in P1: exit statuses and `$?`, `;` `&&` `||`, and globbing (no `~`: bsh has no tilde expansion, as the P1 capture showed). `Shell.run` still returns a list of lines, and the status is read from `Shell.status`, so nothing that calls the shell changed. Not built, and it limits what the commands can do: pipes, input redirection, command substitution, and scripts with `if` or `for`. `head`, `tail`, `wc` and `grep` need a file name today because there is nothing to pipe into them.
 
@@ -28,7 +28,7 @@ The order follows what each batch needs. Text filters are useless without pipes,
 | **B3** | `dspmsg catsplf dataq datarea getjobid sysval clrtmp setccsid Rfile getconf` | The IBM i side of PASE, and where the lessons are (see below). Several need an object type Silverlake does not model yet (`*DTAARA`, `*DTAQ`, message files) |
 | **B4** | `sort uniq cut tr sed nl fold rev tee xargs` | The text filters. `sed` only `s///`, `d` and `p`, `xargs` only runs commands the shell already has |
 | **B5** | `awk diff cmp comm join paste od strings split pr` | The heavier filters. `awk` is a small subset (`print $N`, `-F`, a pattern, `NR`, `BEGIN` and `END`), not the language |
-| **B6** | `tar zcat compress uncompress pax ar more qsh sleep time` | Archives and odds and ends. Likely the first to be cut: `compress`, `pax` and `ar` have little to teach |
+| **B6** (built) | `tar zcat compress uncompress pax ar more sleep time` (`qsh` was already in B3) | Archives and odds and ends. The archive formats are ours, a text container, because the IFS holds text. `sleep` never waits and `time` prints fixed figures |
 | **B7** | `ssh-keygen ssh-keyscan ssh scp sftp dig nslookup host openssl ldapsearch` | Keys and names, only against the simulator itself: `ssh` goes to Silverlake's own listener and nowhere else, `dig` and its cousins read a small static table in the IFS, `openssl` does `version` and reading a certificate. `sftp` and `scp` need a subsystem the listener does not have yet. `ldapsearch` is the weakest fit |
 | **B8** | `kill jobs ulimit nice nohup wait fg bg alias unalias`, and real rows for `ps` | Process control with nothing real behind it, so mostly wording. Optional |
 
