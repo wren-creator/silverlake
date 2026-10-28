@@ -4,7 +4,7 @@ The base seed (data/profiles.toml) is the vulnerable range. Every lesson is a fi
 lists what its fix changes, each change with both its vulnerable and its secure value:
 
     [[change]]
-    target = "object:APPLIB/RUNCMD/*PGM"      # object:LIB/NAME/TYPE, profile:NAME or system
+    target = "object:APPLIB/RUNCMD/*PGM"      # object:LIB/NAME/TYPE, profile:NAME, ifs:/path or system
     field = "owner"                           # a dotted path: owner, public, data.usrprf, private.STUDENT
     vulnerable = "QSECOFR"
     secure = "QDFTOWN"
@@ -39,7 +39,7 @@ DATA = Path(__file__).resolve().parent / "data"
 UNSET = "*UNSET"
 STATES = ("vulnerable", "secure")
 GROUPS = {"A": "Reconnaissance and credentials", "B": "Authority and data exposure", "C": "Programs and the library list",
-          "D": "Network services (start with ./start.sh --services)"}
+          "D": "Network services (start with ./start.sh --services)", "E": "PASE and the IFS"}
 
 
 class ScenarioError(ValueError):
@@ -123,11 +123,21 @@ def _auth_name(auth) -> str:
     return name_auth(auth)
 
 
+def _node(store: ProfileStore, target: str):
+    path = target.split(":", 1)[1]
+    node = store.ifs.get(path)
+    if node is None:
+        raise ScenarioError(f"{target}: no such IFS path")
+    return node
+
+
 def get(store: ProfileStore, change: Change):
     """The current value of the field a change names."""
     kind = change.target.split(":", 1)[0]
     if kind == "object":
         return _from_object(_object(store, change.target), change.field)
+    if kind == "ifs":
+        return getattr(_node(store, change.target), change.field)
     if kind == "profile":
         p = store.get(change.target.split(":", 1)[1])
         if p is None:
@@ -164,6 +174,11 @@ def put(store: ProfileStore, change: Change, raw) -> None:
             setattr(obj, head, None if raw == UNSET else raw)
         else:
             raise ScenarioError(f"{change.target}: cannot change {change.field}")
+    elif kind == "ifs":
+        node = _node(store, change.target)
+        if change.field not in ("owner", "owner_mode", "public", "content"):
+            raise ScenarioError(f"{change.target}: cannot change {change.field}")
+        setattr(node, change.field, raw)
     elif kind == "profile":
         p = store.get(change.target.split(":", 1)[1])
         if p is None:
@@ -181,7 +196,7 @@ def put(store: ProfileStore, change: Change, raw) -> None:
             raise ScenarioError(f"system has no {change.field}")
         setattr(store.system, change.field, raw)
     else:
-        raise ScenarioError(f"{change.target}: target must start object:, profile: or system")
+        raise ScenarioError(f"{change.target}: target must start object:, profile:, ifs: or be system")
 
 
 # -- applying a state ---------------------------------------------------------------------------------------------
@@ -226,6 +241,18 @@ def cleanup(store: ProfileStore, scenario: Scenario) -> list[str]:
         for name in [n for n in store.profiles if n not in seed_names]:
             del store.profiles[name]
             done.append(f"removed profile {name}")
+    if c.get("remove_new_ifs"):
+        from .system import ifs as _ifs
+        seed_paths = set(_ifs.load_seed())
+        gone = [p for p in store.ifs if p not in seed_paths]
+        for p in gone:
+            del store.ifs[p]
+        if gone:
+            done.append(f"removed {len(gone)} IFS paths")
+        for p, n in _ifs.load_seed().items():
+            if p in store.ifs and p in c.get("restore_ifs", []):
+                store.ifs[p] = n
+                done.append(f"restored {p}")
     if c.get("remove_new_spool"):
         seed_ids = {(f.name, f.user, f.job_number) for f in _seed_store().spool}
         keep = [f for f in store.spool if (f.name, f.user, f.job_number) in seed_ids]

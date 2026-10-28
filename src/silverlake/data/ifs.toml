@@ -41,7 +41,7 @@ path = "/QOpenSys/etc/profile"
 kind = "file"
 owner = "QSYS"
 owner_mode = "rw-"
-public = "r--"
+public = "rw-"
 content = "# system wide profile, read by every PASE shell at start\nPATH=/QOpenSys/usr/bin:/usr/bin\nexport PATH\n"
 
 [[node]]
@@ -78,7 +78,7 @@ kind = "file"
 owner = "OPERATOR"
 owner_mode = "rw-"
 public = "r--"
-content = "# operator login settings\nexport EDITOR=vi\n"
+content = "# operator login settings\nexport EDITOR=vi\nPATH=/tmp/opsbin:$PATH\nexport PATH\nid\n"
 
 [[node]]
 path = "/home/DEVELOPER"
@@ -101,4 +101,9 @@ public = "---"
 [[node]]
 path = "/tmp"
 owner = "QSYS"
+public = "rwx"
+
+[[node]]
+path = "/tmp/opsbin"
+owner = "OPERATOR"
 public = "rwx"

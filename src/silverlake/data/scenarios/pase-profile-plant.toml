@@ -1,0 +1,35 @@
+id = "pase-profile-plant"
+title = "The system profile that anyone can write and every login runs"
+group = "E"
+summary = "/QOpenSys/etc/profile is read by every PASE shell at login. If an ordinary profile may write it, the next privileged login runs the ordinary profile's lines."
+
+[[change]]
+target = "ifs:/QOpenSys/etc/profile"
+field = "public"
+vulnerable = "rw-"
+secure = "r--"
+
+[cleanup]
+remove_new_ifs = true
+restore_ifs = ["/QOpenSys/etc/profile"]
+
+[flag]
+kind = "state"
+check = "ifs_loot_by_qsecofr"
+task = "As STUDENT, get a copy of the payroll file into the IFS that STUDENT can read, without STUDENT ever being allowed to read APPLIB/PAYROLL. Then play the security officer: open a second session as QSECOFR and run CALL PGM(QP2TERM)."
+
+[doc]
+where = "PASE terminal, CALL PGM(QP2TERM) from any 5250 session"
+parallel = "A login shell runs the system profile before the user's own, as the user who is logging in. A system profile that anyone can write is a shared trigger: whoever logs in next runs what was put there, with their own authority. It is a standard finding on Unix and AIX reviews and PASE inherits it."
+vulnerability = "/QOpenSys/etc/profile has public write. STUDENT has no authority over APPLIB/PAYROLL, but QSECOFR has all object authority, and QSECOFR's next PASE login runs every line of the profile."
+mitre = ["T1546.004 Event Triggered Execution: Unix Shell Configuration Modification", "T1068 Exploitation for Privilege Escalation", "T1005 Data from Local System"]
+steps = [
+  "Sign on as STUDENT and run CALL PGM(QP2TERM). Try cat /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE and read the refusal.",
+  "ls -l /QOpenSys/etc. The profile has rw- for everyone.",
+  "echo 'cp /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE /tmp/pay.txt' >> /QOpenSys/etc/profile",
+  "Sign on to a second session as QSECOFR (password QSECOFR) and run CALL PGM(QP2TERM). The login runs the planted line as QSECOFR.",
+  "Back as STUDENT, cat /tmp/pay.txt. The payroll rows are there, and STUDENT never had the authority to read them.",
+]
+consequence = "An account with no authority over the payroll file reads it, because a privileged login did the copying. The plant leaves the profile changed for every later login too."
+fix = "System profiles are owned by the system and writable by no one else (the secure state makes /QOpenSys/etc/profile read only for everyone but its owner). Watch for changes to profile files, and keep privileged users out of shells where they do not need to be."
+reference = "IBM i PASE documentation on shell startup files; CIS Benchmarks for AIX and Linux on profile file permissions; MITRE ATT&CK T1546.004."

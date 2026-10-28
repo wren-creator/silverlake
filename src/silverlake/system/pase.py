@@ -3,6 +3,13 @@ profile, and nothing else: no process is ever started, no host file is read, and
 these commands is refused in the shell's own voice. That is what makes it safe to leave on a training box and
 why `reset.sh` puts everything back exactly.
 
+A name is looked up the way a shell does it: a word with a slash is a path; cd, pwd, echo, export and exit are
+the shell's own; anything else is looked for as an executable file along $PATH, directory by directory, before
+the simulator's own ls, cat, id and the rest are tried. So a script named `id` in an early PATH directory wins
+over `id`, which is the point of the PATH lessons. A script is a stream file with `x` for the profile; each
+line runs as that profile through this same shell (no interpreter, no shebang meaning, five levels deep at
+most). `login()` reads /QOpenSys/etc/profile and then ~/.profile, as a login shell does.
+
 Built: pwd, cd, ls (-l -a), cat, id, whoami, echo ($VAR), env, export, exit, and the writing set: mkdir (-p),
 touch, rm (-r -f), cp, mv, chmod, `> file` and `>> file` at the end of a command, and `system 'CL command'`,
 which runs through the CL dispatcher as the signed on profile. Not built: pipes, input redirection, `;`, `&`,
@@ -24,6 +31,9 @@ from .profiles import Profile, ProfileStore
 BANNER = "Simulated PASE terminal. Not an AIX runtime: a few commands over a virtual IFS."
 UNSUPPORTED = re.compile(r"[|&;<`]|\$\(")
 SYSTEM_PATH = "/QOpenSys/usr/bin:/usr/bin"
+BUILTINS = frozenset({"cd", "pwd", "echo", "export", "exit", "logout"})
+MAX_DEPTH = 5
+SYSTEM_PROFILE = "/QOpenSys/etc/profile"
 
 
 @dataclass
@@ -33,6 +43,7 @@ class Shell:
     cwd: str = ""
     env: dict[str, str] = field(default_factory=dict)
     done: bool = False
+    depth: int = 0
 
     def __post_init__(self) -> None:
         home = ifs.home_of(self.actor)
@@ -69,11 +80,19 @@ class Shell:
             return ["ksh: the redirection must be the last thing on the line: command > file."]
         if not words:
             return []
+        if re.fullmatch(r"[A-Za-z_]\w*=.*", words[0]) and len(words) == 1:
+            name, _, value = words[0].partition("=")
+            self.env[name] = self.expand(value)
+            return []
         name, args = words[0], [self.expand(w) for w in words[1:]]
+        script = None if name in BUILTINS else self.find_script(name)
         fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[a-z]+", name) else None
-        if fn is None:
+        if script is not None:
+            out = self.run_script(script, name)
+        elif "/" in name or fn is None:
             return [f"ksh: {name}: not found."]
-        out = fn(args)
+        else:
+            out = fn(args)
         if redirect is None:
             return out
         target = self.path(self.expand(redirect[1]))
@@ -82,6 +101,57 @@ class Shell:
         except ifs.IfsError as exc:
             return [self._write_error("ksh", exc, redirect[1])]
         return []
+
+    def find_script(self, name: str) -> str | None:
+        """The path of the executable stream file `name` means, or None. A slash makes it a path, otherwise each
+        $PATH directory is tried in order. The profile needs `x` on the file."""
+        if "/" in name:
+            candidates = [self.path(name)]
+        else:
+            candidates = [ifs.normalize(d + "/" + name, self.cwd, self.env["HOME"])
+                          for d in self.env.get("PATH", "").split(":") if d]
+        for path in candidates:
+            try:
+                entry = ifs.lookup(self.store, self.actor, path)
+            except ifs.IfsError:
+                continue
+            if not entry.is_dir and "x" in entry.mode and path in self.store.ifs:
+                return path
+        return None
+
+    def run_script(self, path: str, name: str) -> list[str]:
+        if self.depth >= MAX_DEPTH:
+            return [f"ksh: {name}: 0403-016 Cannot execute: too many nested scripts."]
+        try:
+            text = ifs.read(self.store, self.actor, path)
+        except ifs.IfsError:
+            return [f"ksh: {name}: 0403-006 Execute permission denied."]
+        out: list[str] = []
+        self.depth += 1
+        try:
+            for line in text.splitlines()[:200]:
+                if line.strip() in ("exit", "logout"):
+                    break
+                out += self.run(line)
+        finally:
+            self.depth -= 1
+        return out
+
+    def login(self) -> list[str]:
+        """What a login shell does first: the system profile, then the profile's own. What they print is shown."""
+        out: list[str] = []
+        for path in (SYSTEM_PROFILE, self.env["HOME"] + "/.profile"):
+            try:
+                text = ifs.read(self.store, self.actor, path)
+            except ifs.IfsError:
+                continue
+            self.depth += 1
+            try:
+                for line in text.splitlines()[:200]:
+                    out += self.run(line)
+            finally:
+                self.depth -= 1
+        return out
 
     def expand(self, word: str) -> str:
         return re.sub(r"\$(\w+)|\$\{(\w+)\}", lambda m: self.env.get(m.group(1) or m.group(2), ""), word)

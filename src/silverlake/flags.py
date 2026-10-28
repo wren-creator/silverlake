@@ -107,6 +107,23 @@ def _readable_copy(store):
     return False, "no readable copy of PAYROLL"
 
 
+def _loot_made_by(owner: str):
+    """A file somebody else wrote into the IFS that STUDENT can read and that holds payroll rows."""
+    def check(store):
+        from .system import ifs
+        student = store.get("STUDENT")
+        pay = _payroll(store)
+        names = [r.get("NAME") or "" for r in (pay.data.get("records", []) if pay else [])]
+        seed = set(ifs.load_seed())
+        for path, node in store.ifs.items():
+            if path in seed or node.is_dir or node.owner != owner:
+                continue
+            if "r" in ifs.mode_for(store, student, node) and any(n and n in node.content for n in names):
+                return True, f"{path} is owned by {owner}, holds payroll rows, and STUDENT can read it"
+        return False, f"no readable payroll copy in the IFS made by {owner}"
+    return check
+
+
 def _release_and_pwdlevel(store) -> str:
     from .net import hostsvr
     return f"{hostsvr.OS_LEVEL}/{store.system.qpwdlvl}"
@@ -115,7 +132,8 @@ def _release_and_pwdlevel(store) -> str:
 FACTS = {"release_and_pwdlevel": _release_and_pwdlevel}
 
 CHECKS = {"new_privileged_profile": _new_privileged_profile, "salary_raised": _salary_raised,
-          "student_reads_payroll": _student_reads_payroll, "readable_copy": _readable_copy}
+          "student_reads_payroll": _student_reads_payroll, "readable_copy": _readable_copy,
+          "ifs_loot_by_qsecofr": _loot_made_by("QSECOFR"), "ifs_loot_by_operator": _loot_made_by("OPERATOR")}
 
 
 # -- scoring --------------------------------------------------------------------------------------------------------

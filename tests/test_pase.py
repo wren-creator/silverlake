@@ -222,3 +222,46 @@ def test_writes_are_saved_with_the_store(store):
     shell(store).run("echo kept > ~/k")
     again = ifs.from_rows(ifs.to_rows(store.ifs))
     assert again["/home/STUDENT/k"].content == "kept\n"
+
+
+# -- scripts, PATH and login ----------------------------------------------------------------------------------
+
+def test_a_script_needs_x_and_is_found_along_path_before_the_simulators_own_command(store):
+    sh = shell(store)
+    sh.run("mkdir bin")
+    sh.run("echo 'echo hijacked' > bin/id")
+    assert sh.run("export PATH=/home/STUDENT/bin:$PATH") == []
+    assert sh.run("id")[0].startswith("uid=")                     # no x yet: only text, the shell skips it
+    sh.run("chmod 755 bin/id")
+    assert sh.run("id") == ["hijacked"]
+    assert sh.run("./bin/id") == ["hijacked"] and sh.run("/home/STUDENT/bin/id") == ["hijacked"]
+    assert sh.run("echo $PATH") != ["hijacked"]                   # echo is the shell's own, nothing can replace it
+
+
+def test_a_script_runs_as_whoever_runs_it_and_nests_only_so_far(store):
+    sh = shell(store)
+    sh.run("echo whoami > who")
+    sh.run("chmod 755 who")
+    assert sh.run("./who") == ["STUDENT"] and shell(store, "QSECOFR").run("/home/STUDENT/who") == ["QSECOFR"]
+    sh.run("echo ./loop > loop")
+    sh.run("chmod 755 loop")
+    assert "too many nested" in " ".join(sh.run("./loop"))
+    assert sh.depth == 0
+
+
+def test_login_reads_the_system_profile_then_the_home_profile(store):
+    out = shell(store, "OPERATOR").login()
+    assert out and out[0].startswith("uid=") and "(OPERATOR)" in out[0]       # the seeded .profile runs id
+    sh = shell(store, "OPERATOR")
+    sh.login()
+    assert sh.env["PATH"].startswith("/tmp/opsbin:") and sh.env["EDITOR"] == "vi"
+    assert shell(store).login() == []                                         # STUDENT has no .profile
+
+
+def test_the_terminal_shows_what_the_login_printed():
+    from silverlake.screens.pdm import Context
+    from silverlake.screens.pase import PaseTerm
+    store = profiles.load()
+    store.profiles["OPERATOR"]
+    term = PaseTerm(Context(store, store.profiles["OPERATOR"], None, lambda line: None))
+    assert any("(OPERATOR)" in line for line in term.lines)

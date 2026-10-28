@@ -23,6 +23,8 @@ class PaseTerm:
         self.ctx = ctx
         self.shell = pase.Shell(ctx.store, ctx.profile)
         self.lines: list[str] = []
+        for out in self.shell.login():
+            self.lines += textwrap.wrap(out, WIDTH, replace_whitespace=False, drop_whitespace=False) or [""]
 
     def screen(self, message: str = "") -> Screen:
         rows: list = [Text(0, 1, pase.BANNER[:78], ds.ATTR_BLUE)]

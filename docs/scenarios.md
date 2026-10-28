@@ -350,3 +350,57 @@ Flags are checked with `./check-flags.sh`; see [flags in the README](../README.m
 **Fix:** Install the fix for the console (the secure state records the PTF on QHTTPSVR/QZHBADMIN, after which the description is escaped and never evaluated). Do not expose the ADMIN instance beyond the people who run the web server, and require an administrator profile to use it. (`./scenario.sh set httpadmin-ssi-injection secure`)
 
 **Reference:** CWE-94 code injection; IBM i HTTP Server for i PTF levels; CISA CPG on reducing exposure of administrative interfaces.
+
+## Group E: PASE and the IFS
+
+### 15. A writable directory at the front of the operator's PATH
+
+**Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
+
+**Real-world parallel:** A shell finds a command by walking PATH in order and running the first match. If a directory that anyone can write sits before the real one, a file named like a system command wins, and it runs as whoever typed the command. It is one of the oldest local privilege escalations there is.
+
+**Vulnerability:** OPERATOR's ~/.profile sets PATH=/tmp/opsbin:$PATH and then runs id. /tmp/opsbin is owned by OPERATOR with public rwx. OPERATOR may read APPLIB/PAYROLL, and STUDENT may not.
+
+**MITRE ATT&CK:** T1574.007 Hijack Execution Flow: Path Interception by PATH Environment Variable, T1068 Exploitation for Privilege Escalation, T1005 Data from Local System
+
+**Exploit:**
+
+1. Sign on as STUDENT, CALL PGM(QP2TERM), and ls -ld /tmp/opsbin. Everyone may write there.
+2. echo 'cp /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE /tmp/ops.txt' > /tmp/opsbin/id
+3. chmod 755 /tmp/opsbin/id. Without x it is only text, and the shell skips it.
+4. Sign on to a second session as OPERATOR (password OPERATOR) and run CALL PGM(QP2TERM). The profile runs id, finds yours first, and runs it as OPERATOR.
+5. Back as STUDENT, cat /tmp/ops.txt.
+
+**Consequence in the sim:** STUDENT reads payroll rows through the operator's authority, and the operator saw nothing but a normal login.
+
+**Flag:** As STUDENT, get a copy of the payroll file into the IFS that STUDENT can read, by making the operator's own login do the copying. Then play the operator: sign on as OPERATOR and run CALL PGM(QP2TERM).
+
+**Fix:** Never put a directory that others can write on anyone's PATH, and never before the system directories. The secure state makes /tmp/opsbin read only for everyone but OPERATOR, and the better fix is to take it off PATH. (`./scenario.sh set pase-path-hijack secure`)
+
+**Reference:** CWE-426 Untrusted Search Path; CIS Benchmarks on PATH and world writable directories; MITRE ATT&CK T1574.007.
+
+### 16. The system profile that anyone can write and every login runs
+
+**Where:** PASE terminal, CALL PGM(QP2TERM) from any 5250 session
+
+**Real-world parallel:** A login shell runs the system profile before the user's own, as the user who is logging in. A system profile that anyone can write is a shared trigger: whoever logs in next runs what was put there, with their own authority. It is a standard finding on Unix and AIX reviews and PASE inherits it.
+
+**Vulnerability:** /QOpenSys/etc/profile has public write. STUDENT has no authority over APPLIB/PAYROLL, but QSECOFR has all object authority, and QSECOFR's next PASE login runs every line of the profile.
+
+**MITRE ATT&CK:** T1546.004 Event Triggered Execution: Unix Shell Configuration Modification, T1068 Exploitation for Privilege Escalation, T1005 Data from Local System
+
+**Exploit:**
+
+1. Sign on as STUDENT and run CALL PGM(QP2TERM). Try cat /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE and read the refusal.
+2. ls -l /QOpenSys/etc. The profile has rw- for everyone.
+3. echo 'cp /QSYS.LIB/APPLIB.LIB/PAYROLL.FILE /tmp/pay.txt' >> /QOpenSys/etc/profile
+4. Sign on to a second session as QSECOFR (password QSECOFR) and run CALL PGM(QP2TERM). The login runs the planted line as QSECOFR.
+5. Back as STUDENT, cat /tmp/pay.txt. The payroll rows are there, and STUDENT never had the authority to read them.
+
+**Consequence in the sim:** An account with no authority over the payroll file reads it, because a privileged login did the copying. The plant leaves the profile changed for every later login too.
+
+**Flag:** As STUDENT, get a copy of the payroll file into the IFS that STUDENT can read, without STUDENT ever being allowed to read APPLIB/PAYROLL. Then play the security officer: open a second session as QSECOFR and run CALL PGM(QP2TERM).
+
+**Fix:** System profiles are owned by the system and writable by no one else (the secure state makes /QOpenSys/etc/profile read only for everyone but its owner). Watch for changes to profile files, and keep privileged users out of shells where they do not need to be. (`./scenario.sh set pase-profile-plant secure`)
+
+**Reference:** IBM i PASE documentation on shell startup files; CIS Benchmarks for AIX and Linux on profile file permissions; MITRE ATT&CK T1546.004.
