@@ -83,7 +83,7 @@ def test_everything_else_is_refused_and_nothing_reaches_the_host(store):
     sh = shell(store)
     assert sh.run("rm -rf /")[0].startswith("rm: 0653-345") and "/home" in store.ifs
     assert sh.run("python -c 'print(1)'") == ["bsh: python: not found"]
-    for line in ("ls | cat", "cat < /tmp/x", "id &", "echo `id`", "echo $(id)", "echo \"$(id)\"", "ls|cat"):
+    for line in ("id &", "cat <<EOF", "(id)", "echo a & echo b", "echo )"):
         assert "not available in the simulator" in sh.run(line)[0], line
     assert sh.run("echo 'unclosed") == ["bsh: a quote was not closed."]
     assert sh.run("") == [] and sh.run("# comment") == []
@@ -420,7 +420,7 @@ def test_tilde_and_variables_in_words(store):
     assert sh.run("cd") == [] and sh.run("pwd") == ["/home/STUDENT"], "cd with no argument still goes home"
     assert sh.run("cat ~/notes.txt") == ["cat: cannot open ~/notes.txt"]
     sh.run("W='two words'")
-    assert sh.run('echo "$W" | cat')[0].startswith("bsh:")
+    assert sh.run('echo "$W" | cat') == ["two words"]
     assert sh.run('ls "$W"') == ["two words not found"], "quoted, so one word"
     assert sh.run("ls $W") == ["two not found", "words not found"], "unquoted, so two"
     assert sh.run("echo $?x ${HOME}y") == ["2x /home/STUDENTy"], "$? is the ls before, which failed"
@@ -468,3 +468,111 @@ def test_dot_star_matches_dot_and_dot_dot_as_it_did_on_pub400(store):
     sh = shell(store)
     assert sh.run("echo /QOpenSys/etc/.*") == ["/QOpenSys/etc/. /QOpenSys/etc/.."]
     assert sh.run("echo [p]rofile") == ["[p]rofile"], "nothing here matches, so it stays as typed"
+
+
+# -- P2: pipes, input redirection, backticks (checked against the ssh-pase-p2 capture, 2026-10-28) --------------------
+
+def test_a_pipe_feeds_the_next_command_what_the_last_one_printed(store):
+    sh = shell(store)
+    sh.run("cd /QOpenSys/etc")
+    assert sh.run("echo hello | cat") == ["hello"]
+    assert sh.run("echo hello | wc") == ["       1       1       6"], "counts of the input, no name after them"
+    assert sh.run("echo a b c | wc -w") == ["       3"] and sh.run("echo 'a b' | wc -c") == ["       4"]
+    assert sh.run("cat profile | head -n 2") == sh.run("head -n 2 profile") and len(sh.run("head -n 2 profile")) == 2
+    assert sh.run("cat profile | tail -n 2") == sh.run("tail -n 2 profile")
+    assert sh.run("cat profile | grep -c system") == sh.run("grep -c system profile") != ["0"] and sh.run("echo A | grep -i a") == ["A"]
+    assert sh.run("echo a | cat | cat | wc -l") == ["       1"]
+    assert sh.run("cat profile | head -n 1 | tail -n 1") == sh.run("head -n 1 profile")
+    assert sh.run("echo a | echo b") == ["b"], "echo has no use for its input"
+    assert sh.run("echo a | cat -") == ["a"]
+    assert sh.run("echo a | grep a profile") == sh.run("grep a profile") != [], "a file on the line beats the pipe"
+
+
+def test_a_pipeline_exits_with_its_last_commands_status(store):
+    sh = shell(store)
+    assert sh.run("cat /nosuchfile | cat; echo $?") == ["cat: cannot open /nosuchfile", "0"]
+    assert sh.run("nosuchcmd | cat; echo $?") == ["bsh: nosuchcmd: not found", "0"]
+    assert sh.run("echo hi | nosuchcmd; echo $?") == ["bsh: nosuchcmd: not found", "1"]
+    assert sh.run("cat /QOpenSys/etc/profile | grep nosuchstring; echo $?") == ["1"]
+    assert sh.run("echo a || echo b | cat") == ["a"] and sh.run("echo a | cat && echo b") == ["a", "b"]
+
+
+def test_what_a_command_says_to_stderr_never_goes_down_the_pipe(store):
+    sh = shell(store)
+    assert sh.run("cat /nosuchfile | grep -c cannot") == ["cat: cannot open /nosuchfile", "0"]
+    assert sh.run("cat /nosuchfile | wc -l") == ["cat: cannot open /nosuchfile", "       0"]
+    sh.run("cat /nosuchfile > /tmp/out")
+    assert sh.run("cat /tmp/out") == [] and sh.run("ls /nowhere > /tmp/out") == ["/nowhere not found"]
+    assert sh.run("echo kept | cat > /tmp/out") == [] and sh.run("cat /tmp/out") == ["kept"]
+    assert sh.run("echo gone > /dev/null") == [] and sh.run("cat /nosuchfile > /dev/null") == ["cat: cannot open /nosuchfile"]
+
+
+def test_input_redirection_reads_a_file_the_profile_may_read(store):
+    sh = shell(store)
+    assert sh.run("wc < /QOpenSys/etc/motd") == [sh.run("wc /QOpenSys/etc/motd")[0].rsplit(" ", 1)[0]]
+    assert sh.run("wc -l < /QOpenSys/etc/motd")[0].strip().isdigit()
+    assert sh.run("head -n 1 < /QOpenSys/etc/motd") == sh.run("head -n 1 /QOpenSys/etc/motd")
+    assert sh.run("cat < /QOpenSys/etc/motd | wc") == sh.run("wc < /QOpenSys/etc/motd")
+    assert sh.run("< /QOpenSys/etc/motd head -n 1") == sh.run("head -n 1 /QOpenSys/etc/motd"), "the file may come first"
+    assert sh.run("cat < /nosuchfile; echo $?") == ["bsh: /nosuchfile: cannot open", "1"]
+    assert sh.run("cat < /home/OPERATOR/.profile; echo $?") == ["bsh: /home/OPERATOR/.profile: cannot open", "1"]
+    assert sh.run("echo gone | cat < /QOpenSys/etc/motd") == sh.run("cat /QOpenSys/etc/motd"), "a file beats the pipe"
+    assert sh.run("cat < /dev/null") == []
+    sh.run("cat < /QOpenSys/etc/motd > /tmp/copy")
+    assert sh.run("cat /tmp/copy") == sh.run("cat /QOpenSys/etc/motd")
+
+
+def test_backticks_bring_back_what_a_command_printed(store):
+    sh = shell(store)
+    assert sh.run("echo `echo tick`") == ["tick"] and sh.run("echo `echo 'x y'`") == ["x y"]
+    assert sh.run('echo "`echo a b`" `echo c d`') == ["a b c d"]
+    assert sh.run('ls "`echo a b`"') == ["a b not found"], "quoted, so one word"
+    assert sh.run("ls `echo a b`") == ["a not found", "b not found"], "unquoted, so split"
+    sh.run("X=`echo val`")
+    assert sh.env["X"] == "val" and sh.run("echo `echo $X`!") == ["val!"]
+    assert sh.run("echo `echo a; echo b`") == ["a b"] and sh.run("echo `echo a | wc -l`") == ["1"]
+    assert sh.run("echo '`echo no`' \\`x") == ["`echo no` `x"]
+    assert sh.run("echo `echo \\`echo inner\\``") == ["inner"], "backslash backtick nests"
+    assert sh.run("echo `nosuchcmd`; echo $?") == ["bsh: nosuchcmd: not found", "", "0"], "stderr shows, the substitution is empty"
+
+
+def test_a_backtick_command_cannot_change_the_shell_that_ran_it(store):
+    sh = shell(store)
+    sh.run("cd /tmp")
+    sh.run("echo `cd /QOpenSys; export LEAK=1; exit 3`")
+    assert sh.run("pwd") == ["/tmp"] and "LEAK" not in sh.env and not sh.done
+    sh.run("echo 'echo `/tmp/rec`' > /tmp/rec")
+    sh.run("chmod 755 /tmp/rec")
+    out = sh.run("/tmp/rec")                                # a script that runs itself in a backtick has to stop
+    assert any("too many nested" in l for l in out) and not sh.done
+
+
+def test_dollar_paren_is_a_syntax_error_as_in_bsh_and_text_inside_quotes(store):
+    sh = shell(store)
+    assert sh.run("echo $(echo inner)") == ["bsh: syntax error at line 1: `(' unexpected"] and sh.status == 2
+    assert sh.run("echo a; echo $(id)") == ["bsh: syntax error at line 1: `(' unexpected"], "nothing runs"
+    assert sh.run('echo "$(echo inner)"') == ["$(echo inner)"] and sh.run("echo '$(id)'") == ["$(id)"]
+
+
+def test_a_trailing_pipe_runs_nothing_and_a_bad_pipe_is_a_syntax_error(store):
+    sh = shell(store)
+    sh.status = 5
+    assert sh.run("echo a |") == [] and sh.status == 0, "PUB400 printed nothing and exited 0"
+    assert sh.run("| cat") == ["bsh: syntax error at line 1: `|' unexpected"] and sh.status == 2
+    assert sh.run("echo a | | cat") == ["bsh: syntax error at line 1: `|' unexpected"]
+    assert sh.run("cat <") == ["bsh: syntax error at line 1: `end of file' unexpected"] and sh.status == 2
+    assert sh.run("echo 'a|b' \"c|d\" e\\|f") == ["a|b c|d e|f"], "a quoted bar is text"
+
+
+def test_pipelines_and_substitutions_are_capped(store):
+    sh = shell(store)
+    assert sh.run(" | ".join(["cat"] * 21)) == ["bsh: too many commands in one pipeline (the simulator stops at 20)."]
+    assert sh.run("echo a" + " | cat" * 19) == ["a"]
+    sh.run("cd /tmp")
+    sh.run("echo " + "x" * 200 + " > big")
+    from silverlake.system import pase as module
+    module.SUB_LIMIT = 50
+    try:
+        assert len(sh.run("echo `cat big`")[0]) == 50
+    finally:
+        module.SUB_LIMIT = 64 * 1024

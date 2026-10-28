@@ -70,7 +70,7 @@
   - [x] Batches 0 and 1: pwd cd ls cat id echo env printenv export exit; mkdir touch rm cp mv chmod system db2; uname hostname date logname ps head tail wc grep
   - [x] P1, shell features part one: exit statuses and `$?`, `;` `&&` `||`, globbing, `~`. Landed alone. `Shell.run` still returns the lines and the status is `Shell.status`, so no caller changed. One old test lost `;` from its refused list. Checked against a fourth PUB400 run (`ssh-pase-p1`), which corrected tilde (none), not found (1), a failed cd or export (ends a shell with no terminal), syntax error wording and `.*`. The statuses PUB400 gave are copied, the rest are labelled guesses
   - [ ] B2, files and lookup: rmdir basename dirname which type test file find du umask. Lesson: pase-find-writable
-  - [ ] P2, shell features part two: pipes, `<`, standard input for cat head tail wc grep, command substitution
+  - [x] P2, shell features part two: pipes, `<`, standard input for cat head tail wc grep, backtick substitution. Checked against a fifth PUB400 run (`ssh-pase-p2`), which showed bsh has no `$()`, a pipeline's status is its last command's, and errors stay out of the pipe. Replay of the captured commands matches exactly. Also built: `> /dev/null`, `cat -`, errors marked as stderr
   - [ ] B3, the IBM i side: dspmsg catsplf dataq datarea getjobid sysval clrtmp setccsid Rfile getconf. Needs *DTAARA, *DTAQ and message file objects. Lessons: system values, spool files and data areas read from the shell
   - [ ] B4, text filters: sort uniq cut tr sed nl fold rev tee xargs. Lesson: pase-secrets-in-profile
   - [ ] B5, heavier filters: awk (a small subset) diff cmp comm join paste od strings split pr

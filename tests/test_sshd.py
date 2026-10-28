@@ -81,7 +81,7 @@ def test_a_command_runs_after_the_profiles_and_an_interactive_login_shows_what_t
 def test_no_host_shell_is_ever_reached(store):
     out, _ = session(store, "STUDENT", "curl http://example.com", password="STUDENT", client_keys=None)
     assert out.strip() == "bsh: curl: not found"
-    out, _ = session(store, "STUDENT", "ls | cat", password="STUDENT", client_keys=None)
+    out, _ = session(store, "STUDENT", "id &", password="STUDENT", client_keys=None)
     assert "not available in the simulator" in out
 
 

@@ -11,8 +11,8 @@ line runs as that profile through this same shell (no interpreter, no shebang me
 most). `login()` reads /QOpenSys/etc/profile and then ~/.profile, as a login shell does.
 
 The read-only batch PUB400 has (uname, hostname, date, logname, printenv, ps, head, tail, wc, grep) was captured
-on 2026-10-27 and its wording and layout are copied. The simulator has no pipes and no input, so head, tail, wc
-and grep need a file name; with none, they read an empty input and print nothing, where a real one would wait.
+on 2026-10-27 and its wording and layout are copied. With a pipe or `<` head, tail, wc, grep and cat read what they
+were given; with no file and no input they print nothing, where a real one would wait.
 
 Built: pwd, cd, ls (-l -a), cat, id, echo ($VAR), env, export, exit, and the writing set: mkdir (-p),
 touch, rm (-r -f), cp, mv, chmod, `> file` and `>> file` at the end of a command, and `system 'CL command'`,
@@ -20,8 +20,10 @@ which runs through the CL dispatcher as the signed on profile. A line may hold s
 `&&` and `||`, read left to right; every command leaves an exit status in `status`, which `$?` shows and which
 `&&` and `||` act on. Words may use `*`, `?` and `[...]` (matched against the directories the profile can list,
 a pattern with no match stays as typed). There is no `~` expansion, because bsh has none. A line that does not
-parse is refused whole, before anything runs. Not built: pipes, input redirection, `&`, command
-substitution, `if` and `for`, and every other command.
+parse is refused whole, before anything runs. `a | b` feeds b what a printed (stdout only: lines marked `Err` are
+stderr, shown but never piped or written to a file), `< file` is its input, and a `command` between backticks is
+run by a nested copy of this shell and replaced by what it printed. bsh has no `$(...)`, and says so as a syntax
+error. Not built: `&`, subshells, here documents, `2>`, `if` and `for`, and every other command.
 
 The shell is bsh, as PUB400 showed over ssh on 2026-10-27, and what it said is copied: a missing path in `ls`
 is `X not found`, `cat` says `cat: cannot open X`, `cd` says `X: No such file or directory`, an unknown command
@@ -39,7 +41,10 @@ from . import ifs
 from .profiles import Profile, ProfileStore
 
 BANNER = "Simulated PASE terminal. Not an AIX runtime: a few commands over a virtual IFS."
-NOT_AVAILABLE = "bsh: that syntax is not available in the simulator (no pipes, input redirection, & or substitution)."
+NOT_AVAILABLE = "bsh: that syntax is not available in the simulator (no &, subshells or here documents)."
+MAX_STAGES = 20                                # commands in one pipeline
+MAX_SUB = 5                                    # backticks inside backticks
+SUB_LIMIT = 64 * 1024                          # characters one substitution may bring back
 MAX_COMMANDS = 100                             # per line, so `;` cannot be used to loop the work
 MAX_GLOB = 1000                                # names one pattern may produce, and directory entries it may look at
 SYSTEM_PATH = "/QOpenSys/usr/bin:/usr/bin"
@@ -49,6 +54,11 @@ HOST_NAME = "SILVERLAKE.LOCALDOMAIN"
 MACHINE_ID = "0078000000A1"                    # made up: a real one is the machine's serial based id
 MAX_DEPTH = 5
 SYSTEM_PROFILE = "/QOpenSys/etc/profile"
+
+
+class Err(str):
+    """A line meant for stderr. It is still a str, so callers and tests see plain text, but a pipe or a `>` leaves it out and
+    the terminal still shows it, in order."""
 
 
 @dataclass
@@ -61,6 +71,9 @@ class Shell:
     depth: int = 0
     status: int = 0                              # the exit status of the last command, what `$?` shows
     leaving: bool = False                        # `exit` inside a script ends the script, not the shell
+    stdin: list[str] | None = None               # what the command now running was piped, or None when it has no input
+    sub_errors: list = field(default_factory=list)   # what a backtick command printed to stderr, shown ahead of its line
+    sub_depth: int = 0
     batch: bool = False                          # a command run with no terminal (ssh host cmd): a failed cd or export ends it
     job: object = None
     clock: object = None                         # a callable giving "now" in UTC, for tests; None means the real time
@@ -85,57 +98,85 @@ class Shell:
     # -- running a line ----------------------------------------------------------------------------------------
 
     def run(self, line: str) -> list[str]:
-        """One line: commands joined by `;`, `&&` and `||`, read left to right. `status` holds the last one's exit
+        """One line: pipelines joined by `;`, `&&` and `||`, read left to right. `status` holds the last one's exit
         status afterwards."""
         parts = self.split_line(line)
+        if parts is None:                                  # a trailing `|`: PUB400's bsh ran nothing and said nothing
+            self.status = 0
+            return []
         if isinstance(parts, str):
             self.status = 2
-            return [parts]
+            return [Err(parts)]
         out: list[str] = []
-        for joint, text in parts:
+        for joint, stages in parts:
             if self.done or self.leaving:
                 break
             if (joint == "&&" and self.status != 0) or (joint == "||" and self.status == 0):
                 continue
-            out += self.run_simple(text)
+            out += self.run_pipeline(stages)
         return out
 
     @staticmethod
-    def split_line(line: str) -> list[tuple[str, str]] | str:
-        """The line cut at `;`, `&&` and `||` that are not quoted, as (joint before it, command) pairs, or a
-        message when the line uses syntax the simulator does not have. A `#` that starts a word ends the line."""
-        parts: list[tuple[str, str]] = []
-        joint, start, end, quote, i = ";", 0, len(line), "", 0
-        while i < len(line):
-            ch, two = line[i], line[i:i + 2]
-            if ch == "\\" and quote != "'":
+    def _scan(text: str):
+        """(index, char) for every character outside quotes, backticks and backslash escapes. A backtick inside double
+        quotes is skipped as a whole. ValueError when a quote or a backtick is not closed."""
+        i, n = 0, len(text)
+        while i < n:
+            ch = text[i]
+            if ch == "\\":
                 i += 2
-                continue
-            if quote:
-                if ch == quote:
-                    quote = ""
-                elif quote == '"' and (ch == "`" or two == "$("):
-                    return NOT_AVAILABLE
+            elif ch == "'":
+                j = text.find("'", i + 1)
+                if j < 0:
+                    raise ValueError(ch)
+                i = j + 1
+            elif ch in "\"`":
+                j = i + 1
+                while j < n and text[j] != ch:
+                    if text[j] == "\\":
+                        j += 1
+                    elif ch == '"' and text[j] == "`":
+                        j += 1
+                        while j < n and text[j] != "`":
+                            j += 2 if text[j] == "\\" else 1
+                    j += 1
+                if j >= n:
+                    raise ValueError(ch)
+                i = j + 1
+            else:
+                yield i, ch
                 i += 1
-                continue
-            if ch in "'\"":
-                quote = ch
-            elif ch == "`" or two == "$(" or ch == "<" or (ch == "|" and two != "||") or (ch == "&" and two != "&&"):
-                return NOT_AVAILABLE
-            elif ch == "#" and (i == 0 or line[i - 1].isspace()):
+
+    @classmethod
+    def split_line(cls, line: str) -> list[tuple[str, list[str]]] | str | None:
+        """The line cut at `;`, `&&` and `||` that are not quoted, as (joint before it, pipeline) pairs where a pipeline is
+        its commands split at `|`. A message instead when the line cannot run, and None for a trailing `|`, which PUB400's
+        bsh swallowed. A `#` that starts a word ends the line. Nothing here runs anything."""
+        try:
+            tops = list(cls._scan(line))
+        except ValueError:
+            return "bsh: a quote was not closed."
+        parts: list[tuple[str, str]] = []
+        joint, start, end, k = ";", 0, len(line), 0
+        while k < len(tops):
+            i, ch = tops[k]
+            two = line[i:i + 2]
+            if ch == "#" and (i == 0 or line[i - 1].isspace()):
                 end = i
                 break
-            elif two == ";;":
+            if ch == "$" and line[i + 1:i + 2] == "(":
+                return "bsh: syntax error at line 1: `(' unexpected"          # bsh has no $(...), only backticks
+            if ch in "()" or (ch == "&" and two != "&&") or two == "<<":
+                return NOT_AVAILABLE
+            if two == ";;":
                 return "bsh: syntax error at line 1: `;;' unexpected"
-            elif ch == ";" or two in ("&&", "||"):
+            if ch == ";" or two in ("&&", "||"):
                 op = ch if ch == ";" else two
                 parts.append((joint, line[start:i]))
                 joint, start = op, i + len(op)
-                i += len(op)
+                k += len(op)
                 continue
-            i += 1
-        if quote:
-            return "bsh: a quote was not closed."
+            k += 1
         parts.append((joint, line[start:end]))
         if len(parts) > MAX_COMMANDS:
             return f"bsh: too many commands on one line (the simulator stops at {MAX_COMMANDS})."
@@ -146,46 +187,94 @@ class Shell:
             if last and (j == ";" and n > 0 or len(parts) == 1):
                 continue                                           # `echo a;` and an empty line are fine
             # What PUB400's bsh said: the whole line is refused before anything runs, and the token it names is the
-            # operator after the empty command, `end of file` at the end of the line, and (odd, but copied) for a
+            # operator after the empty command, `end of file` at the end of the line and (odd, but copied) for a
             # `;` that starts the line.
             token = "end of file" if last or (n == 0 and parts[n + 1][0] == ";") else parts[n + 1][0]
             return f"bsh: syntax error at line 1: `{token}' unexpected"
-        return [(j, t) for j, t in parts if t.strip()]
+        out: list[tuple[str, list[str]]] = []
+        swallowed = False
+        for j, text in parts:
+            if not text.strip():
+                continue
+            cuts = [i for i, ch in cls._scan(text) if ch == "|"]
+            stages = [text[a:b] for a, b in zip([0] + [c + 1 for c in cuts], cuts + [len(text)])]
+            if len(stages) > MAX_STAGES:
+                return f"bsh: too many commands in one pipeline (the simulator stops at {MAX_STAGES})."
+            empty = [n for n, st in enumerate(stages) if not st.strip()]
+            if empty == [len(stages) - 1] and len(stages) > 1:
+                swallowed = True
+            elif empty:
+                return "bsh: syntax error at line 1: `|' unexpected"
+            out.append((j, stages))
+        return None if swallowed else out
 
-    def run_simple(self, text: str) -> list[str]:
-        words, redirect = self.words_of(text)
-        if isinstance(words, str):
+    def run_pipeline(self, stages: list[str]) -> list[str]:
+        """Each command's output is the next one's input. What reaches the terminal is every command's errors, in order,
+        and the last command's output. The status is the last command's, as PUB400 showed
+        (`cat /nosuchfile | cat; echo $?` printed 0)."""
+        out: list[str] = []
+        stdin: list[str] | None = None
+        for n, text in enumerate(stages):
+            lines = self.run_simple(text, stdin)
+            if n == len(stages) - 1:
+                out += lines
+            else:
+                out += [l for l in lines if isinstance(l, Err)]
+                stdin = [l for l in lines if not isinstance(l, Err)]
+        return out
+
+    def run_simple(self, text: str, stdin: list[str] | None = None) -> list[str]:
+        self.sub_errors = []
+        parsed = self.words_of(text)
+        shown: list[str] = self.sub_errors                       # errors from a backtick command come out first
+        if isinstance(parsed, str):
             self.status = 2
-            return [words]
+            return shown + [Err(parsed)]
+        words, redir_in, redir_out = parsed
         if not words:
-            return []
+            return shown
         self.status = 0
         if re.fullmatch(r"[A-Za-z_]\w*=.*", words[0]) and len(words) == 1:
             name, _, value = words[0].partition("=")
             self.env[name] = value
-            return []
+            return shown
+        if redir_in is not None:                                 # a file beats the pipe, and a file that will not open stops the command
+            if redir_in == "/dev/null":
+                stdin = []
+            else:
+                try:
+                    stdin = ifs.read(self.store, self.actor, self.path(redir_in)).splitlines()
+                except ifs.IfsError:
+                    self.status = 1
+                    return shown + [Err(f"bsh: {redir_in}: cannot open")]
         name, args = words[0], words[1:]
         script = None if name in BUILTINS else self.find_script(name)
         fn = getattr(self, "cmd_" + name, None) if re.fullmatch(r"[a-z][a-z0-9]*", name) else None
-        if script is not None:
-            out = self.run_script(script, name)
-        elif "/" in name or fn is None:
+        if script is None and ("/" in name or fn is None):
             self.status = 1                                    # PUB400's bsh, not the 127 other shells give
-            return [f"bsh: {name}: not found"]
-        else:
-            out = fn(args)
-        if redirect is None:
-            return out
-        target = self.path(redirect[1])
+            return shown + [Err(f"bsh: {name}: not found")]
+        before, self.stdin = self.stdin, (None if script is not None else stdin)
         try:
-            ifs.write(self.store, self.actor, target, "".join(l + "\n" for l in out), append=redirect[0] == ">>")
+            out = self.run_script(script, name) if script is not None else fn(args)
+        finally:
+            self.stdin = before
+        out = shown + out
+        if redir_out is None:
+            return out
+        errors = [l for l in out if isinstance(l, Err)]
+        target = self.path(redir_out[1])
+        if redir_out[1] == "/dev/null":                          # not captured: the usual sink, so a reflexive `> /dev/null` works
+            return errors
+        try:
+            ifs.write(self.store, self.actor, target, "".join(l + "\n" for l in out if not isinstance(l, Err)),
+                      append=redir_out[0] == ">>")
         except ifs.IfsError as exc:
-            return [self._write_error("bsh", exc, redirect[1])]
-        return []
+            return errors + [self._write_error("bsh", exc, redir_out[1])]
+        return errors
 
-    def words_of(self, text: str) -> tuple[list[str] | str, tuple[str, str] | None]:
-        """The words of one command after quoting, $VAR, $? and ~ and then globbing, and the redirection at its
-        end if there is one. A message instead of the words when the command is not well formed."""
+    def words_of(self, text: str):
+        """The words of one command after quoting, $VAR, $? and `backticks` and then globbing, with the file for `<` and
+        the one for `>` or `>>` if there are any: (words, in, out). A message instead when the command is not well formed."""
         tokens: list[tuple[str, str]] = []                      # (text, mask): mask has a 1 for every char a glob may use
         cur_t, cur_m, have, i = "", "", False, 0
 
@@ -195,13 +284,21 @@ class Shell:
                 tokens.append((cur_t, cur_m))
             cur_t, cur_m, have = "", "", False
 
+        def unquoted(value: str) -> None:                       # a $VAR or a backtick result outside quotes splits and may glob
+            nonlocal cur_t, cur_m, have
+            for n, piece in enumerate(re.split(r"(\s+)", value)):
+                if n % 2:
+                    flush()
+                elif piece:
+                    cur_t, cur_m, have = cur_t + piece, cur_m + "1" * len(piece), True
+
         while i < len(text):
             ch = text[i]
             if ch.isspace():
                 flush()
-            elif ch in "<>" or (ch == ">" and text[i:i + 2] == ">>"):
+            elif ch in "<>":
                 flush()
-                op = ">>" if text[i:i + 2] == ">>" else ">"
+                op = ">>" if text[i:i + 2] == ">>" else ch
                 tokens.append((op, "op"))
                 i += len(op) - 1
             elif ch == "'":
@@ -218,6 +315,10 @@ class Shell:
                         value, i = self.dollar(text, i)
                         cur_t, cur_m = cur_t + value, cur_m + "0" * len(value)
                         continue
+                    elif text[i] == "`":
+                        value, i = self.backtick(text, i)
+                        cur_t, cur_m = cur_t + value, cur_m + "0" * len(value)
+                        continue
                     else:
                         cur_t, cur_m = cur_t + text[i], cur_m + "0"
                     i += 1
@@ -226,28 +327,66 @@ class Shell:
                 cur_t, cur_m, have = cur_t + text[i], cur_m + "0", True
             elif ch == "$":
                 value, i = self.dollar(text, i)
-                for n, piece in enumerate(re.split(r"(\s+)", value)):      # unquoted, so it splits and may glob
-                    if n % 2:
-                        flush()
-                    elif piece:
-                        cur_t, cur_m, have = cur_t + piece, cur_m + "1" * len(piece), True
+                unquoted(value)
+                continue
+            elif ch == "`":
+                value, i = self.backtick(text, i)
+                unquoted(value)
                 continue
             else:
                 cur_t, cur_m, have = cur_t + ch, cur_m + "1", True
             i += 1
         flush()
-        redirect = None
-        if any(m == "op" for _, m in tokens):
-            if len(tokens) >= 2 and tokens[-2][1] == "op" and tokens[-1][1] != "op" \
-                    and sum(m == "op" for _, m in tokens) == 1:
-                redirect = (tokens[-2][0], tokens[-1][0])
-                tokens = tokens[:-2]
+        words_in: list[tuple[str, str]] = []
+        redir_in = redir_out = None
+        k = 0
+        while k < len(tokens):
+            tok, mask = tokens[k]
+            if mask != "op":
+                words_in.append((tok, mask))
+                k += 1
+                continue
+            if k + 1 >= len(tokens) or tokens[k + 1][1] == "op":
+                nxt = tokens[k + 1][0] if k + 1 < len(tokens) else "end of file"
+                return f"bsh: syntax error at line 1: `{nxt}' unexpected"
+            if tok == "<":
+                redir_in = tokens[k + 1][0]
+            elif k + 2 == len(tokens) and redir_out is None:             # the output file ends the command, as before
+                redir_out = (tok, tokens[k + 1][0])
             else:
-                return "bsh: the redirection must be the last thing on the line: command > file.", None
+                return "bsh: the redirection must be the last thing on the line: command > file."
+            k += 2
         words: list[str] = []
-        for word, mask in tokens:
+        for word, mask in words_in:
             words += self.glob(word, mask)
-        return words, redirect
+        return words, redir_in, redir_out
+
+    def backtick(self, text: str, i: int) -> tuple[str, int]:
+        """What the command between the backticks at text[i] printed, and where the text goes on. `$(...)` is not here
+        because bsh has none."""
+        j = i + 1
+        while j < len(text) and text[j] != "`":
+            j += 2 if text[j] == "\\" else 1
+        return self.substitute(text[i + 1:j].replace("\\`", "`")), j + 1
+
+    def substitute(self, command: str) -> str:
+        """Run `command` as a nested copy of this shell and bring back what it printed, without the trailing newlines.
+        What it printed to stderr is shown anyway. The nested run cannot change the directory, the variables or end the
+        shell, and cannot nest more than MAX_SUB deep or bring back more than SUB_LIMIT characters."""
+        if self.sub_depth >= MAX_SUB:
+            self.sub_errors.append(Err("bsh: too many nested backticks."))
+            return ""
+        saved = (self.cwd, dict(self.env), self.done, self.leaving, self.stdin, self.sub_errors, self.status)
+        self.sub_depth += 1
+        self.sub_errors = []
+        try:
+            lines = self.run(command)
+        finally:
+            self.sub_depth -= 1
+            errors = self.sub_errors
+            self.cwd, self.env, self.done, self.leaving, self.stdin, self.sub_errors, self.status = saved
+        self.sub_errors += errors + [l for l in lines if isinstance(l, Err)]
+        return "\n".join(l for l in lines if not isinstance(l, Err))[:SUB_LIMIT].rstrip("\n")
 
     def dollar(self, text: str, i: int) -> tuple[str, int]:
         """The value of the `$` expression at text[i], and where the text goes on. A lone `$` is itself."""
@@ -347,11 +486,11 @@ class Shell:
 
     def run_script(self, path: str, name: str) -> list[str]:
         if self.depth >= MAX_DEPTH:
-            return [f"bsh: {name}: 0403-016 Cannot execute: too many nested scripts."]
+            return [Err(f"bsh: {name}: 0403-016 Cannot execute: too many nested scripts.")]
         try:
             text = ifs.read(self.store, self.actor, path)
         except ifs.IfsError:
-            return [f"bsh: {name}: 0403-006 Execute permission denied."]
+            return [Err(f"bsh: {name}: 0403-006 Execute permission denied.")]
         out: list[str] = []
         self.depth += 1
         try:
@@ -411,12 +550,12 @@ class Shell:
             self.leaving = True
         elif self.batch:
             self.done = True
-        return out
+        return [Err(line) for line in out]
 
     @staticmethod
     def _cd_error(exc: ifs.IfsError, given: str) -> str:
         why = {"ENOENT": "No such file or directory", "EACCES": "Permission denied", "ENOTDIR": "Not a directory"}
-        return f"{given}: {why.get(exc.kind, exc.kind)}"
+        return Err(f"{given}: {why.get(exc.kind, exc.kind)}")
 
     def cmd_ls(self, args: list[str]) -> list[str]:
         flags = "".join(a[1:] for a in args if a.startswith("-") and len(a) > 1)
@@ -441,22 +580,25 @@ class Shell:
     @staticmethod
     def _ls_error(exc: ifs.IfsError, given: str) -> str:
         if exc.kind == "EACCES":
-            return f"ls: 0653-345 {given}: Permission denied."     # not captured: PUB400 only showed the missing case
-        return f"{given} not found"
+            return Err(f"ls: 0653-345 {given}: Permission denied.")     # not captured: PUB400 only showed the missing case
+        return Err(f"{given} not found")
 
     def _long(self, e: ifs.Entry) -> str:
         return f"{ifs.perms(e)}   1 {e.owner:<10} 0 {e.size:>8} {ifs.STAMP} {e.path.rsplit('/', 1)[-1]}"
 
     def cmd_cat(self, args: list[str]) -> list[str]:
-        if not args:
+        if not args and self.stdin is None:
             self.status = 2
-            return ["cat: cannot open standard input in the simulator"]
+            return [Err("cat: cannot open standard input in the simulator")]
         out: list[str] = []
-        for given in args:
+        for given in args or ["-"]:
+            if given == "-":                                   # standard input, which is what a pipe or `<` gave it
+                out += self.stdin or []
+                continue
             try:
                 out += ifs.read(self.store, self.actor, self.path(given)).splitlines()
             except ifs.IfsError as exc:
-                out.append(f"cat: cannot open {given}")
+                out.append(Err(f"cat: cannot open {given}"))
                 self.status = 2
         return out
 
@@ -500,7 +642,7 @@ class Shell:
                "EEXIST": "0653-340 {0} already exists.", "ENOTDIR": "0653-346 {0} is not a directory.",
                "EISDIR": "0653-347 {0} is a directory.", "ENOTEMPTY": "0653-348 {0} is not empty.",
                "EPERM": "0653-349 {0}: Operation not permitted.", "EINVAL": "0653-350 {0}: invalid mode."}
-        return f"{cmd}: " + why.get(exc.kind, exc.kind).format(given)
+        return Err(f"{cmd}: " + why.get(exc.kind, exc.kind).format(given))
 
     def cmd_mkdir(self, args: list[str]) -> list[str]:
         parents = "-p" in args
@@ -540,7 +682,7 @@ class Shell:
             try:
                 target = self.path(given)
                 if target in self.store.ifs and self.store.ifs[target].is_dir and "r" not in flags:
-                    out.append(f"rm: 0653-603 {given} is a directory.")
+                    out.append(Err(f"rm: 0653-603 {given} is a directory."))
                     continue
                 ifs.remove(self.store, self.actor, target, recursive="r" in flags)
             except ifs.IfsError as exc:
@@ -552,7 +694,7 @@ class Shell:
         args = [a for a in args if not a.startswith("-")]
         if len(args) != 2:
             self.status = 2
-            return [f"{name}: 0653-401 usage: {name} source target"]
+            return [Err(f"{name}: 0653-401 usage: {name} source target")]
         try:
             fn(self.store, self.actor, self.path(args[0]), self.path(args[1]))
         except ifs.IfsError as exc:
@@ -568,7 +710,7 @@ class Shell:
     def cmd_chmod(self, args: list[str]) -> list[str]:
         if len(args) < 2:
             self.status = 2
-            return ["chmod: 0653-401 usage: chmod mode file ..."]
+            return [Err("chmod: 0653-401 usage: chmod mode file ...")]
         out: list[str] = []
         for given in args[1:]:
             try:
@@ -583,7 +725,7 @@ class Shell:
         from ..net import textview
         if not args:
             self.status = 2
-            return ["system: 0653-401 usage: system 'CL command'"]
+            return [Err("system: 0653-401 usage: system 'CL command'")]
         line = " ".join(args)
         outcome = commands.execute(self.store, self.actor, line, self._job())
         message = outcome.message
@@ -603,11 +745,11 @@ class Shell:
         from . import sql
         if not args:
             self.status = 2
-            return ["db2: usage: db2 \"SQL statement\""]
+            return [Err("db2: usage: db2 \"SQL statement\"")]
         result = sql.run(self.store, self.actor, self._job(), " ".join(args))
         if result.error:
             self.status = 4                          # the db2 command line returns 4 for an SQL error, from IBM's page, not seen here
-        return sql.render(result)
+        return [Err(l) for l in sql.render(result)] if result.error else sql.render(result)
 
     # -- the small read-only batch, wording copied from PUB400 ------------------------------------------------------
 
@@ -630,7 +772,7 @@ class Shell:
 
     def cmd_logname(self, args: list[str]) -> list[str]:
         self.status = 1
-        return ["logname: getlogin failed"]               # what PUB400 said over ssh, where there is no terminal
+        return [Err("logname: getlogin failed")]               # what PUB400 said over ssh, where there is no terminal
 
     def cmd_printenv(self, args: list[str]) -> list[str]:
         if not args:
@@ -643,14 +785,16 @@ class Shell:
         return ["    PID    TTY  TIME CMD"]               # PUB400 listed no process for the login, and neither do we
 
     def _lines_of(self, name: str, given: str) -> tuple[list[str] | None, str]:
+        if given == "-":
+            return list(self.stdin or []), ""
         try:
             return ifs.read(self.store, self.actor, self.path(given)).splitlines(), ""
         except ifs.IfsError as exc:
             if name == "wc":
-                return None, f"wc: cannot open {given}"
+                return None, Err(f"wc: cannot open {given}")
             if name == "grep":
-                return None, f"grep: can't open {given}"
-            return None, f"{given}: {'Permission denied' if exc.kind == 'EACCES' else 'No such file or directory'}"
+                return None, Err(f"grep: can't open {given}")
+            return None, Err(f"{given}: {'Permission denied' if exc.kind == 'EACCES' else 'No such file or directory'}")
 
     @staticmethod
     def _count_option(args: list[str]) -> tuple[int, list[str]]:
@@ -669,6 +813,8 @@ class Shell:
 
     def _head_tail(self, name: str, args: list[str], pick) -> list[str]:
         count, files = self._count_option(args)
+        if not files and self.stdin is not None:
+            files = ["-"]
         out: list[str] = []
         for given in files:
             lines, err = self._lines_of(name, given)
@@ -691,11 +837,16 @@ class Shell:
         flags = "".join(a[1:] for a in args if a.startswith("-") and len(a) > 1)
         wanted = [k for k in "lwc" if k in flags] or ["l", "w", "c"]
         out: list[str] = []
-        for given in [a for a in args if not a.startswith("-")]:
+        names = [a for a in args if not a.startswith("-")]
+        if not names and self.stdin is not None:               # counts of what was piped in, with no name after them
+            text = "".join(l + "\n" for l in self.stdin)
+            counts = {"l": text.count("\n"), "w": len(text.split()), "c": len(text.encode())}
+            return ["".join(f"{counts[k]:8d}" for k in wanted)]
+        for given in names:
             try:
                 text = ifs.read(self.store, self.actor, self.path(given))
             except ifs.IfsError:
-                out.append(f"wc: cannot open {given}")
+                out.append(Err(f"wc: cannot open {given}"))
                 self.status = 2
                 continue
             counts = {"l": text.count("\n"), "w": len(text.split()), "c": len(text.encode())}
@@ -714,13 +865,15 @@ class Shell:
                 rest.append(a)
         if not rest:
             self.status = 2
-            return ["Usage: grep [-i] [-v] [-n] [-c] pattern [file ...]"]
+            return [Err("Usage: grep [-i] [-v] [-n] [-c] pattern [file ...]")]
         pattern, files = rest[0], rest[1:]
+        if not files and self.stdin is not None:
+            files = ["-"]                                       # a file named on the line wins over the pipe, as on PUB400
         try:
             rx = re.compile(pattern, re.I if "i" in flags else 0)
         except re.error:
             self.status = 2
-            return [f"grep: 0651-209 The regular expression {pattern} is not valid."]
+            return [Err(f"grep: 0651-209 The regular expression {pattern} is not valid.")]
         out: list[str] = []
         matched, failed = False, False
         for given in files:
