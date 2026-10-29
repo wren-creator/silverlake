@@ -342,6 +342,23 @@ AUTHENTICATED["auth-prompts-pages"] = [
                    {"key": "ROLLUP"}, {"key": "ROLLUP"}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
     {**_SIGNOFF, "always": True},
 ]
+# Read only: what F10=Additional parameters shows on the prompts that offer it (29 of them, in the F4 captures).
+# Each command is typed bare, F4 opens the prompt, F10 asks for the additional parameters and Roll Up looks at the
+# next page of them. Then F12 three times to get back to the command line (one too many is harmless there).
+# Enter is never pressed on a prompt and nothing is typed into one, so nothing is run.
+F10_BATCHES = {
+    "a": ("CHGJOB", "CHGMSGQ", "CHGPRF", "CHGSPLFA", "CHGUSRPRF", "CPYF", "CRTAUTL", "CRTBNDRPG", "CRTDSPF", "CRTMSGQ"),
+    "b": ("CRTOUTQ", "CRTPF", "CRTPRTF", "CRTSRCPF", "CRTUSRPRF", "DLTF", "DSPJOB", "DSPJOBLOG", "DSPMSG", "DSPSPLF"),
+    "c": ("ENDJOB", "HLDJOB", "RLSJOB", "SNDMSG", "WRKACTJOB", "WRKJOB", "WRKLIB", "WRKSPLF", "WRKUSRPRF"),
+}
+for _batch, _cmds in F10_BATCHES.items():
+    AUTHENTICATED["auth-f10-" + _batch] = [
+        _SIGNON,
+        *[step for cmd in _cmds
+          for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F10"}, {"key": "ROLLUP"},
+                       {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+        {**_SIGNOFF, "always": True},
+    ]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

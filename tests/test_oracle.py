@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-splopts", "auth-pdm") or name.startswith("auth-prompts-"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-")):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -680,3 +680,20 @@ def test_the_prompt_pages_scenario_only_types_a_made_up_name_before_rolling_up()
             assert a["fill"]["0"] in scenario.PROMPT_PAGES and a["fill"]["0"].isalpha()
         else:
             assert "fill" not in a and a.get("always")
+
+
+def test_the_f10_scenarios_cover_every_prompt_that_offers_f10_and_never_press_enter():
+    from silverlake.screens.promptspecs import SPECS
+    offered = {c for c, sp in SPECS.items() if any("F10=Additional" in k for k in sp["keys"])}
+    asked = {c for cmds in scenario.F10_BATCHES.values() for c in cmds}
+    assert asked == offered
+    for batch in scenario.F10_BATCHES:
+        actions = scenario.SCENARIOS["auth-f10-" + batch]
+        assert actions[0]["key"] == "ENTER" and "${SILVERLAKE_ORACLE_PASS}" in actions[0]["fill"]["1"]
+        assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+        for a in actions[1:-1]:
+            assert a["key"] in ("F4", "F10", "ROLLUP", "F12"), a          # never Enter, so nothing is run
+            if a["key"] == "F4":
+                assert a["fill"]["0"].isalnum() and a["fill"]["0"].isupper()
+            else:
+                assert "fill" not in a and (a["key"] != "F12" or a.get("always"))

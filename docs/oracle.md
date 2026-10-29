@@ -197,6 +197,8 @@ Nine read-only runs on 2026-10-29 (`auth-prompts-a` to `auth-prompts-h`, then `a
 
 The layouts are in `screens/promptspecs.py`, generated from the captures by `python -m silverlake.oracle.promptspec captures/pub400/auth-prompts-*.json`. Change the generator, not the table.
 
+Three more read-only scenarios (`auth-f10-a` to `auth-f10-c`) are written for the 29 prompts that offer F10=Additional parameters: type the bare command, F4, F10, Roll Up once, then F12 out. Nothing is typed into a prompt and Enter is never pressed, and a test checks the list against the prompts that show the F10 key. They have not been run yet.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.
