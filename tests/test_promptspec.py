@@ -1,0 +1,91 @@
+from silverlake.oracle import promptspec, scenario
+from silverlake.screens.promptspecs import SPECS
+
+
+def _run(row, col, text, attr="0x20"):
+    return {"row": row, "col": col, "attr": attr, "length": len(text), "text": text}
+
+
+def _field(row, col, length):
+    return {"row": row, "col": col, "length": length, "attr": "0x24", "hidden": False}
+
+
+def _screen(runs, fields):
+    return {"runs": runs, "fields": fields, "message_ids": [], "cursor": None}
+
+
+def _prompt():
+    return _screen([
+        _run(0, 19, "      Delete Thing (DLTTHG)"), _run(2, 1, "Type choices, press Enter."),
+        _run(4, 1, "Thing  . . . . . . . . . . . . ."), _run(4, 34, "THING"),
+        _run(5, 1, "  Library  . . . . . . . . . . ."), _run(5, 51, "*LIBL", "0x24"),
+        _run(6, 1, "Device:", "0x20"), _run(6, 34, "DEV"),
+        _run(7, 1, "  Printer  . . . . . . . . . . ."), _run(7, 49, "*JOB", "0x24"),
+        _run(20, 66, "       Bottom"), _run(21, 1, "F3=Exit   F4=Prompt"), _run(22, 0, " F24=More keys"),
+    ], [_field(4, 49, 10), _field(5, 51, 10), _field(7, 49, 10)])
+
+
+def test_a_prompt_screen_becomes_a_command_and_its_rows():
+    name, spec = promptspec.extract(_prompt())
+    assert name == "DLTTHG"
+    assert spec["title"] == ("Delete Thing (DLTTHG)", 25)               # column is where the words start
+    assert spec["bottom"] == "Bottom" and spec["keys"] == ("F3=Exit   F4=Prompt", "F24=More keys")
+    assert spec["rows"] == [
+        (4, "Thing  . . . . . . . . . . . . .".ljust(33) + "THING", "THING", 49, 10, ""),
+        (5, "  Library  . . . . . . . . . . .", "THING@", 51, 10, "*LIBL"),       # the library of a qualified name
+        (6, "Device:".ljust(33) + "DEV", "", 0, 0, ""),
+        (7, "  Printer  . . . . . . . . . . .", "DEV", 49, 10, "*JOB"),          # a field under a label only row
+    ]
+
+
+def test_a_screen_that_is_not_a_prompt_is_ignored():
+    assert promptspec.extract(_screen([_run(0, 1, "MAIN"), _run(0, 32, "IBM i Main Menu")], [])) is None
+
+
+def test_a_command_with_nothing_to_prompt_for_keeps_the_hosts_words():
+    snap = _screen([_run(0, 19, "         Change Password (CHGPWD)"), _run(21, 1, "F3=Exit"),
+                    _run(23, 1, "No parameters to show; press Enter to run, F3 to exit.")], [])
+    name, spec = promptspec.extract(snap)
+    assert name == "CHGPWD" and spec["rows"] == [] and spec["note"].startswith("No parameters to show")
+
+
+def test_a_second_page_continues_the_keyword_it_started_in_the_middle_of():
+    page1 = _prompt()
+    page1["runs"][-3] = _run(20, 66, "      More...")
+    page2 = _screen([
+        _run(0, 19, "      Delete Thing (DLTTHG)"), _run(2, 1, "Type choices, press Enter."),
+        _run(4, 1, "  Number . . . . . . . . . . . ."), _run(4, 49, "*ALL", "0x24"),
+        _run(20, 66, "       Bottom"),
+    ], [_field(4, 49, 6)])
+    cap = {"snapshots": [page1, page2]}
+    spec = promptspec.extract_all([cap])["DLTTHG"]
+    assert spec["bottom"] == "More..." and spec["pages"] == [([(4, "  Number . . . . . . . . . . . .", "DEV@", 49, 6, "*ALL")], "Bottom")]
+
+
+def test_a_roll_up_that_was_refused_is_not_a_second_page():
+    page1 = _prompt()
+    page1["runs"][-3] = _run(20, 66, "      More...")
+    refused = _prompt()
+    refused["runs"][-3] = _run(20, 66, "      More...")
+    refused["runs"].append(_run(23, 1, "Parameter THING required."))
+    assert promptspec.extract_all([{"snapshots": [page1, refused]}])["DLTTHG"]["pages"] == []
+
+
+def test_the_table_has_every_command_the_scenarios_prompted_except_the_refused_one():
+    asked = {c for batch in scenario.PROMPT_BATCHES.values() for c in batch}
+    assert asked - set(SPECS) == {"CRTLIB"}              # the host refused it before the prompt
+
+
+def test_every_row_in_the_table_is_well_formed():
+    for name, spec in SPECS.items():
+        assert spec["title"][0].endswith(f"({name})"), name
+        pages = [(spec["rows"], spec["bottom"])] + list(spec.get("pages", []))
+        for rows, bottom in pages:
+            assert bottom in ("Bottom", "More...", ""), (name, bottom)
+            for row, label, field, col, length, default in rows:
+                assert 3 < row < 20 and label.strip(), (name, row)
+                assert (length > 0) == bool(field) and (col > 0) == bool(field), (name, row)
+                assert len(default) <= max(length, 1) or length == 0 or len(default) <= length + 40, (name, row)
+        names = [r[2] for rows, _ in pages for r in rows if r[2]]
+        assert len(names) == len(set(names)), name        # a field name is never used twice
+        assert (spec["bottom"] == "") == ("note" in spec), name        # only a no-parameter prompt has no marker
