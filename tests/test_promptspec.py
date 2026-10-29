@@ -89,3 +89,25 @@ def test_every_row_in_the_table_is_well_formed():
         names = [r[2] for rows, _ in pages for r in rows if r[2]]
         assert len(names) == len(set(names)), name        # a field name is never used twice
         assert (spec["bottom"] == "") == ("note" in spec), name        # only a no-parameter prompt has no marker
+
+
+def test_a_brighter_field_is_required_and_a_more_values_line_with_a_field_is_the_keywords_plus():
+    snap = _screen([
+        _run(0, 19, "      Add Thing (ADDTHG)"), _run(2, 1, "Type choices, press Enter."),
+        _run(4, 1, "Thing  . . . . . . . . . . . . ."), _run(4, 34, "THING"),
+        _run(5, 1, "User . . . . . . . . . . . . . ."), _run(5, 34, "USER"),
+        _run(6, 17, "          + for more values"),
+        _run(7, 1, "Authority  . . . . . . . . . . ."), _run(7, 34, "AUT"), _run(7, 49, "*CHANGE", "0x24"),
+        _run(20, 66, "       Bottom"),
+    ], [{**_field(4, 49, 10), "attr": "0x26"}, {**_field(5, 49, 10), "attr": "0x26"}, _field(6, 49, 10),
+        _field(7, 49, 10)])
+    name, spec = promptspec.extract(snap)
+    assert spec["required"] == ["THING", "USER"]                                  # not AUT, and not USER+
+    assert [r[2] for r in spec["rows"]] == ["THING", "USER", "USER+", "AUT"]
+    assert spec["rows"][2] == (6, " " * 16 + "          + for more values", "USER+", 49, 10, "")
+
+
+def test_every_required_name_in_the_table_is_a_field_of_the_prompt():
+    for name, spec in SPECS.items():
+        fields = {r[2] for rows in [spec["rows"]] + [p[0] for p in spec.get("pages", [])] for r in rows}
+        assert set(spec["required"]) <= fields, name

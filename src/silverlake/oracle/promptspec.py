@@ -1,10 +1,10 @@
 """Turn the F4 prompt screens in `auth-prompts-*` captures into the table `screens/promptspecs.py`.
 
-    python -m silverlake.oracle.promptspec captures/pub400/auth-prompts-*.json > src/silverlake/screens/promptspecs.py
+    python -m silverlake.oracle.promptspec captures/pub400/auth-pdm.json captures/pub400/auth-prompts-*.json > src/silverlake/screens/promptspecs.py
 
 Only layout comes out: title, rows, labels, keywords, columns, lengths, defaults, the bottom marker and the
-key lines. The first screen after F4 for each command is the one read, so a second page (Roll Up) is not
-part of this table. Rows are in the shape `screens/prompt.py` already uses:
+key lines. The first screen after F4 for each command is the one read, and a Roll Up that paged adds the
+next page. Rows are in the shape `screens/prompt.py` already uses:
 (row, label as drawn, field name, field column, field length, default). A row with no field name is a label
 only. The field name is the command's keyword, and "KW@" is the library part of a qualified name."""
 
@@ -16,6 +16,7 @@ import sys
 
 _TITLE = re.compile(r"\((\w+)\)\s*$")
 LABEL_COL, KEYWORD_COL = 1, 34
+REQUIRED_ATTR = "0x26"      # the host draws a required parameter brighter than the rest
 
 
 def _runs_by_row(snapshot: dict) -> dict[int, list[dict]]:
@@ -39,11 +40,12 @@ def extract(snapshot: dict, carry: tuple[str, int] = ("", 0)) -> tuple[str, dict
         lead = len(runs[0]["text"]) - len(runs[0]["text"].lstrip())
         keys = tuple(r["text"] for r in runs if r["row"] in (21, 22))
         return m.group(1), {"title": (runs[0]["text"].strip(), runs[0]["col"] + lead), "rows": [], "bottom": "",
-                            "keys": keys, "note": note, "odd": [], "end": ("", 0)}
+                            "keys": keys, "note": note, "required": [], "odd": [], "end": ("", 0)}
     lead = len(runs[0]["text"]) - len(runs[0]["text"].lstrip())
     title = (runs[0]["text"].strip(), runs[0]["col"] + lead)
     fields = {(f["row"], f["col"]): f for f in snapshot["fields"]}
     rows: list[tuple] = []
+    required: list[str] = []
     odd: list[str] = []
     current, count = carry                     # the keyword the next field belongs to, and fields seen under it
     for row, here in sorted(_runs_by_row(snapshot).items()):
@@ -55,10 +57,14 @@ def extract(snapshot: dict, carry: tuple[str, int] = ("", 0)) -> tuple[str, dict
         if len(placed) > 1:
             odd.append(f"row {row} has {len(placed)} fields")
         field = placed[0] if placed else None
-        if label is None:                      # a lone line like "+ for more values"
+        if label is None:                      # a lone line like "+ for more values", which may carry a field
+            before = len(rows)
             for r in here:
                 if field is None or r["col"] < field["col"]:
                     rows.append((row, " " * (r["col"] - LABEL_COL) + r["text"], "", 0, 0, ""))
+            if field is not None and len(rows) > before:      # more values of the keyword above: KW+
+                default = next((r["text"].strip() for r in here if r["col"] == field["col"]), "")
+                rows[-1] = (*rows[-1][:2], current + "+", field["col"], field["length"], default)
             continue
         drawn = label["text"].rstrip()
         if keyword:
@@ -75,6 +81,8 @@ def extract(snapshot: dict, carry: tuple[str, int] = ("", 0)) -> tuple[str, dict
             name = current if count == 1 else current + "@" + (str(count) if count > 2 else "")
         default = next((r["text"].strip() for r in here if r["col"] == field["col"]), "")
         rows.append((row, drawn, name, field["col"], field["length"], default))
+        if field["attr"] == REQUIRED_ATTR:
+            required.append(name)
         extra = [r["text"] for r in here if r is not label and r is not keyword
                  and not (r["col"] == field["col"] and r["text"].strip() == default)]
         if extra:
@@ -86,7 +94,8 @@ def extract(snapshot: dict, carry: tuple[str, int] = ("", 0)) -> tuple[str, dict
             text = tail[row]["text"]
             keys.append(text[1:] if tail[row]["col"] == 0 and text.startswith(" ") else text)
     bottom = tail[20]["text"].strip() if 20 in tail else ""
-    return m.group(1), {"title": title, "rows": rows, "bottom": bottom, "keys": tuple(keys), "odd": odd, "end": (current, count)}
+    return m.group(1), {"title": title, "rows": rows, "bottom": bottom, "keys": tuple(keys), "required": required, "odd": odd,
+                        "end": (current, count)}
 
 
 def extract_all(captures: list[dict]) -> dict[str, dict]:
@@ -114,6 +123,7 @@ def extract_all(captures: list[dict]) -> dict[str, dict]:
                         or any(r["row"] == 23 for r in snaps[j + 1]["runs"])):
                     break
                 found[name]["pages"].append((nxt[1]["rows"], nxt[1]["bottom"]))
+                found[name]["required"] += nxt[1]["required"]
                 cur, end, j = nxt[1], nxt[1]["end"], j + 1
     return found
 
@@ -123,12 +133,16 @@ def render(found: dict[str, dict]) -> str:
            '`python -m silverlake.oracle.promptspec`, so change that and run it again, not this file.',
            '',
            'Each entry: the title and its column, the rows as (row, label as drawn, field name, field column,',
-           'field length, default), the marker on row 20 and the two key lines."""',
+           'field length, default), the marker on row 20 and the two key lines. "required" names the parameters',
+           'the host draws brighter and will not run without. "pages" has the rows and marker of each page after',
+           'the first, where Roll Up was captured. "note" is what the host says when there is nothing to prompt',
+           'for."""',
            '', 'from __future__ import annotations', '', 'SPECS: dict[str, dict] = {']
     for name in sorted(found):
         spec = found[name]
         out.append(f'    "{name}": {{"title": {spec["title"]!r}, "bottom": {spec["bottom"]!r},')
         out.append(f'        "keys": {spec["keys"]!r},')
+        out.append(f'        "required": {tuple(spec["required"])!r},')
         if spec.get("note"):
             out.append(f'        "note": {spec["note"]!r},')
         if spec["pages"]:
