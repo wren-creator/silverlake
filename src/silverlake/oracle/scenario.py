@@ -427,6 +427,26 @@ AUTHENTICATED["auth-f13-one"] = [
     {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the F13 help of the six prompts of auth-f13, now that the client answers Save Screen. Each command is
+# typed bare, F4 opens its prompt, F13 opens the help, Roll Up eight times pages through it (past the last page is
+# only a message), and F12 three times gets back to the command line (help, then prompt, then one too many).
+# Nothing is typed but the bare name and Enter is never pressed, so nothing runs.
+AUTHENTICATED["auth-f13-help"] = [
+    _SIGNON,
+    *[step for cmd in F13_COMMANDS
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F13"}, *[{"key": "ROLLUP"}] * 8,
+                   {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+    {**_SIGNOFF, "always": True},
+]
+# The F13 help is the same text for every prompt (auth-f13-help, six of them) and was still on More... after nine
+# pages, so this follows it to the end on one prompt: F4, F13, Roll Up sixteen times, then F10 (Move to top), F3
+# (Exit help) and F12 out. F14 (Print help) is left alone, it would make a spooled file. Never Enter.
+AUTHENTICATED["auth-f13-helpall"] = [
+    _SIGNON,
+    {"fill": {"0": "CRTPF"}, "key": "F4"}, {"key": "F13"}, *[{"key": "ROLLUP"}] * 16, {"key": "F10"},
+    {"key": "F3", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

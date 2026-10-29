@@ -809,3 +809,20 @@ def test_save_screen_and_read_immediate_in_one_record_both_get_answers():
     c, sent = _bare_client()
     c._on_record(ds.gds_record(bytes([ds.ESC, 0x02, ds.ESC, 0x72]), 0x04))
     assert len(sent) == 2 and not c._got_read
+
+
+def test_the_f13_help_scenario_opens_help_for_the_six_prompts_and_never_presses_enter():
+    actions = scenario.SCENARIOS["auth-f13-help"]
+    assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+    assert [a["fill"]["0"] for a in actions if a["key"] == "F4"] == list(scenario.F13_COMMANDS)
+    for a in actions[1:-1]:
+        assert a["key"] in ("F4", "F13", "ROLLUP", "F12"), a                  # never Enter, so nothing is run
+        assert ("fill" in a) == (a["key"] == "F4") and (a["key"] != "F12" or a.get("always"))
+
+
+def test_the_f13_help_all_scenario_never_prints_and_never_presses_enter():
+    actions = scenario.SCENARIOS["auth-f13-helpall"]
+    assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+    keys = [a["key"] for a in actions[1:-1]]
+    assert set(keys) <= {"F4", "F13", "ROLLUP", "F10", "F3", "F12"} and "F14" not in keys and "ENTER" not in keys
+    assert [a["fill"]["0"] for a in actions if a["key"] == "F4"] == ["CRTPF"]
