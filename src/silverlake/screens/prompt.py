@@ -1,11 +1,14 @@
 """F4 on a command: the prompt display, drawn from the layouts captured on PUB400 (read only, `auth-pdm` and
-`auth-prompts-*`, held in `promptspecs.py`).
+`auth-prompts-*` and `auth-f10-*`, held in `promptspecs.py`).
 
 What the captures showed, and this follows: the title, the rows, the labels, the columns and the lengths; a
 "Bottom" or "More..." marker and the key lines; required parameters drawn brighter, with "Parameter X required."
-on Enter and on Roll Up while one is empty; Roll Up paging a prompt that is more than one page, and "Already at
+on Enter and on Roll Up while one is empty; F10=Additional parameters (no check first, the whole prompt again
+with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); Roll Up paging a prompt that is more than one page, and "Already at
 bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). Not captured, so ours: what Roll Down
-says at the top, how a refused command reads on the prompt, and F10, F13 and F24, which say they are not built.
+says at the top, how a refused command reads on the prompt, and F13 and F24, which say they are not built, as does F10
+on a prompt with no additional parameters or when pressed a second time. CHGSPLFA's F10 view stops at its first page:
+the host will not page it without a spooled file that exists.
 
 Where this differs from the captured host on purpose: its CRTDSPF and CRTPRTF offered SRCFILE *NONE with a blank
 library, which looks like a local setting. Here the field holds QDDSSRC and *LIBL, the real IBM default, so
@@ -57,6 +60,10 @@ def _build() -> dict[str, dict]:
         pages += [(_with_overrides(command, rows), bottom) for rows, bottom in spec.get("pages", [])]
         specs[command] = {"title": spec["title"], "pages": pages, "keys": spec["keys"],
                           "required": spec["required"], "note": spec.get("note", "")}
+        if "more" in spec:                  # F10=Additional parameters: the whole prompt again, and what follows
+            specs[command]["more"] = {"keys": spec["more"]["keys"],
+                                      "pages": [(_with_overrides(command, rows), bottom)
+                                                for rows, bottom in spec["more"]["pages"]]}
         # the first page's rows, for the callers that only want to know what the prompt holds
         specs[command]["rows"] = pages[0][0]
     return specs
@@ -75,17 +82,30 @@ def _split_qualified(value: str) -> tuple[str, str]:
 
 
 def _all_rows(spec: dict) -> list:
-    return [row for rows, _ in spec["pages"] for row in rows]
+    pages = spec["pages"] + spec.get("more", {}).get("pages", [])
+    return [row for rows, _ in pages for row in rows]
 
 
-def _defaults(spec: dict) -> dict[str, str]:
-    return {name: default for _, _, name, _, _, default in _all_rows(spec) if name}
+def _resolve(default: str, ctx: Context) -> str:
+    """The table holds a token where the host showed a value of the profile it was captured with (current library,
+    text, profile name), because a change command shows current values. Here they are the signed-on profile's."""
+    if default == "{USER}":
+        return ctx.profile.name
+    if default == "{CURLIB}":
+        return ctx.profile.current_library
+    if default == "{TEXT}":
+        return "'" + ctx.profile.text.replace("'", "''") + "'" if ctx.profile.text else "*BLANK"
+    return default
+
+
+def _defaults(spec: dict, ctx: Context) -> dict[str, str]:
+    return {name: _resolve(default, ctx) for _, _, name, _, _, default in _all_rows(spec) if name}
 
 
 def _group(values: dict, key: str) -> list[str]:
     """The fields that make up one keyword: KW, then KW@ (the library, or a second value), KW@3 and on, and KW+ (the
-    "+ for more values" line)."""
-    return [n for n in values if n == key or n.startswith(key + "@") or n == key + "+"]
+    "+ for more values" line), and KW+@ (a bare field under it)."""
+    return [n for n in values if n == key or n.startswith(key + "@") or n.startswith(key + "+")]
 
 
 @dataclass
@@ -95,6 +115,7 @@ class Prompt:
     typed: dict
     values: dict
     page: int = field(default=0)
+    extra: bool = False                             # F10 pressed: the additional parameters view
     flagged: set = field(default_factory=set)      # fields drawn in reverse image after a refusal
     cursor: str = ""                                # where the cursor goes after one
 
@@ -129,7 +150,7 @@ class Prompt:
         order = [p.key for p in commands.COMMANDS[parsed.command]]
         given = dict(zip(order, ([v] for v in parsed.positional)))
         given.update(parsed.keywords)
-        values = _defaults(spec)
+        values = _defaults(spec, ctx)
         for key, vals in given.items():
             names = _group(values, key)
             if not names or not vals:
@@ -145,6 +166,11 @@ class Prompt:
         values.update({k: v for k, v in preset.items() if k in values})
         return cls(ctx, parsed.command, given, values)
 
+    def _view(self) -> tuple[list, tuple]:
+        """The pages and key lines on show: the plain prompt, or what F10 asks for."""
+        spec = SPECS[self.command]
+        return (spec["more"]["pages"], spec["more"]["keys"]) if self.extra else (spec["pages"], spec["keys"])
+
     # -- drawing -----------------------------------------------------------------------------------------
 
     def screen(self, message: str = "") -> Screen:
@@ -155,15 +181,17 @@ class Prompt:
             rows += [Text(21, 1, spec["keys"][0], ds.ATTR_BLUE)]
             _msg(rows, message or spec["note"])
             return Screen(rows)
-        page_rows, marker = spec["pages"][self.page]
+        pages, keys = self._view()
+        page_rows, marker = pages[self.page]
         rows.append(Text(2, 1, "Type choices, press Enter.", ds.ATTR_BLUE))
         for row, label, name, fcol, flen, _ in sorted(page_rows, key=lambda r: r[0]):
-            rows.append(Text(row, 1, label, ds.ATTR_GREEN))
+            if label:
+                rows.append(Text(row, 1, label, ds.ATTR_GREEN))
             if name:
                 rows.append(Input(row, fcol, flen, name, value=self.values.get(name, ""),
                                   required=name in spec["required"], error=name in self.flagged))
         rows.append(Text(20, 79 - len(marker), marker, ds.ATTR_WHITE))
-        rows += [Text(21 + i, 1, line, ds.ATTR_BLUE) for i, line in enumerate(spec["keys"])]
+        rows += [Text(21 + i, 1, line, ds.ATTR_BLUE) for i, line in enumerate(keys)]
         _msg(rows, message)
         first = next(name for _, _, name, _, _, _ in sorted(page_rows, key=lambda r: r[0]) if name)
         return Screen(rows, cursor=self.cursor or first)
@@ -181,7 +209,7 @@ class Prompt:
         first = missing[0]
         self.flagged = {n for key in missing for n in _group(self.values, key)}
         self.cursor = first
-        self.page = next(i for i, (rows, _) in enumerate(SPECS[self.command]["pages"])
+        self.page = next(i for i, (rows, _) in enumerate(self._view()[0])
                          if any(r[2] == first for r in rows))
         return Step(f"Parameter {first} required.")
 
@@ -193,17 +221,20 @@ class Prompt:
         if aid == "F12":
             return Step(go="back")
         if aid == "F5":
-            self.values = _defaults(spec)
+            self.values = _defaults(spec, self.ctx)
+            return Step()
+        for name in self.values:                                  # what was typed stays when the view changes
+            if name in values:
+                self.values[name] = values[name].strip()
+        if aid == "F10" and "more" in spec and not self.extra:    # captured: no check, straight to the view
+            self.extra, self.page = True, 0
             return Step()
         if aid in ("F10", "F13", "F24", "F4"):
             return Step("That key is not built here.")
-        for name in self.values:
-            if name in values:
-                self.values[name] = values[name].strip()
         if aid == "ROLLUP":
             if (missing := self._missing()):                      # captured: the host checks these first
                 return self._refuse(missing)
-            if self.page + 1 < len(spec["pages"]):
+            if self.page + 1 < len(self._view()[0]):
                 self.page += 1
                 return Step()
             return Step("Already at bottom of area.")             # captured
@@ -230,7 +261,7 @@ class Prompt:
         """The command line these fields make. Only what is not the default goes in, so the job log reads like
         something a person would type. A required parameter always goes in."""
         spec = SPECS[self.command]
-        defaults = _defaults(spec)
+        defaults = _defaults(spec, self.ctx)
         required = set(spec["required"])
         parts = []
         for name in defaults:

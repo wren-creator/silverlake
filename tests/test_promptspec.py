@@ -111,3 +111,44 @@ def test_every_required_name_in_the_table_is_a_field_of_the_prompt():
     for name, spec in SPECS.items():
         fields = {r[2] for rows in [spec["rows"]] + [p[0] for p in spec.get("pages", [])] for r in rows}
         assert set(spec["required"]) <= fields, name
+
+
+def _f10_pair():
+    keys = [_run(21, 1, "F3=Exit   F4=Prompt   F10=Additional parameters"), _run(22, 0, " F24=More keys")]
+    plain = _screen([_run(0, 19, "      Delete Thing (DLTTHG)"), _run(2, 1, "Type choices, press Enter."),
+                     _run(4, 1, "Thing  . . . . . . . . . . . . ."), _run(4, 34, "THING"),
+                     _run(20, 66, "       Bottom"), *keys], [_field(4, 49, 10)])
+    more = _screen([_run(0, 19, "      Delete Thing (DLTTHG)"), _run(2, 1, "Type choices, press Enter."),
+                    _run(4, 1, "Thing  . . . . . . . . . . . . ."), _run(4, 34, "THING"),
+                    _run(14, 18, "          Additional Parameters"),
+                    _run(16, 1, "Colour . . . . . . . . . . . . ."), _run(16, 34, "COLOUR"), _run(16, 49, "*RED", "0x24"),
+                    _run(20, 66, "       Bottom"), _run(21, 1, "F3=Exit   F4=Prompt"), _run(22, 0, " F24=More keys")],
+                   [_field(4, 49, 10), _field(16, 49, 10)])
+    return plain, more
+
+
+def test_the_f10_view_is_read_whole_and_a_roll_up_that_complained_does_not_page():
+    plain, more = _f10_pair()
+    refused = {**more, "runs": [*more["runs"], _run(23, 1, "Parameter THING required.")]}
+    found = promptspec.extract_f10([{"snapshots": [plain, more, refused, plain]}])
+    assert list(found) == ["DLTTHG"]
+    assert [b for _, b in found["DLTTHG"]["pages"]] == ["Bottom"] and len(found["DLTTHG"]["pages"]) == 1
+    assert "F10=Additional" not in " ".join(found["DLTTHG"]["keys"])
+    assert any(r[2] == "COLOUR" for r in found["DLTTHG"]["pages"][0][0])
+
+
+def test_a_field_with_no_label_and_no_text_is_still_a_field_of_the_keyword_above():
+    plain, _ = _f10_pair()
+    snap = {**plain, "fields": [*plain["fields"], _field(5, 49, 10)]}                  # an empty second value
+    _, spec = promptspec.extract(snap)
+    assert (5, "", "THING@", 49, 10, "") in spec["rows"]
+
+
+def test_values_of_the_profile_the_host_was_captured_with_never_reach_the_table():
+    assert promptspec.scrub("WREN01") == "{USER}" and promptspec.scrub("'Hoff,Britley'") == "{TEXT}"
+    assert promptspec.scrub("'-=* https://pub400.com *=-") == "*SAME" and promptspec.scrub("*YES") == "*YES"
+
+
+def test_the_table_has_an_f10_view_for_every_prompt_that_offers_the_key():
+    offered = [c for c, s in SPECS.items() if any("F10=Additional" in k for k in s["keys"])]
+    assert len(offered) == 29 and all("more" in SPECS[c] for c in offered)

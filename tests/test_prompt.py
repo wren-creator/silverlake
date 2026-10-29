@@ -259,3 +259,59 @@ def test_a_refusal_on_another_page_brings_the_page_with_the_missing_name_back(st
     c.handle("ROLLUP", {})                                         # page 3
     s = c.handle("ENTER", {"FILE": ""})                            # the name is gone: back to the page that holds it
     assert "Parameter FILE required." in texts(s) and "FILE" in inputs(s) and s.cursor == "FILE"
+
+
+# -- F10=Additional parameters (captured: auth-f10-*) ---------------------------------------------------------
+
+def test_f10_shows_the_additional_parameters_below_the_first_ones_and_drops_the_f10_key(store):
+    c = signed(store)
+    plain = f4(c, "CHGJOB")
+    assert any("F10=Additional parameters" in t for t in texts(plain)) and "Additional Parameters" not in " ".join(texts(plain))
+    s = c.handle("F10", {})
+    s.validate()
+    assert "Additional Parameters" in " ".join(t.strip() for t in texts(s))
+    assert set(inputs(plain)) <= set(inputs(s)) and "JOBQ" in inputs(s)               # the first rows repeat, then more
+    assert not any("F10=Additional" in t for t in texts(s)) and "More..." in " ".join(texts(s))
+
+
+def test_f10_keeps_what_was_typed_and_rolls_through_every_captured_page(store):
+    c = signed(store)
+    f4(c, "CRTUSRPRF")
+    c.handle("F10", {"USRPRF": "NEWGUY"})
+    pages = 1
+    while True:
+        s = c.handle("ROLLUP", {})
+        s.validate()
+        if "Already at bottom of area." in texts(s) or "Parameter USRPRF required." in texts(s):
+            break
+        pages += 1
+    assert pages == 5                                                       # five pages captured, then the bottom
+    for _ in range(pages - 1):
+        s = c.handle("ROLLDOWN", {})
+    assert inputs(s)["USRPRF"] == "NEWGUY"                                  # still there on the first page
+
+
+def test_f10_a_second_time_and_a_prompt_without_it_say_the_key_is_not_built(store):
+    c = signed(store)
+    f4(c, "CHGJOB")
+    c.handle("F10", {})
+    assert "That key is not built here." in texts(c.handle("F10", {}))
+    f4(c2 := signed(store), "CRTLIB")                                       # no F10 page for this prompt
+    assert "That key is not built here." in texts(c2.handle("F10", {}))
+
+
+def test_f12_leaves_the_prompt_from_the_f10_view_as_the_host_did(store):
+    c = signed(store)
+    f4(c, "CHGJOB")
+    c.handle("F10", {})
+    assert "Silverlake Main Menu" in texts(c.handle("F12", {}))
+
+
+def test_a_change_command_shows_the_signed_on_profiles_current_values_not_the_captured_ones(store):
+    c = signed(store)
+    f4(c, "CHGPRF")
+    s = c.handle("F10", {})
+    values = inputs(s)
+    assert values["CURLIB"] == store.get("STUDENT").current_library
+    from silverlake.screens.promptspecs import SPECS
+    assert not any(w in repr(SPECS) for w in ("WREN01", "Hoff,Britley", "pub400.com", "PRT01", "PUB400SYS"))
