@@ -741,3 +741,10 @@ def test_the_f13_scenario_only_presses_keys_that_open_or_leave_things_and_types_
             assert a["fill"]["0"] in scenario.F13_COMMANDS and a["fill"]["0"].isalnum()
         else:
             assert "fill" not in a and (a["key"] != "F12" or a.get("always"))
+
+
+def test_the_single_f13_scenario_is_one_prompt_and_never_presses_enter():
+    actions = scenario.SCENARIOS["auth-f13-one"]
+    assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+    assert [a["key"] for a in actions[1:-1]] == ["F4", "F13", "ROLLUP", "F12", "F12", "F12"]
+    assert actions[1]["fill"] == {"0": "CRTPF"} and all("fill" not in a for a in actions[2:-1])

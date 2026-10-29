@@ -419,6 +419,14 @@ AUTHENTICATED["auth-f13"] = [
                    {"key": "F12", "always": True})],
     {**_SIGNOFF, "always": True},
 ]
+# The first auth-f13 run got no answer from the host to F13 on CRTPF within 15 seconds and stopped. This is the same
+# key on one prompt only, meant for a longer --timeout: F4, F13, Roll Up on whatever it opened, F12 out. Read only.
+AUTHENTICATED["auth-f13-one"] = [
+    _SIGNON,
+    {"fill": {"0": "CRTPF"}, "key": "F4"}, {"key": "F13"}, {"key": "ROLLUP"},
+    {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

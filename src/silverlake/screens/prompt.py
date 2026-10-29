@@ -5,8 +5,7 @@ What the captures showed, and this follows: the title, the rows, the labels, the
 "Bottom" or "More..." marker and the key lines; required parameters drawn brighter, with "Parameter X required."
 on Enter and on Roll Up while one is empty; F10=Additional parameters (no check first, the whole prompt again
 with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); Roll Up paging a prompt that is more than one page, and "Already at
-bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). Not captured, so ours: what Roll Down
-says at the top, how a refused command reads on the prompt, and F13 and F24, which say they are not built, as does F10
+bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). Not captured, so ours: how a refused command reads on the prompt, and F13 and F24, which say they are not built, as does F10
 on a prompt with no additional parameters or when pressed a second time. CHGSPLFA's F10 view stops at its first page:
 the host will not page it without a spooled file that exists.
 
@@ -242,7 +241,7 @@ class Prompt:
             if self.page:
                 self.page -= 1
                 return Step()
-            return Step("Already at top of area.")                # ours
+            return Step("Already at top of area.")                # captured
         if (missing := self._missing()):
             return self._refuse(missing)                          # captured
         for (cmd, kw), why in NOT_BUILT.items():

@@ -199,7 +199,7 @@ The layouts are in `screens/promptspecs.py`, generated from the captures by `pyt
 
 Those scenarios are `auth-f10-a` to `auth-f10-c`: type the bare command, F4, F10, Roll Up once, then F12 out. Nothing is typed into a prompt and Enter is never pressed, and a test checks the list against the prompts that show the F10 key. The follow ups type only a made-up name (`SLPLACE`) or the signed-on profile before a Roll Up. Regenerate the table with `python -m silverlake.oracle.promptspec captures/pub400/auth-pdm.json captures/pub400/auth-prompts-*.json captures/pub400/auth-f10-*.json`.
 
-`auth-f13` is written for the prompt keys still answered with "not built" (F13, F24) and for Roll Down at the top of a prompt: CRTPF, CHGJOB, CHGPWD, DSPMSG, WRKSPLF and CRTUSRPRF, each F4, Roll Down, F24, F13, Roll Up, then F12 out. Never Enter, nothing typed but the bare name. Not run yet.
+`auth-f13` covers the prompt keys still answered with "not built" (F13, F24) and Roll Down at the top of a prompt. It ran once and stopped at F13 on the first prompt, CRTPF: the host sent nothing the client turned into a screen in 15 seconds, and `auth-f13-one` (F13 on CRTPF alone, 90 seconds) got nothing in 90 either, the same silence F10 got on the edit screen. Both runs left the job without a sign-off, since the harness sends nothing more after a stop. What the first run did show: **Roll Down at the top says `Already at top of area.`**, the wording we had guessed, and **F24 swaps the key lines for `F9=All parameters   F11=Choices   F14=Command string   F24=More keys`**. F13 stays "not built" here until a client can read whatever the host sends.
 
 ## Still open
 
