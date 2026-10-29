@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-splopts", "auth-pdm"):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-splopts", "auth-pdm") or name.startswith("auth-prompts-"):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -615,3 +615,68 @@ def test_save_and_restore_screen_are_decoded_not_refused():
     assert t.snapshot()["runs"] == []
     assert t.apply(bytes([ds.ESC, 0x12])) == []                    # Restore Screen
     assert t.snapshot()["runs"][0]["text"] == "kept"
+
+
+def test_the_prompt_scenarios_press_f4_and_never_enter_on_a_prompt():
+    names = [n for n in scenario.AUTHENTICATED if n.startswith("auth-prompts-") and n != "auth-prompts-pages"]
+    assert names
+    for name in names:
+        actions = scenario.SCENARIOS[name]
+        assert actions[0]["key"] == "ENTER" and "${SILVERLAKE_ORACLE_PASS}" in actions[0]["fill"]["1"]
+        assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+        for a in actions[1:-1]:
+            assert a["key"] in ("F4", "ROLLUP", "F12"), (name, a)       # never Enter, so nothing is run
+            if a["key"] == "F4":
+                assert a["fill"]["0"].isalnum() and a["fill"]["0"].isupper()      # a bare name, no parameters
+            else:
+                assert "fill" not in a and (a["key"] != "F12" or a.get("always"))
+
+
+def _snap(texts, fields=0):
+    return {"runs": [{"text": t} for t in texts], "fields": [{"hidden": False}] * fields, "message_ids": [], "cursor": None}
+
+
+def test_a_notice_is_a_screen_with_no_fields_that_says_press_enter():
+    assert scenario._is_notice(_snap(["Message queue WREN01 is allocated to another job.", "Press Enter to continue."]))
+    assert not scenario._is_notice(_snap(["Press Enter to continue."], fields=1))       # a screen that takes input
+    assert not scenario._is_notice(_snap(["Display Program Messages"]))
+
+
+def test_a_notice_after_sign_on_gets_one_enter_and_nothing_else(monkeypatch):
+    from silverlake.oracle.client import Capture
+    notice = _snap(["Message queue WREN01 is allocated to another job.", "Press Enter to continue."])
+    menu = _snap(["MAIN"], fields=1)
+    signon = _snap(["Your user name:"], fields=2)
+    screens = iter([signon, notice, menu, menu])        # opening, after sign-on (a notice), after Enter, after sign-off
+    sent = []
+
+    class Fake:
+        def __init__(self, *a, **k): pass
+        async def connect(self): pass
+        async def close(self): pass
+        async def wait_screen(self, timeout=10.0):
+            return Capture(next(screens), [], "")
+        def send_aid(self, key, fill=None): sent.append((key, dict(fill or {})))
+
+    monkeypatch.setenv(scenario.USER_ENV, "U")
+    monkeypatch.setenv(scenario.PASS_ENV, "P")
+    monkeypatch.setattr(scenario, "Client", Fake)
+    monkeypatch.setitem(scenario.SCENARIOS, "auth-fake", [scenario._SIGNON, scenario._SIGNOFF])
+    monkeypatch.setitem(scenario.AUTHENTICATED, "auth-fake", scenario.SCENARIOS["auth-fake"])
+    cap = _asyncio.run(scenario.run_scenario("127.0.0.1", 1, "auth-fake"))
+    assert [k for k, _ in sent] == ["ENTER", "ENTER", "ENTER"]          # sign-on, the notice, sign-off
+    assert sent[1] == ("ENTER", {})                                      # the notice gets a bare Enter
+    assert len(cap["snapshots"]) == 4                                  # opening, notice, menu, after sign-off
+
+
+def test_the_prompt_pages_scenario_only_types_a_made_up_name_before_rolling_up():
+    actions = scenario.SCENARIOS["auth-prompts-pages"]
+    assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+    for a in actions[1:-1]:
+        assert a["key"] in ("F4", "ROLLUP", "F12"), a                     # never Enter, so nothing is run
+        if a["key"] == "ROLLUP":
+            assert a.get("fill", {"0": "SLPLACE"}) == {"0": "SLPLACE"}    # the only text typed into a prompt
+        elif a["key"] == "F4":
+            assert a["fill"]["0"] in scenario.PROMPT_PAGES and a["fill"]["0"].isalpha()
+        else:
+            assert "fill" not in a and a.get("always")

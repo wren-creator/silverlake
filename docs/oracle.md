@@ -184,6 +184,19 @@ Taken from PUB400 on 2026-10-27, read only (`auth-pdm`). It opens the PDM menu, 
 
 `CALL PGM(QP2TERM)` on PUB400 never produced a screen the client could read. The first run died on `ESC 02` (Save Screen), which the decoder now handles. The next two runs, at 15 and then 45 seconds per screen (`--timeout`), got no record at all after the call. So the guess that the start was only slow is wrong, and no further runs were made: it is a shared host. Likely causes, none confirmed: PUB400 steers PASE users to SSH on port 2222 and blocks the 5250 route, or the terminal waits on something this client does not send. The PASE items in docs/pase.md stay unverified.
 
+## What the F4 prompt captures taught us
+
+Nine read-only runs on 2026-10-29 (`auth-prompts-a` to `auth-prompts-h`, then `auth-prompts-pages`) typed 67 command names bare, pressed F4, rolled the prompt up once and backed out with F12. Enter is never pressed on a prompt, so nothing runs, and a test holds that. Each run signs off at the end.
+
+- **66 of the 67 opened a prompt.** `CRTLIB` did not: the host answered on the menu with `Not authorized to command CRTLIB in library *LIBL.` and no prompt, because the test profile may not use it. A command you may not use is refused at F4, not on Enter.
+- **`CHGPWD` has nothing to prompt for.** It draws its title and keys and says `No parameters to show; press Enter to run, F3 to exit.`
+- **Roll Up checks the required name first.** On `HLDSPLF` and `OVRDBF` with the first field empty, Roll Up answered `Parameter FILE required.` and stayed put. With a made-up name typed (never run, never Entered) it pages: `HLDSPLF` and `WRKSPLF` have two pages, `OVRDBF` three.
+- **24 prompts offer F10=Additional parameters.** Those pages are not captured yet.
+- **A notice can sit in front of the first screen.** Signed on at the same time as another session of the same profile, the host shows `Message queue X is allocated to another job. Press Enter to continue.` with no input field. The harness now presses Enter once, and only on a screen like that. Before it did, a run would stop there and leave its job signed on.
+- **A screen with no field stops a run and keeps what it gathered.** The harness used to throw its captures away on that, and now it saves them and says which action stopped it, the way it already did when the host went quiet.
+
+The layouts are in `screens/promptspecs.py`, generated from the captures by `python -m silverlake.oracle.promptspec captures/pub400/auth-prompts-*.json`. Change the generator, not the table.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

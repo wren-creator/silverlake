@@ -309,6 +309,39 @@ AUTHENTICATED["auth-pdm"] = [
     *_cmd("STRSEU SRCFILE(NOSUCH/NOFILE) SRCMBR(NOMBR)"),
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the F4 prompt of every command Silverlake has, in batches so no single job stays on the host
+# long. Each command is typed bare and F4 is pressed, so it is never run. The prompt is rolled once (the
+# second page and the Bottom marker) and left with F12, twice, never Enter. A command the profile may not
+# use answers with the refusal instead, which is also worth having.
+PROMPT_BATCHES = {
+    "a": ("CRTLIB", "DLTLIB", "ADDLIBLE", "RMVLIBLE", "CRTUSRPRF", "CHGUSRPRF", "DLTUSRPRF", "CHGPWD"),
+    "b": ("GRTOBJAUT", "RVKOBJAUT", "CHGOBJOWN", "EDTOBJAUT", "DSPOBJAUT", "CRTAUTL", "ADDAUTLE", "CHGAUTLE"),
+    "c": ("RMVAUTLE", "DLTAUTL", "DSPAUTL", "WRKAUTL", "WRKOBJ", "WRKOBJOWN", "DSPOBJD", "CHGOBJD"),
+    "d": ("DSPLIBL", "WRKLIB", "RNMOBJ", "DLTF", "DLTPGM", "DSPPGM", "DSPPFM", "CPYF"),
+    "e": ("CHGJOB", "DSPJOB", "WRKJOB", "WRKACTJOB", "ENDJOB", "HLDJOB", "RLSJOB", "DSPJOBLOG"),
+    "f": ("WRKSPLF", "DSPSPLF", "HLDSPLF", "RLSSPLF", "DLTSPLF", "CHGSPLFA", "WRKOUTQ", "CRTOUTQ", "DLTOUTQ"),
+    "g": ("DSPMSG", "SNDMSG", "CRTMSGQ", "CHGMSGQ", "CLRMSGQ", "DLTMSGQ", "WRKUSRPRF", "DSPUSRPRF"),
+    "h": ("CALL", "GO", "OVRDBF", "DLTOVR", "DLTCMD", "DLTMNU", "CHGPRF", "WRKMBRPDM", "WRKOBJPDM", "STRSEU"),
+}
+for _batch, _cmds in PROMPT_BATCHES.items():
+    AUTHENTICATED["auth-prompts-" + _batch] = [
+        _SIGNON,
+        *[step for cmd in _cmds
+          for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "ROLLUP"}, {"key": "F12", "always": True},
+                       {"key": "F12", "always": True})],
+        {**_SIGNOFF, "always": True},
+    ]
+# Read only: the second page of the two prompts whose Roll Up complained about a missing parameter (the
+# host checks the required name before it rolls). The first field gets a made-up name, the prompt is rolled
+# once and left with F12. Enter is never pressed on a prompt, so nothing is run and the name is never looked up.
+PROMPT_PAGES = ("HLDSPLF", "OVRDBF")
+AUTHENTICATED["auth-prompts-pages"] = [
+    _SIGNON,
+    *[step for cmd in PROMPT_PAGES
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"fill": {"0": "SLPLACE"}, "key": "ROLLUP"},
+                   {"key": "ROLLUP"}, {"key": "ROLLUP"}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host
@@ -349,6 +382,16 @@ def _not_signed_on(snapshot: dict) -> bool:
     return bool(snapshot["message_ids"]) or any(f["hidden"] for f in snapshot["fields"])
 
 
+def _is_notice(snapshot: dict) -> bool:
+    """A notice screen after sign-on, like "Message queue X is allocated to another job" when the same profile
+    is signed on somewhere else. It takes no input and says "Press Enter to continue"."""
+    seen = " ".join(r["text"] for r in snapshot["runs"]).lower()
+    return not snapshot["fields"] and "press enter to continue" in seen
+
+
+MAX_NOTICES = 2
+
+
 def expand(value: str) -> str:
     def sub(m: re.Match) -> str:
         name = m.group(1)
@@ -382,7 +425,15 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
             if skipping and not always:
                 skipped.append(i)
                 continue
-            client.send_aid(key, fill)
+            try:
+                client.send_aid(key, fill)
+            except CaptureError as exc:
+                if not str(exc).startswith("no input field"):
+                    raise
+                # The screen in front of us is not the one the scenario expects. Keep what was gathered,
+                # say which action it was, and send nothing more.
+                stopped = {"action": i, "key": key, "reason": str(exc)}
+                break
             try:
                 captures.append(await client.wait_screen(timeout))
             except CaptureError as exc:
@@ -405,6 +456,15 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
                 ids = ", ".join(captures[-1].snapshot["message_ids"]) or "none"
                 raise CaptureError(f"did not get past sign-on, stopping (message IDs: {ids}). "
                                    "Nothing further was sent.")
+            if name in AUTHENTICATED and i == 0:
+                # Dismiss a notice (and only a notice) the host puts in front of the first screen. Enter on a
+                # screen with no fields and "Press Enter to continue" is what a person would do, and it
+                # cannot run anything.
+                for _ in range(MAX_NOTICES):
+                    if not _is_notice(captures[-1].snapshot):
+                        break
+                    client.send_aid("ENTER")
+                    captures.append(await client.wait_screen(timeout))
     finally:
         await client.close()
     return {
