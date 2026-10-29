@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from ..proto import datastream as ds
 from ..proto import ebcdic
 from ..proto import telnet as tn
-from .terminal import DecodeError, Terminal
+from .terminal import CMD_READ_INPUT_FIELDS, DecodeError, Terminal
 
 TERMINAL_TYPE = "IBM-3179-2"
 AID_BYTES = {name: code for code, name in ds.AIDS.items()}
@@ -169,19 +169,30 @@ class Client:
 
     # -- input -----------------------------------------------------------------
 
-    def send_aid(self, key: str, fill: dict[int, str] | None = None) -> None:
+    def send_aid(self, key: str, fill: dict[int, str] | None = None, raw: bool = False) -> None:
         """Press a key. `fill` maps an input field's index (screen order) to
-        the text typed into it."""
+        the text typed into it. `raw` sends that text bare, with no SBA in front and no padding."""
         code = AID_BYTES.get(key.upper())
         if code is None:
             raise CaptureError(f"unknown key {key!r}")
         fields = self.term.input_fields()
         cursor = self.term.snapshot()["cursor"] or [0, 0]
         body = bytearray([cursor[0] + 1, cursor[1] + 1, code])
-        for idx, text in sorted((fill or {}).items()):
+        for idx in (fill or {}):
             if idx >= len(fields):
                 raise CaptureError(f"no input field #{idx}, screen has {len(fields)}")
-            f = fields[idx]
-            text = text[: f["length"]]
-            body += bytes([ds.ORDER_SBA, f["row"] + 1, f["col"] + 1]) + ebcdic.encode(text)
+        if raw:
+            for idx, text in sorted((fill or {}).items()):
+                body += ebcdic.encode(text[: fields[idx]["length"]])
+        elif self.term.read_command == CMD_READ_INPUT_FIELDS:
+            # Read Input Fields (the PASE terminal asks this way) wants the data of every input field in screen
+            # order and no orders. Fields are padded with blanks to their length (a guess; a shell would ignore
+            # trailing blanks). Not what QP2TERM wants, it asks with Read MDT Fields and still takes an SBA as text.
+            for idx, f in enumerate(fields):
+                body += ebcdic.encode((fill or {}).get(idx, "")[: f["length"]].ljust(f["length"]))
+        else:
+            for idx, text in sorted((fill or {}).items()):
+                f = fields[idx]
+                text = text[: f["length"]]
+                body += bytes([ds.ORDER_SBA, f["row"] + 1, f["col"] + 1]) + ebcdic.encode(text)
         self._write(tn.record(ds.gds_record(bytes(body))))

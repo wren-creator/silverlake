@@ -447,6 +447,21 @@ AUTHENTICATED["auth-f13-helpall"] = [
     {"key": "F3", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# The PASE terminal now opens (auth-qp2term, once the client answers Save Screen) but takes a command typed into
+# its ===> line as text that starts with the SBA the client put in front of it. Same read only commands as
+# auth-qp2term, with the field's text sent bare ("raw"): no SBA, no padding. A guess at what the terminal wants.
+AUTHENTICATED["auth-qp2term-raw"] = [
+    _SIGNON,
+    {"fill": {"0": "CALL PGM(QP2TERM)"}, "key": "ENTER"},
+    # The terminal draws a command's output on a later screen than the one the Enter got back, and two of the six
+    # commands (ls -ld and echo) left no output at all when sent one after another, as if typed ahead of the
+    # shell. So each is followed by a bare Enter to let its output arrive, and three more at the end.
+    *[step for c in ("pwd", "id", "ls -ld / /home /tmp /QOpenSys", "ls /nosuchdir", "cat /nosuchfile", "echo $PATH")
+      for step in ({"fill": {"0": c}, "key": "ENTER", "raw": True}, {"key": "ENTER", "raw": True})],
+    *[{"key": "ENTER", "raw": True}] * 3,
+    {"key": "F3", "always": True}, {"key": "F3", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host
@@ -516,7 +531,7 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
     # a half finished session on someone else's system.
     os.environ[TESTLIB_ENV] = "SLT" + "".join(random.choices("0123456789", k=5))
     actions = [({int(k): expand(v) for k, v in a.get("fill", {}).items()}, a["key"],
-                [expand(t).lower() for t in a.get("proceed_if", [])], bool(a.get("always")))
+                [expand(t).lower() for t in a.get("proceed_if", [])], bool(a.get("always")), bool(a.get("raw")))
                for a in SCENARIOS[name]]
     client = Client(host, port, devname, tls=tls)
     await client.connect()
@@ -526,12 +541,12 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
     try:
         captures.append(await client.wait_screen(timeout))
         skipping = False
-        for i, (fill, key, proceed_if, always) in enumerate(actions):
+        for i, (fill, key, proceed_if, always, raw) in enumerate(actions):
             if skipping and not always:
                 skipped.append(i)
                 continue
             try:
-                client.send_aid(key, fill)
+                client.send_aid(key, fill, raw=True) if raw else client.send_aid(key, fill)
             except CaptureError as exc:
                 if not str(exc).startswith("no input field"):
                     raise

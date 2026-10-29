@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13")):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13")):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -826,3 +826,44 @@ def test_the_f13_help_all_scenario_never_prints_and_never_presses_enter():
     keys = [a["key"] for a in actions[1:-1]]
     assert set(keys) <= {"F4", "F13", "ROLLUP", "F10", "F3", "F12"} and "F14" not in keys and "ENTER" not in keys
     assert [a["fill"]["0"] for a in actions if a["key"] == "F4"] == ["CRTPF"]
+
+
+def _client_showing(screen, read):
+    from silverlake.screens import render as _render
+    c, sent = _bare_client()
+    c.term.apply(_render.render(screen)[:-4] + bytes([ds.ESC, read, 0x00, 0x00]))        # swap the Read MDT for another
+    return c, sent
+
+
+def test_a_read_mdt_screen_gets_each_typed_field_after_an_sba_as_before():
+    from silverlake.screens.model import Input, Screen, Text
+    from silverlake.proto import ebcdic
+    c, sent = _client_showing(Screen([Text(0, 1, "T"), Input(5, 6, 10, "a"), Input(8, 6, 10, "b")]), ds.CMD_READ_MDT_FIELDS)
+    c.send_aid("ENTER", {1: "hi"})
+    assert sent[0].endswith(bytes([ds.ORDER_SBA, 9, 7]) + ebcdic.encode("hi") + bytes([0xFF, 0xEF]))
+
+
+def test_a_read_input_fields_screen_gets_every_fields_data_in_order_and_no_orders():
+    from silverlake.screens.model import Input, Screen, Text
+    from silverlake.proto import ebcdic
+    from silverlake.oracle.terminal import CMD_READ_INPUT_FIELDS
+    c, sent = _client_showing(Screen([Text(0, 1, "T"), Input(5, 6, 10, "a"), Input(8, 6, 4, "b")]), CMD_READ_INPUT_FIELDS)
+    c.send_aid("ENTER", {0: "pwd"})
+    body = sent[0][10:-2]                                    # past the GDS header, before IAC EOR
+    assert body[2] == 0xF1 and body[3:] == ebcdic.encode("pwd".ljust(10) + " " * 4)     # AID, then data, no SBA
+    assert ds.ORDER_SBA not in body[3:]
+
+
+def test_a_raw_send_puts_the_text_after_the_aid_with_no_sba_and_no_padding():
+    from silverlake.screens.model import Input, Screen, Text
+    from silverlake.proto import ebcdic
+    c, sent = _client_showing(Screen([Text(0, 1, "T"), Input(5, 6, 10, "a")]), ds.CMD_READ_MDT_FIELDS)
+    c.send_aid("ENTER", {0: "pwd"}, raw=True)
+    assert sent[0][10:-2][3:] == ebcdic.encode("pwd")
+
+
+def test_the_raw_pase_scenario_runs_the_same_read_only_commands_as_the_plain_one():
+    plain = [a["fill"]["0"] for a in scenario.SCENARIOS["auth-qp2term"] if "fill" in a and "1" not in a["fill"]]
+    raw = [a["fill"]["0"] for a in scenario.SCENARIOS["auth-qp2term-raw"] if "fill" in a and "1" not in a["fill"]]
+    assert plain == raw and all(a["key"] in ("ENTER", "F3") for a in scenario.SCENARIOS["auth-qp2term-raw"])
+    assert [a["fill"]["0"] for a in scenario.SCENARIOS["auth-qp2term-raw"] if a.get("raw") and "fill" in a] == plain[1:-1]
