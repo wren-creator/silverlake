@@ -27,6 +27,8 @@ class Input:
     hidden: bool = False    # password style, nothing echoed
     monocase: bool = False  # the terminal upper-cases what is typed
     value: str = ""
+    required: bool = False  # drawn brighter, the way a prompt marks a parameter it will not run without
+    error: bool = False     # drawn in reverse image, the way a prompt marks a parameter it just refused
 
 
 @dataclass

@@ -18,7 +18,12 @@ def _text(f: Text) -> bytes:
 
 
 def _input(f: Input) -> bytes:
-    attr = ds.ATTR_NONDISPLAY if f.hidden else ds.ATTR_GREEN_UNDERLINE
+    if f.hidden:
+        attr = ds.ATTR_NONDISPLAY
+    elif f.error:
+        attr = ds.ATTR_REVERSE_UNDERLINE
+    else:
+        attr = ds.ATTR_WHITE_UNDERLINE if f.required else ds.ATTR_GREEN_UNDERLINE
     ffw1, ffw2 = ds.FFW_ALPHA
     if f.monocase:
         ffw2 |= ds.FFW2_MONOCASE

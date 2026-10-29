@@ -2,7 +2,7 @@
 
 The user profile commands and the library and object authority commands exist
 so far. Keywords must be written in full
-(no F4 prompting, no abbreviations yet). Parameters we accept but do not model
+(no abbreviations yet; F4 prompts are in screens/prompt.py). Parameters we accept but do not model
 are named in IGNORED so a copied command from a real system still runs."""
 
 import fnmatch

@@ -296,7 +296,7 @@ Still inferred and unchecked: that `ADDLIBLE` needs `*USE` on the library, that 
 
 Said plainly, so nobody assumes otherwise:
 
-- F4 prompting and keyword abbreviation on the command line, `DSPUSRPRF` types other than `*BASIC`, and `WRKUSRPRF` options other than 5.
+- Keyword abbreviation on the command line, `DSPUSRPRF` types other than `*BASIC`, and `WRKUSRPRF` options other than 5.
 - Authority to the job description, message queue and output queue named on a profile.
 - Programs other than `QCMD`, so `INLPGM` and `CALL` cannot run anything else, and menu options that are not CL commands. The `QMAXSIGN` warnings before the last attempt (see Lockout and expiry above for what is built).
 - Adopted authority, and the exceptions to `*ALLOBJ`.

@@ -85,9 +85,14 @@ def test_a_file_with_no_source_and_a_stream_file_are_laid_out_and_refused(store)
     assert "not built" in " ".join(texts(enter(c, PGM="X", SRCSTMF="/home/x.rpgle")))
 
 
-def test_roll_up_says_already_at_bottom(store):
+def test_roll_up_checks_the_required_name_first_and_then_says_already_at_bottom(store):
     c = signed(store)
     f4(c, "CRTSRCPF")
+    assert "Parameter FILE required." in texts(c.handle("ROLLUP", {}))          # captured on CRTPF
+    assert "Already at bottom of area." in texts(c.handle("ROLLUP", {"FILE": "MYSRC"}))
+    f4(signed(store), "CRTBNDRPG")                                                # nothing required: captured
+    c = signed(store)
+    f4(c, "CRTBNDRPG")
     assert "Already at bottom of area." in texts(c.handle("ROLLUP", {}))
 
 
@@ -124,7 +129,7 @@ def test_f12_and_f3_leave_and_f5_resets(store):
 
 def test_a_command_without_a_prompt_says_so_and_blank_f4_does_nothing(store):
     c = signed(store)
-    assert "not built" in " ".join(texts(f4(c, "WRKOBJ")))
+    assert "not built" in " ".join(texts(f4(c, "SIGNOFF")))
     assert "Silverlake Main Menu" in texts(f4(c, ""))
 
 
@@ -145,3 +150,112 @@ def test_f4_on_the_pdm_command_line_prompts_the_typed_command(store):
     s = c.handle("F4", {"command": "CRTPF"})
     assert "Create Physical File (CRTPF)" in texts(s)
     assert "Work with Members Using PDM" in texts(c.handle("F12", {}))      # back to the member list
+
+
+# -- the other commands, from the table ------------------------------------------------------------------
+
+from silverlake.proto import datastream as ds                    # noqa: E402
+from silverlake.screens import prompt as _prompt                 # noqa: E402
+
+
+@pytest.mark.parametrize("cmd", sorted(_prompt.SPECS))
+def test_every_captured_prompt_draws_a_valid_screen_on_every_page(store, cmd):
+    c = signed(store, "QSECOFR")
+    s = f4(c, cmd)
+    spec = _prompt.SPECS[cmd]
+    assert spec["title"][0] in texts(s)
+    if spec["note"]:
+        assert spec["note"] in texts(s) and not inputs(s)
+        return
+    first = {"FILE": "X", "OBJ": "X", "AUTL": "X", "LIB": "X", "PGM": "X"}
+    for page in range(len(spec["pages"])):
+        s.validate()
+        assert spec["pages"][page][1] in texts(s)                                  # Bottom or More...
+        assert {n for rows in [spec["pages"][page][0]] for _, _, n, _, _, _ in rows if n} == set(inputs(s))
+        if page + 1 < len(spec["pages"]):
+            filled = {n: first.get(n, "X") for n in spec["required"]}
+            s = c.handle("ROLLUP", filled)
+
+
+def test_a_required_parameter_is_drawn_brighter_and_roll_up_and_enter_refuse_while_it_is_empty(store):
+    c = signed(store, "QSECOFR")
+    s = f4(c, "DLTLIB")
+    assert at(s, 4, 49).required and not at(s, 5, 49).required                       # LIB is required, ASPDEV is not
+    assert "Parameter LIB required." in texts(c.handle("ROLLUP", {}))
+    assert "Parameter LIB required." in texts(enter(c))
+    from silverlake.screens.render import render
+    assert bytes([ds.ATTR_WHITE_UNDERLINE]) in render(s)
+
+
+def test_roll_up_pages_a_long_prompt_and_roll_down_comes_back(store):
+    c = signed(store, "QSECOFR")
+    f4(c, "OVRDBF")
+    assert "Parameter FILE required." in texts(c.handle("ROLLUP", {}))         # captured: the name first
+    two = c.handle("ROLLUP", {"FILE": "CUSTPF"})
+    assert "More..." in texts(two) and "FILE" not in inputs(two)
+    three = c.handle("ROLLUP", {})
+    assert "Bottom" in texts(three)
+    assert "Already at bottom of area." in texts(c.handle("ROLLUP", {}))
+    back = c.handle("ROLLDOWN", {})
+    assert "More..." in texts(back)
+    assert "FILE" in inputs(c.handle("ROLLDOWN", {}))
+    assert "Already at top of area." in texts(c.handle("ROLLDOWN", {}))
+
+
+def test_what_was_typed_on_one_page_is_still_there_when_enter_is_pressed_on_another(store):
+    c = signed(store, "QSECOFR")
+    f4(c, "HLDSPLF")
+    c.handle("ROLLUP", {"FILE": "QPJOBLOG"})
+    assert _prompt.SPECS["HLDSPLF"]["pages"][1][0]                                   # a second page exists
+    s = enter(c)                                                                      # FILE is on the first page
+    assert "Parameter FILE required." not in texts(s)
+
+
+def test_a_command_with_nothing_to_prompt_for_says_so_and_enter_runs_it(store):
+    c = signed(store)
+    s = f4(c, "CHGPWD")
+    assert "No parameters to show; press Enter to run, F3 to exit." in texts(s) and not inputs(s)
+    assert "Change Password (CHGPWD)" in texts(s)
+
+
+def test_a_qualified_name_and_a_list_value_make_the_command_line_the_host_would_take(store):
+    c = signed(store, "QSECOFR")
+    w = _prompt.Prompt.for_command(c._ctx(), "DSPOBJAUT OBJ(QGPL/QSYS) OBJTYPE(*LIB)")
+    assert (w.values["OBJ"], w.values["OBJ@"], w.values["OBJTYPE"]) == ("QSYS", "QGPL", "*LIB")
+    assert w._line() == "DSPOBJAUT OBJ(QGPL/QSYS) OBJTYPE(*LIB)"
+    w = _prompt.Prompt.for_command(c._ctx(), "WRKSPLF")
+    assert w._line() == "WRKSPLF"                                                     # nothing changed, nothing added
+    w.values["SELECT"] = "STUDENT"
+    assert w._line().startswith("WRKSPLF SELECT(STUDENT ")
+
+
+def test_the_colors_follow_the_capture(store):
+    s = f4(signed(store), "DLTLIB")
+    assert at(s, 2, 1).attr == ds.ATTR_BLUE                      # "Type choices" is blue on the real host
+    assert at(s, 0, 29).attr == ds.ATTR_WHITE
+    assert next(t for t in s.fields if isinstance(t, Text) and t.text == "Bottom").attr == ds.ATTR_WHITE
+    assert at(s, 20, 73).text == "Bottom"
+
+
+def test_a_refusal_redraws_every_missing_required_field_in_reverse_and_puts_the_cursor_on_the_first(store):
+    c = signed(store, "QSECOFR")
+    s = f4(c, "ADDAUTLE")                                          # AUTL and USER (which has a "+" line) are required
+    s = c.handle("ENTER", {})
+    s.validate()
+    assert "Parameter AUTL required." in texts(s) and s.cursor == "AUTL"
+    flagged = {f.name for f in s.fields if isinstance(f, Input) and f.error}
+    assert flagged == {"AUTL", "USER", "USER+"}                    # captured: all of the group, not AUT
+    from silverlake.screens.render import render
+    assert bytes([ds.ATTR_REVERSE_UNDERLINE]) in render(s)
+    s = c.handle("ENTER", {"AUTL": "MYLIST"})                      # AUTL is filled in, so only USER is flagged now
+    assert "Parameter USER required." in texts(s) and s.cursor == "USER"
+    assert {f.name for f in s.fields if isinstance(f, Input) and f.error} == {"USER", "USER+"}
+
+
+def test_a_refusal_on_another_page_brings_the_page_with_the_missing_name_back(store):
+    c = signed(store, "QSECOFR")
+    f4(c, "OVRDBF")
+    c.handle("ROLLUP", {"FILE": "CUSTPF"})                         # now on page 2
+    c.handle("ROLLUP", {})                                         # page 3
+    s = c.handle("ENTER", {"FILE": ""})                            # the name is gone: back to the page that holds it
+    assert "Parameter FILE required." in texts(s) and "FILE" in inputs(s) and s.cursor == "FILE"
