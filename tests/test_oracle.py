@@ -748,3 +748,32 @@ def test_the_single_f13_scenario_is_one_prompt_and_never_presses_enter():
     assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
     assert [a["key"] for a in actions[1:-1]] == ["F4", "F13", "ROLLUP", "F12", "F12", "F12"]
     assert actions[1]["fill"] == {"0": "CRTPF"} and all("fill" not in a for a in actions[2:-1])
+
+
+def test_a_silent_host_leaves_the_bytes_that_did_arrive_in_the_capture(monkeypatch):
+    from silverlake.oracle.client import Capture, CaptureError
+    menu = _snap(["MAIN"], fields=1)
+    signon = _snap(["Your user name:"], fields=2)
+    screens = iter([signon, menu])
+
+    class Fake:
+        _records = [b"\x04\x12"]
+        _raw = [b"\xff\xef", b"\x04"]
+        def __init__(self, *a, **k): pass
+        async def connect(self): pass
+        async def close(self): pass
+        async def wait_screen(self, timeout=10.0):
+            try:
+                return Capture(next(screens), [], "")
+            except StopIteration:
+                raise CaptureError("no screen within 15s")
+        def send_aid(self, key, fill=None): pass
+
+    monkeypatch.setenv(scenario.USER_ENV, "U")
+    monkeypatch.setenv(scenario.PASS_ENV, "P")
+    monkeypatch.setattr(scenario, "Client", Fake)
+    monkeypatch.setitem(scenario.SCENARIOS, "auth-fake", [scenario._SIGNON, scenario._SIGNOFF])
+    monkeypatch.setitem(scenario.AUTHENTICATED, "auth-fake", scenario.SCENARIOS["auth-fake"])
+    cap = _asyncio.run(scenario.run_scenario("127.0.0.1", 1, "auth-fake"))
+    assert cap["stopped"]["reason"].startswith("no screen within")
+    assert cap["stopped"]["records_hex"] == ["0412"] and cap["stopped"]["wire_hex"] == ["ffef", "04"]

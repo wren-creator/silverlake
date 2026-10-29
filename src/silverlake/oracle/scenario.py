@@ -530,6 +530,10 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
                 stopped = {"action": i, "key": key, "reason": str(exc)}
                 if str(exc).startswith("could not decode"):
                     stopped["raw_records_hex"] = [r.hex() for r in client._records]
+                # What did arrive, if anything: records the terminal applied, and the raw bytes off the wire, so
+                # a silence can be told from a reply with no Read command or one that never ended.
+                stopped["records_hex"] = [r.hex() for r in getattr(client, "_records", [])]
+                stopped["wire_hex"] = [c.hex() for c in getattr(client, "_raw", [])]
                 break
             if proceed_if:
                 seen = " ".join(r["text"] for r in captures[-1].snapshot["runs"]).lower()

@@ -45,6 +45,7 @@ class Client:
         self._they: set[int] = set()
         self._we: set[int] = set()
         self._records: list[bytes] = []
+        self._raw: list[bytes] = []         # every chunk read while waiting for the current screen
         self._got_read = False
 
     async def connect(self, timeout: float = 10.0) -> None:
@@ -129,10 +130,12 @@ class Client:
         assert self._reader is not None
         self._got_read = False
         self._records = []
+        self._raw = []
 
         async def loop() -> None:
             while not self._got_read:
                 chunk = await self._reader.read(4096)
+                self._raw.append(chunk)
                 if not chunk:
                     raise CaptureError("host closed the connection before the screen was ready")
                 for ev in self.parser.feed(chunk):
