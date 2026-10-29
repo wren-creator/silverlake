@@ -56,7 +56,7 @@ class Cell:
 
 @dataclass
 class Event:
-    kind: str                     # "read", "query", "unsupported"
+    kind: str                     # "read", "save", "query", "unsupported"
     detail: str = ""
 
 
@@ -109,6 +109,7 @@ class Terminal:
                 i += 2  # CC1, CC2
                 events.append(Event("read", f"0x{cmd:02X}"))
             elif cmd == CMD_SAVE_SCREEN:
+                events.append(Event("save"))
                 self._saved = (self.rows, self.cols, [Cell(**vars(c)) for c in self.cells], self.cursor)
             elif cmd == CMD_RESTORE_SCREEN:
                 if self._saved is not None:

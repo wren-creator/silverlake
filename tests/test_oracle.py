@@ -610,7 +610,7 @@ def test_the_pase_scenario_only_reads():
 def test_save_and_restore_screen_are_decoded_not_refused():
     t = Terminal()
     t.apply(render(Screen([Text(1, 2, "kept")])))
-    assert t.apply(bytes([ds.ESC, 0x02])) == []                    # Save Screen, as QP2TERM opens with
+    assert [e.kind for e in t.apply(bytes([ds.ESC, 0x02]))] == ["save"]      # Save Screen, as QP2TERM opens with
     t.apply(bytes([ds.ESC, ds.CMD_CLEAR_UNIT]))
     assert t.snapshot()["runs"] == []
     assert t.apply(bytes([ds.ESC, 0x12])) == []                    # Restore Screen
@@ -777,3 +777,35 @@ def test_a_silent_host_leaves_the_bytes_that_did_arrive_in_the_capture(monkeypat
     cap = _asyncio.run(scenario.run_scenario("127.0.0.1", 1, "auth-fake"))
     assert cap["stopped"]["reason"].startswith("no screen within")
     assert cap["stopped"]["records_hex"] == ["0412"] and cap["stopped"]["wire_hex"] == ["ffef", "04"]
+
+
+def _bare_client():
+    from silverlake.oracle.client import Client
+    c = Client("127.0.0.1", 1)
+    sent = []
+    c._write = sent.append
+    return c, sent
+
+
+def test_save_screen_from_the_host_is_answered_with_a_redraw_stream_and_the_hosts_own_opcode():
+    from silverlake.proto import telnet as tn
+    c, sent = _bare_client()
+    c._on_record(ds.gds_record(bytes([ds.ESC, 0x02]), 0x04))                 # the record F13 on CRTPF produced
+    assert sent == [tn.record(ds.gds_record(bytes([ds.ESC, ds.CMD_CLEAR_UNIT, ds.ESC, ds.CMD_WRITE_TO_DISPLAY, 0, 0]), 0x04))]
+    assert not c._got_read                                                    # a window is not a screen ready for a key
+
+
+def test_read_immediate_is_answered_with_the_cursor_and_no_aid_and_is_not_the_screen_being_ready():
+    from silverlake.proto import telnet as tn
+    c, sent = _bare_client()
+    c._on_record(ds.gds_record(bytes([ds.ESC, 0x72]), 0x06))                 # the record 5250ng's issue quotes
+    assert sent == [tn.record(ds.gds_record(bytes([1, 1, 0x00]), 0x06))]       # row 1, column 1, AID 0, nothing typed
+    assert not c._got_read
+    c._on_record(ds.gds_record(bytes([ds.ESC, 0x52, 0x00, 0x00]), 0x03))      # a real Read does end the wait
+    assert c._got_read and len(sent) == 1
+
+
+def test_save_screen_and_read_immediate_in_one_record_both_get_answers():
+    c, sent = _bare_client()
+    c._on_record(ds.gds_record(bytes([ds.ESC, 0x02, ds.ESC, 0x72]), 0x04))
+    assert len(sent) == 2 and not c._got_read

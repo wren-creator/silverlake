@@ -12,6 +12,13 @@ from .terminal import DecodeError, Terminal
 TERMINAL_TYPE = "IBM-3179-2"
 AID_BYTES = {name: code for code, name in ds.AIDS.items()}
 
+# What a host that puts up a window (the F13 help panel, QP2TERM) seems to want after "Save Screen" and "Read
+# Immediate". Both are guesses from outside sources, see docs/oracle.md: a record with the host's own opcode
+# whose data is a stream that redraws the screen (here only Clear Unit and an empty Write To Display), and a
+# bare input record (cursor, AID 0, no fields).
+_SAVED_SCREEN = bytes([ds.ESC, ds.CMD_CLEAR_UNIT, ds.ESC, ds.CMD_WRITE_TO_DISPLAY, 0x00, 0x00])
+READ_IMMEDIATE = "0x72"
+
 # Query reply: cursor 0,0, AID 0x88 (inbound WSF), then one 58 byte structured
 # field describing a 3179-2 display. Layout per the 5494 functions reference.
 _QUERY_REPLY = bytes([0x00, 0x00, 0x88]) + (
@@ -112,13 +119,20 @@ class Client:
     def _on_record(self, data: bytes) -> None:
         self._records.append(data)
         try:
-            _, body = ds.split_gds(data)
+            opcode, body = ds.split_gds(data)
             events = self.term.apply(body)
         except (ds.ProtocolError, DecodeError, IndexError) as exc:
             raise CaptureError(f"could not decode host record: {exc}") from exc
         for ev in events:
             if ev.kind == "query":
                 self._write(tn.record(ds.gds_record(_QUERY_REPLY)))
+            elif ev.kind == "save":
+                self._write(tn.record(ds.gds_record(_SAVED_SCREEN, opcode)))
+            elif ev.kind == "read" and ev.detail == READ_IMMEDIATE:
+                # Not the screen being ready for a key: the host wants the current input now and goes on
+                # from there, so answer and keep waiting for a real Read.
+                cursor = self.term.snapshot()["cursor"] or [0, 0]
+                self._write(tn.record(ds.gds_record(bytes([cursor[0] + 1, cursor[1] + 1, 0x00]), opcode)))
             elif ev.kind == "read":
                 self._got_read = True
             elif ev.kind == "unsupported":
