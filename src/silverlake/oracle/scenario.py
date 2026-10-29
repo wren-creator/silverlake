@@ -359,6 +359,52 @@ for _batch, _cmds in F10_BATCHES.items():
                        {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
         {**_SIGNOFF, "always": True},
     ]
+# Read only: the F10 pages that one Roll Up did not reach. The F10 runs above showed that the host checks the
+# required names before it pages, and that a page can end in More... with another behind it. So each command is
+# opened with F4 and F10 again, the required name (first field, and the second file of CPYF) gets a made-up
+# value the first Roll Up needs, and the prompt is rolled on three more times (past the bottom is just a
+# message). Enter is never pressed on a prompt, so the made-up names are never looked up and nothing runs.
+F10_PAGES = {
+    "a": {"CHGJOB": {}, "CHGPRF": {}, "CRTBNDRPG": {}, "CHGMSGQ": {"0": "SLPLACE"}, "CHGSPLFA": {"0": "SLPLACE"},
+          "CHGUSRPRF": {"0": "SLPLACE"}, "CPYF": {"0": "SLPLACE", "2": "SLPLACE"}},
+    "b": {"CRTDSPF": {"0": "SLPLACE"}, "CRTOUTQ": {"0": "SLPLACE"}, "CRTPF": {"0": "SLPLACE"},
+          "CRTPRTF": {"0": "SLPLACE"}, "CRTSRCPF": {"0": "SLPLACE"}, "CRTUSRPRF": {"0": "SLPLACE"},
+          "SNDMSG": {"0": "SLPLACE"}},
+}
+for _batch, _cmds in F10_PAGES.items():
+    AUTHENTICATED["auth-f10-pages-" + _batch] = [
+        _SIGNON,
+        *[step for cmd, fill in _cmds.items()
+          for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F10"},
+                       {"key": "ROLLUP", **({"fill": fill} if fill else {})}, {"key": "ROLLUP"}, {"key": "ROLLUP"},
+                       {"key": "ROLLUP"}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
+                       {"key": "F12", "always": True})],
+        {**_SIGNOFF, "always": True},
+    ]
+# Read only: the rest of the F10 pages for the three prompts still showing More... after four Roll Ups. CHGUSRPRF
+# looks up the current values of the profile it is given (a made-up name was refused with "Current values could
+# not be ..."), so it gets the signed-on profile, which only reads it. CHGSPLFA does the same for a spooled file
+# and there is none to name, so its later pages stay uncaptured. Enter is never pressed.
+F10_DEEP = {"CPYF": {"0": "SLPLACE", "2": "SLPLACE"}, "CRTPRTF": {"0": "SLPLACE"},
+            "CHGUSRPRF": {"0": "${%s}" % USER_ENV}}
+AUTHENTICATED["auth-f10-deep"] = [
+    _SIGNON,
+    *[step for cmd, fill in F10_DEEP.items()
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F10"}, {"key": "ROLLUP", "fill": fill},
+                   *[{"key": "ROLLUP"}] * 8,
+                   {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+    {**_SIGNOFF, "always": True},
+]
+# CRTPRTF was still on More... after ten Roll Ups, so this one rolls it twenty times.
+F10_DEEP2 = {"CRTPRTF": {"0": "SLPLACE"}}
+AUTHENTICATED["auth-f10-deep2"] = [
+    _SIGNON,
+    *[step for cmd, fill in F10_DEEP2.items()
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F10"}, {"key": "ROLLUP", "fill": fill},
+                   *[{"key": "ROLLUP"}] * 20,
+                   {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

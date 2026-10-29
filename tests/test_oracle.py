@@ -697,3 +697,35 @@ def test_the_f10_scenarios_cover_every_prompt_that_offers_f10_and_never_press_en
                 assert a["fill"]["0"].isalnum() and a["fill"]["0"].isupper()
             else:
                 assert "fill" not in a and (a["key"] != "F12" or a.get("always"))
+
+
+def test_the_f10_pages_scenarios_type_only_made_up_names_and_only_before_a_roll_up():
+    for batch, cmds in scenario.F10_PAGES.items():
+        actions = scenario.SCENARIOS["auth-f10-pages-" + batch]
+        assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+        for a in actions[1:-1]:
+            assert a["key"] in ("F4", "F10", "ROLLUP", "F12"), a          # never Enter, so nothing is run
+            if a["key"] == "F4":
+                assert a["fill"]["0"] in cmds
+            elif a["key"] == "ROLLUP" and "fill" in a:
+                assert set(a["fill"].values()) == {"SLPLACE"}
+            else:
+                assert "fill" not in a and (a["key"] != "F12" or a.get("always"))
+
+
+def test_the_f10_deep_scenario_types_only_made_up_names_or_the_signed_on_profile():
+    for name, cmds in (("auth-f10-deep", scenario.F10_DEEP), ("auth-f10-deep2", scenario.F10_DEEP2)):
+        _check_f10_deep(scenario.SCENARIOS[name], cmds)
+
+
+def _check_f10_deep(actions, cmds):
+    assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+    allowed = {"SLPLACE", "${%s}" % scenario.USER_ENV}
+    for a in actions[1:-1]:
+        assert a["key"] in ("F4", "F10", "ROLLUP", "F12"), a              # never Enter, so nothing is run
+        if a["key"] == "F4":
+            assert a["fill"]["0"] in cmds
+        elif a["key"] == "ROLLUP" and "fill" in a:
+            assert set(a["fill"].values()) <= allowed
+        else:
+            assert "fill" not in a and (a["key"] != "F12" or a.get("always"))
