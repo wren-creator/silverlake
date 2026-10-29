@@ -315,3 +315,34 @@ def test_a_change_command_shows_the_signed_on_profiles_current_values_not_the_ca
     assert values["CURLIB"] == store.get("STUDENT").current_library
     from silverlake.screens.promptspecs import SPECS
     assert not any(w in repr(SPECS) for w in ("WREN01", "Hoff,Britley", "pub400.com", "PRT01", "PUB400SYS"))
+
+
+# -- F24, the other key line (captured on CRTPF: auth-f13) ----------------------------------------------------
+
+MORE = "F9=All parameters   F11=Choices   F14=Command string   F24=More keys"
+
+
+def test_f24_swaps_the_key_lines_for_the_one_the_host_showed_and_a_second_turns_it_back(store):
+    c = signed(store)
+    plain = f4(c, "CRTPF")
+    s = c.handle("F24", {})
+    s.validate()
+    assert MORE in texts(s) and not any("F3=Exit" in t for t in texts(s))
+    assert at(s, 21, 1).attr == at(plain, 21, 1).attr and not any(f.row == 22 for f in s.fields)   # one line, row 21
+    assert inputs(s) == inputs(plain)
+    assert texts(c.handle("F24", {})) == texts(plain)                                              # ours
+
+
+def test_the_keys_on_the_other_line_say_they_are_not_built_and_do_not_run_the_command(store):
+    c = signed(store)
+    f4(c, "CRTPF")
+    c.handle("F24", {})
+    for key in ("F9", "F11", "F14", "F13"):
+        s = c.handle(key, {"FILE": "NEWF", "SRCMBR": "X"})
+        assert "That key is not built here." in texts(s), key
+        assert inputs(s)["FILE"] == "NEWF"                                   # typed text kept, nothing ran
+    assert store.find_library("SCRATCH") is not None and not source_exists(store, "NEWF")
+
+
+def source_exists(store, name):
+    return any(o.name == name for o in store.objects.values())

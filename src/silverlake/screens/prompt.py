@@ -4,8 +4,8 @@
 What the captures showed, and this follows: the title, the rows, the labels, the columns and the lengths; a
 "Bottom" or "More..." marker and the key lines; required parameters drawn brighter, with "Parameter X required."
 on Enter and on Roll Up while one is empty; F10=Additional parameters (no check first, the whole prompt again
-with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); Roll Up paging a prompt that is more than one page, and "Already at
-bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). Not captured, so ours: how a refused command reads on the prompt, and F13 and F24, which say they are not built, as does F10
+with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); F24 swapping the key lines for the other set (seen on CRTPF only, the same line is used for every prompt, and a second F24 turning it back is ours); Roll Up paging a prompt that is more than one page, and "Already at
+bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). Not captured, so ours: how a refused command reads on the prompt, and F9, F11, F13 and F14, which say they are not built, as does F10
 on a prompt with no additional parameters or when pressed a second time. CHGSPLFA's F10 view stops at its first page:
 the host will not page it without a spooled file that exists.
 
@@ -71,6 +71,9 @@ def _build() -> dict[str, dict]:
 SPECS: dict[str, dict] = _build()
 
 
+MORE_KEYS = "F9=All parameters   F11=Choices   F14=Command string   F24=More keys"
+
+
 def promptable(name: str) -> bool:
     return name in SPECS
 
@@ -114,6 +117,7 @@ class Prompt:
     typed: dict
     values: dict
     page: int = field(default=0)
+    more_keys: bool = False                         # F24 pressed: the other key line is showing
     extra: bool = False                             # F10 pressed: the additional parameters view
     flagged: set = field(default_factory=set)      # fields drawn in reverse image after a refusal
     cursor: str = ""                                # where the cursor goes after one
@@ -190,6 +194,8 @@ class Prompt:
                 rows.append(Input(row, fcol, flen, name, value=self.values.get(name, ""),
                                   required=name in spec["required"], error=name in self.flagged))
         rows.append(Text(20, 79 - len(marker), marker, ds.ATTR_WHITE))
+        if self.more_keys:                                         # captured on CRTPF: one line, on row 21
+            keys = (MORE_KEYS,)
         rows += [Text(21 + i, 1, line, ds.ATTR_BLUE) for i, line in enumerate(keys)]
         _msg(rows, message)
         first = next(name for _, _, name, _, _, _ in sorted(page_rows, key=lambda r: r[0]) if name)
@@ -228,8 +234,9 @@ class Prompt:
         if aid == "F10" and "more" in spec and not self.extra:    # captured: no check, straight to the view
             self.extra, self.page = True, 0
             return Step()
-        if aid in ("F10", "F13", "F24", "F4"):
-            return Step("That key is not built here.")
+        if aid == "F24":                                           # captured on CRTPF; pressing it again is ours
+            self.more_keys = not self.more_keys
+            return Step()
         if aid == "ROLLUP":
             if (missing := self._missing()):                      # captured: the host checks these first
                 return self._refuse(missing)
@@ -242,6 +249,8 @@ class Prompt:
                 self.page -= 1
                 return Step()
             return Step("Already at top of area.")                # captured
+        if aid != "ENTER":                                        # F9, F11, F13, F14, a second F10, F4...
+            return Step("That key is not built here.")
         if (missing := self._missing()):
             return self._refuse(missing)                          # captured
         for (cmd, kw), why in NOT_BUILT.items():
