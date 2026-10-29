@@ -132,3 +132,48 @@ def test_an_old_state_file_without_the_data_column_is_upgraded(tmp_path):
     assert again.find_library("APPLIB")
     again.on_change()                                                     # and it can write again
     db2.close()
+
+
+# -- F4 -------------------------------------------------------------------------------------------------------
+
+def signed_on(store, user="STUDENT"):
+    from silverlake.screens.signon import SignonController
+    c = SignonController("QPADEV0161", store)
+    c.handle("ENTER", {"user": user, "password": user})
+    return c
+
+
+def message(screen):
+    return next((f.text for f in screen.fields if getattr(f, "row", None) == 23), "")
+
+
+def test_f4_on_a_locked_command_is_refused_on_the_menu_before_any_prompt(store):
+    lock(store)
+    c = signed_on(store)
+    s = c.handle("F4", {"command": "CRTLIB"})
+    assert message(s) == REFUSED
+    assert not any("Type choices" in getattr(f, "text", "") for f in s.fields)       # no prompt opened
+
+
+def test_f4_on_a_locked_command_with_parameters_is_refused_the_same(store):
+    lock(store)
+    assert message(signed_on(store).handle("F4", {"command": "CRTLIB LIB(X)"})) == REFUSED
+
+
+def test_crtlib_gets_a_prompt_for_someone_who_may_use_it(store):
+    s = signed_on(store).handle("F4", {"command": "CRTLIB"})
+    texts = [f.text for f in s.fields if hasattr(f, "text")]
+    assert "Create Library (CRTLIB)" in texts and "Library  . . . . . . . . . . . LIB" in texts
+
+
+def test_f4_still_works_for_who_gets_through_a_locked_command(store):
+    lock(store)
+    s = signed_on(store, "QSECOFR").handle("F4", {"command": "CRTLIB"})
+    assert "Create Library (CRTLIB)" in [f.text for f in s.fields if hasattr(f, "text")]
+
+
+def test_a_filled_crtlib_prompt_creates_the_library(store):
+    c = signed_on(store)
+    c.handle("F4", {"command": "CRTLIB"})
+    s = c.handle("ENTER", {"LIB": "F4LIB1"})
+    assert store.find_library("F4LIB1") is not None, message(s)

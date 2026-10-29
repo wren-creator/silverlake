@@ -58,6 +58,8 @@ def _msg(rows: list, message: str) -> None:
 
 def _prompt_step(ctx: Context, line: str, **preset: str) -> Step:
     from .prompt import Prompt                                    # imported late: prompt imports this module
+    if (refused := Prompt.refused(ctx, line)):
+        return Step(refused)
     widget = Prompt.for_command(ctx, line, **preset)
     if widget is None:
         return Step("F4 prompting is not built for that command." if line else "")

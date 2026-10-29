@@ -298,6 +298,8 @@ class SignonController:
 
     def _prompt(self, line: str) -> Screen:
         """F4 on the command line: the prompt for the command typed there, when it has one."""
+        if (refused := prompt.Prompt.refused(self._ctx(), line)):
+            return self._base(refused)
         widget = prompt.Prompt.for_command(self._ctx(), line)
         if widget is None:
             return self._base("F4 prompting is not built for that command." if line else "")

@@ -604,6 +604,15 @@ def _chg_attrs(b: dict) -> dict:
     return out
 
 
+def command_refusal(store: ProfileStore, actor: Profile, name: str) -> "messages.Message | None":
+    """Running a command takes *USE to its *CMD object in QSYS. Seen on PUB400, and F4 on the command line gets the
+    same refusal before any prompt opens."""
+    cmd = store.objects.get(("QSYS", name, "*CMD"))
+    if cmd is None or USE not in store.authority_to_object(actor, cmd):
+        return messages.not_authorized_to_command(name)
+    return None
+
+
 def execute(store: ProfileStore, actor: Profile, line: str, session: Session | None = None) -> Outcome:
     session = session or Session.for_profile(actor.current_library)
     try:
@@ -615,10 +624,8 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
     name = parsed.command
     if name not in COMMANDS:
         return Outcome(messages.syntax(f"Command {name} in library *LIBL not found."))
-    cmd = store.objects.get(("QSYS", name, "*CMD"))
-    if cmd is None or USE not in store.authority_to_object(actor, cmd):
-        # Checked before the parameters, as a real system does. Seen on PUB400.
-        return Outcome(messages.not_authorized_to_command(name))
+    if (refused := command_refusal(store, actor, name)):
+        return Outcome(refused)                                # checked before the parameters, as a real system does
     try:
         b = bind(store, name, parsed)
     except BindError as exc:

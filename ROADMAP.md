@@ -62,7 +62,7 @@
 - [x] Phase 4d-2: STRPDM, WRKMBRPDM, WRKOBJPDM (alias to WRKOBJ) and STRSEU, with a SEU-like editor (line commands, blocks, FIND and CHANGE, F3 exit display, browse, member locks). The menu and refusals are captured, the Work with Members and editor layouts are ours
 - [x] Phase 4d-3: F4 prompts for CRTBNDRPG, CRTPF, CRTDSPF, CRTPRTF and CRTSRCPF on the captured layouts, from any command line and from PDM (option 14 with F4 fills in the member)
 - [x] F4 prompts for 71 commands, drawn from the captured layouts (`screens/promptspecs.py`), with required parameters, paging, the reverse-image refusal and CHGPWD
-- [ ] F4 on a command the profile may not use: refuse on the menu with "Not authorized to command X in library *LIBL." before any prompt (captured on CRTLIB), then give CRTLIB its prompt
+- [x] F4 on a command the profile may not use: refused on the menu with "Not authorized to command X in library *LIBL." before any prompt (captured on CRTLIB), and CRTLIB has a prompt (layout ours; recapture it with a profile that may run CRTLIB)
 - [ ] F10 additional parameters on the 24 prompts that offer it (not captured)
 - [ ] Phase 4d later: F4 prompts built from the table, F10 additional parameters, PDM options 1, 2 and 3 as real screens, options 6, 8 and 9, WRKOBJPDM with its own screen, SEU syntax prompts, column shift and F11, CRTRPGMOD and CRTPGM, CPYSRCF and CPYF, RMVM and ADDPFM, PF with no source (RCDLEN), a compile that names its own program in the H-spec, sequence numbers and dates on source lines
 - [ ] Phase 4e: RPG leftovers: several inputs per row (needs rpgle_library to key input by field), function checks, a program dump, DSPPGM options (program references, source member), the real Change/Display Program attributes

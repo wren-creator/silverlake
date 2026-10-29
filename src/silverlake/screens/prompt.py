@@ -4,7 +4,7 @@
 What the captures showed, and this follows: the title, the rows, the labels, the columns and the lengths; a
 "Bottom" or "More..." marker and the key lines; required parameters drawn brighter, with "Parameter X required."
 on Enter and on Roll Up while one is empty; Roll Up paging a prompt that is more than one page, and "Already at
-bottom of area." on the last. CHGPWD has nothing to prompt for and says so. Not captured, so ours: what Roll Down
+bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). Not captured, so ours: what Roll Down
 says at the top, how a refused command reads on the prompt, and F10, F13 and F24, which say they are not built.
 
 Where this differs from the captured host on purpose: its CRTDSPF and CRTPRTF offered SRCFILE *NONE with a blank
@@ -40,9 +40,19 @@ def _with_overrides(command: str, rows: list) -> list:
             for r, label, name, col, length, default in rows]
 
 
+# Not captured, so ours: the host refused CRTLIB to the captured profile before any prompt opened. The rows follow
+# the CRTMSGQ capture (same columns, same key lines) and IBM's parameter order; AUT and the rest sit behind F10.
+LOCAL = {"CRTLIB": {
+    "title": ("Create Library (CRTLIB)", 28), "bottom": "Bottom", "required": ("LIB",),
+    "keys": CAPTURED["CRTMSGQ"]["keys"],
+    "rows": [(4, "Library  . . . . . . . . . . . LIB", "LIB", 49, 10, ""),
+             (5, "Library type  . . . . . . . . . TYPE", "TYPE", 49, 7, "*PROD"),
+             (6, "Text 'description' . . . . . . . TEXT", "TEXT", 49, 50, "*BLANK")]}}
+
+
 def _build() -> dict[str, dict]:
     specs = {}
-    for command, spec in CAPTURED.items():
+    for command, spec in {**CAPTURED, **LOCAL}.items():
         pages = [(_with_overrides(command, spec["rows"]), spec["bottom"])]
         pages += [(_with_overrides(command, rows), bottom) for rows, bottom in spec.get("pages", [])]
         specs[command] = {"title": spec["title"], "pages": pages, "keys": spec["keys"],
@@ -87,6 +97,22 @@ class Prompt:
     page: int = field(default=0)
     flagged: set = field(default_factory=set)      # fields drawn in reverse image after a refusal
     cursor: str = ""                                # where the cursor goes after one
+
+    @classmethod
+    def refused(cls, ctx: Context, line: str) -> str:
+        """Captured: F4 on a command the profile may not use is refused where it was typed, before any prompt
+        opens ("Not authorized to command X in library *LIBL."). Empty when the command may be used."""
+        try:
+            parsed = parser.parse(line)
+        except parser.ParseError:
+            return ""
+        if parsed is None:
+            return ""
+        from ..cl import commands
+        if parsed.command not in commands.COMMANDS:
+            return ""
+        message = commands.command_refusal(ctx.store, ctx.profile, parsed.command)
+        return message.text if message else ""
 
     @classmethod
     def for_command(cls, ctx: Context, line: str = "", **preset: str) -> "Prompt | None":
