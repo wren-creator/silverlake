@@ -337,7 +337,7 @@ def test_the_keys_on_the_other_line_say_they_are_not_built_and_do_not_run_the_co
     c = signed(store)
     f4(c, "CRTPF")
     c.handle("F24", {})
-    for key in ("F9", "F11", "F14", "F13"):
+    for key in ("F9", "F11", "F14"):
         s = c.handle(key, {"FILE": "NEWF", "SRCMBR": "X"})
         assert "That key is not built here." in texts(s), key
         assert inputs(s)["FILE"] == "NEWF"                                   # typed text kept, nothing ran
@@ -346,3 +346,68 @@ def test_the_keys_on_the_other_line_say_they_are_not_built_and_do_not_run_the_co
 
 def source_exists(store, name):
     return any(o.name == name for o in store.objects.values())
+
+
+# -- F13, How to use this display (captured: auth-f13-help, auth-f13-helpall) ---------------------------------
+
+def page_text(s):
+    return " ".join(texts(s))
+
+
+def test_f13_opens_the_help_and_f3_and_f12_both_go_back_to_the_prompt_with_what_was_typed(store):
+    for back in ("F3", "F12"):
+        c = signed(store)
+        f4(c, "CRTPF")
+        s = c.handle("F13", {"FILE": "KEEPME"})
+        s.validate()
+        assert texts(s)[:2] == ["Help", "                 Prompt Display - Help"] and "More..." in page_text(s)
+        assert not [f for f in s.fields if isinstance(f, Input) and not f.hidden]      # nothing to type into
+        s = c.handle(back, {})
+        assert "Create Physical File (CRTPF)" in texts(s) and inputs(s)["FILE"] == "KEEPME"
+
+
+def test_the_help_has_fifteen_pages_and_says_bottom_on_the_last(store):
+    c = signed(store)
+    f4(c, "CHGJOB")
+    c.handle("F13", {})
+    pages = 1
+    while True:
+        s = c.handle("ROLLUP", {})
+        s.validate()
+        if "Already at bottom of area." in texts(s):
+            break
+        pages += 1
+        assert ("Bottom" in page_text(s)) == (pages == 15) and ("More..." in page_text(s)) == (pages < 15)
+    assert pages == 15
+
+
+def test_the_help_is_the_same_text_for_every_prompt_even_one_with_nothing_to_prompt_for(store):
+    first = None
+    for cmd in ("CRTPF", "CHGPWD", "WRKSPLF"):
+        c = signed(store)
+        f4(c, cmd)
+        s = c.handle("F13", {})
+        first = first or page_text(s)
+        assert page_text(s) == first
+
+
+def test_the_other_keys_on_the_help(store):
+    c = signed(store)
+    f4(c, "CRTPF")
+    c.handle("F13", {})
+    assert "Already at top of area." in texts(c.handle("ROLLDOWN", {}))           # ours
+    assert "Wrong cursor position." in texts(c.handle("F10", {}))                   # captured with the cursor in the corner
+    for key in ("F14", "ENTER", "F24"):
+        assert "That key is not built here." in texts(c.handle(key, {})), key
+    assert "Help" in texts(c.handle("ROLLUP", {}))                                  # still on the help, and nothing ran
+
+
+def test_the_help_text_comes_from_the_capture_with_its_colors(store):
+    from silverlake.screens.promptspecs import HELP
+    c = signed(store)
+    f4(c, "CRTPF")
+    s = c.handle("F13", {})
+    drawn = {(f.row, f.col): (f.attr, f.text) for f in s.fields if isinstance(f, Text)}
+    for row, col, attr, text in HELP["pages"][0]:
+        assert drawn[(row, col)] == (attr, text)
+    assert len(HELP["pages"]) == 15 and HELP["cursor"] == (1, 1)

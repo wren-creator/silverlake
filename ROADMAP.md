@@ -66,7 +66,8 @@
 - [x] F10 additional parameters on the 29 prompts that offer it (captured, in the table, drawn); open: CHGSPLFA pages past the first need a real spooled file to page
 - [x] F24 on a prompt swaps the key lines for `F9=All parameters   F11=Choices   F14=Command string   F24=More keys` (captured on CRTPF, drawn for every prompt)
 - [x] Save Screen and Read Immediate replies: worked (help came back). F13 help captured: one generic 15 page text for every prompt (`auth-f13-help`, `auth-f13-helpall`)
-- [ ] Draw the F13 help on the prompts from the capture (extract the 15 pages with their colors into the table, F3 and F12 back to the prompt, Roll Up and Roll Down, `Already at bottom of area.`), then F10 on the help with the cursor in the text, and retry QP2TERM and F10 on the edit screen, which went quiet the same way
+- [x] F13 help drawn on the prompts from the capture (15 pages, F3 and F12 back, Roll Up and Down)
+- [ ] F10 on the help with the cursor in the text (the key moves to the top, the capture only has it refused with the cursor in the corner), and retry QP2TERM and F10 on the edit screen, which went quiet the same way
 - [ ] F9, F11 and F14 on a prompt are not captured (say "not built"), and F13 gets no answer the client can read (15 s and 90 s, CRTPF), so it stays "not built" until the client can see what the host sends. Roll Down at the top is confirmed (`Already at top of area.`)
 - [ ] Phase 4d later: PDM options 1, 2 and 3 as real screens, options 6, 8 and 9, WRKOBJPDM with its own screen, SEU syntax prompts, column shift and F11, CRTRPGMOD and CRTPGM, CPYSRCF and CPYF, RMVM and ADDPFM, PF with no source (RCDLEN), a compile that names its own program in the H-spec, sequence numbers and dates on source lines
 - [ ] Phase 4e: RPG leftovers: several inputs per row (needs rpgle_library to key input by field), function checks, a program dump, DSPPGM options (program references, source member), the real Change/Display Program attributes

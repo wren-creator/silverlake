@@ -152,3 +152,17 @@ def test_values_of_the_profile_the_host_was_captured_with_never_reach_the_table(
 def test_the_table_has_an_f10_view_for_every_prompt_that_offers_the_key():
     offered = [c for c, s in SPECS.items() if any("F10=Additional" in k for k in s["keys"])]
     assert len(offered) == 29 and all("more" in SPECS[c] for c in offered)
+
+
+def test_the_help_is_read_as_pages_and_the_page_roll_up_repeated_past_the_end_is_dropped():
+    def help_screen(text, message=""):
+        runs = [_run(0, 1, "Help", "0x3A"), _run(4, 5, text), _run(20, 67, "     More...", "0x22")]
+        if message:
+            runs.append(_run(23, 1, message))
+        return {**_screen(runs, []), "cursor": [1, 1]}
+    caps = [{"snapshots": [_prompt(), help_screen("one"), help_screen("two"), help_screen("two", "Already at bottom of area."),
+                           _prompt()]}]
+    got = promptspec.extract_help(caps)
+    assert got["cursor"] == (1, 1) and len(got["pages"]) == 2
+    assert (4, 5, 0x20, "one") in got["pages"][0] and all(run[0] < 23 for page in got["pages"] for run in page)
+    assert promptspec.extract_help([{"snapshots": [_prompt()]}]) is None

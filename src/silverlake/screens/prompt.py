@@ -4,8 +4,8 @@
 What the captures showed, and this follows: the title, the rows, the labels, the columns and the lengths; a
 "Bottom" or "More..." marker and the key lines; required parameters drawn brighter, with "Parameter X required."
 on Enter and on Roll Up while one is empty; F10=Additional parameters (no check first, the whole prompt again
-with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); F24 swapping the key lines for the other set (seen on CRTPF only, the same line is used for every prompt, and a second F24 turning it back is ours); Roll Up paging a prompt that is more than one page, and "Already at
-bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). Not captured, so ours: how a refused command reads on the prompt, and F9, F11, F13 and F14, which say they are not built, as does F10
+with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); F13 opening the help (one generic text for every prompt, 15 pages, F3 and F12 back to the prompt); F24 swapping the key lines for the other set (seen on CRTPF only, the same line is used for every prompt, and a second F24 turning it back is ours); Roll Up paging a prompt that is more than one page, and "Already at
+bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). Not captured, so ours: how a refused command reads on the prompt, and F9, F11 and F14, which say they are not built, as does F10
 on a prompt with no additional parameters or when pressed a second time. CHGSPLFA's F10 view stops at its first page:
 the host will not page it without a spooled file that exists.
 
@@ -23,7 +23,7 @@ from ..cl import parser
 from ..proto import datastream as ds
 from .model import Input, Screen, Text
 from .pdm import Context, Step, _msg
-from .promptspecs import SPECS as CAPTURED
+from .promptspecs import HELP, SPECS as CAPTURED
 
 OVERRIDES = {("CRTDSPF", "SRCFILE"): "QDDSSRC", ("CRTDSPF", "SRCFILE@"): "*LIBL",
              ("CRTPRTF", "SRCFILE"): "QDDSSRC", ("CRTPRTF", "SRCFILE@"): "*LIBL"}
@@ -117,6 +117,7 @@ class Prompt:
     typed: dict
     values: dict
     page: int = field(default=0)
+    help_page: int | None = None                    # F13 pressed: the help is on show, at this page
     more_keys: bool = False                         # F24 pressed: the other key line is showing
     extra: bool = False                             # F10 pressed: the additional parameters view
     flagged: set = field(default_factory=set)      # fields drawn in reverse image after a refusal
@@ -176,7 +177,39 @@ class Prompt:
 
     # -- drawing -----------------------------------------------------------------------------------------
 
+    def _help_screen(self, message: str) -> Screen:
+        """Captured: one text for every prompt, 15 pages, the host's own colors, the cursor in a hidden one character
+        field on row 1."""
+        rows: list = [Text(row, col, text, attr) for row, col, attr, text in HELP["pages"][self.help_page]]
+        rows.append(Input(*HELP["cursor"], 1, "helpcursor", hidden=True))
+        _msg(rows, message)
+        return Screen(rows, cursor="helpcursor")
+
+    def _help_key(self, aid: str) -> Step:
+        """Keys on the help. F3 and F12 both went back to the prompt (captured), Roll Up past the end said "Already at
+        bottom of area.", and F10 said "Wrong cursor position." with the cursor in the corner, where this leaves it
+        (it cannot see where a student moved it, so it always says that). Roll Down at the top is ours."""
+        last = len(HELP["pages"]) - 1
+        if aid in ("F3", "F12"):
+            self.help_page = None
+            return Step()
+        if aid == "ROLLUP":
+            if self.help_page < last:
+                self.help_page += 1
+                return Step()
+            return Step("Already at bottom of area.")
+        if aid == "ROLLDOWN":
+            if self.help_page:
+                self.help_page -= 1
+                return Step()
+            return Step("Already at top of area.")
+        if aid == "F10":
+            return Step("Wrong cursor position.")
+        return Step("That key is not built here.")                # F13 (Information Assistant), F14 (Print help)
+
     def screen(self, message: str = "") -> Screen:
+        if self.help_page is not None:
+            return self._help_screen(message)
         spec = SPECS[self.command]
         title, col = spec["title"]
         rows: list = [Text(0, col, title, ds.ATTR_WHITE)]
@@ -221,6 +254,14 @@ class Prompt:
     def handle(self, aid: str, values: dict[str, str]) -> Step:
         spec = SPECS[self.command]
         self.flagged, self.cursor = set(), ""
+        if self.help_page is not None:
+            return self._help_key(aid)
+        if aid == "F13":                                           # captured: opens the help, nothing checked first
+            for name in self.values:
+                if name in values:
+                    self.values[name] = values[name].strip()
+            self.help_page = 0
+            return Step()
         if aid == "F3":
             return Step(go="menu")
         if aid == "F12":
