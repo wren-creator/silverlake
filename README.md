@@ -55,6 +55,10 @@ Teaching it? [instructor/](instructor/) has the agenda, answer key, rubric, setu
 
 Connect with any 5250 client, for example `tn5250 127.0.0.1:5250`. `start.sh` refuses a port that is already in use and tells you the next one to try, and it only says "up" once the server reports it is listening, so a crash during startup shows up as a failure with the log tail instead of a false "up". It always binds to 127.0.0.1. `SILVERLAKE_PORT` does the same as `--port`.
 
+## Feedback
+
+A project like this gets better because people use it and say what they found. You know IBM i screens I have not seen, and you will spot things I got wrong. If you find something, [open an issue or a request](https://github.com/wren-creator/silverlake/issues), or email britleyhoff@britleyhoffconsulting.com. The community is at britleydev.slack.com.
+
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
