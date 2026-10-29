@@ -405,6 +405,20 @@ AUTHENTICATED["auth-f10-deep2"] = [
                    {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the three prompt keys Silverlake still answers with "not built", and Roll Down at the top of a prompt
+# (the wording is ours). Each command is typed bare and F4 opens its prompt, then Roll Down (already at the top),
+# F24 (the more keys line), F13 (How to use this display) and Roll Up on whatever F13 opened, and F12 three times to
+# get back to the command line. CHGPWD has no parameters, WRKSPLF has two pages, CRTUSRPRF is the longest plain one.
+# Nothing is typed into a prompt and Enter is never pressed, so nothing runs.
+F13_COMMANDS = ("CRTPF", "CHGJOB", "CHGPWD", "DSPMSG", "WRKSPLF", "CRTUSRPRF")
+AUTHENTICATED["auth-f13"] = [
+    _SIGNON,
+    *[step for cmd in F13_COMMANDS
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "ROLLDOWN"}, {"key": "F24"}, {"key": "F13"},
+                   {"key": "ROLLUP"}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
+                   {"key": "F12", "always": True})],
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

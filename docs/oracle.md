@@ -199,6 +199,8 @@ The layouts are in `screens/promptspecs.py`, generated from the captures by `pyt
 
 Those scenarios are `auth-f10-a` to `auth-f10-c`: type the bare command, F4, F10, Roll Up once, then F12 out. Nothing is typed into a prompt and Enter is never pressed, and a test checks the list against the prompts that show the F10 key. The follow ups type only a made-up name (`SLPLACE`) or the signed-on profile before a Roll Up. Regenerate the table with `python -m silverlake.oracle.promptspec captures/pub400/auth-pdm.json captures/pub400/auth-prompts-*.json captures/pub400/auth-f10-*.json`.
 
+`auth-f13` is written for the prompt keys still answered with "not built" (F13, F24) and for Roll Down at the top of a prompt: CRTPF, CHGJOB, CHGPWD, DSPMSG, WRKSPLF and CRTUSRPRF, each F4, Roll Down, F24, F13, Roll Up, then F12 out. Never Enter, nothing typed but the bare name. Not run yet.
+
 ## Still open
 
 - **A stock sign-on capture.** The photo settled positions, but a real capture would confirm the title and label columns and the colors. The password field length is also unsettled: stock is 10, PUB400 shows 128 at its password level.

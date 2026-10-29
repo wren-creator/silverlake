@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-")):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13")):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -727,5 +727,17 @@ def _check_f10_deep(actions, cmds):
             assert a["fill"]["0"] in cmds
         elif a["key"] == "ROLLUP" and "fill" in a:
             assert set(a["fill"].values()) <= allowed
+        else:
+            assert "fill" not in a and (a["key"] != "F12" or a.get("always"))
+
+
+def test_the_f13_scenario_only_presses_keys_that_open_or_leave_things_and_types_only_bare_names():
+    actions = scenario.SCENARIOS["auth-f13"]
+    assert actions[0]["key"] == "ENTER" and "${SILVERLAKE_ORACLE_PASS}" in actions[0]["fill"]["1"]
+    assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+    for a in actions[1:-1]:
+        assert a["key"] in ("F4", "ROLLDOWN", "ROLLUP", "F24", "F13", "F12"), a      # never Enter, so nothing is run
+        if a["key"] == "F4":
+            assert a["fill"]["0"] in scenario.F13_COMMANDS and a["fill"]["0"].isalnum()
         else:
             assert "fill" not in a and (a["key"] != "F12" or a.get("always"))
