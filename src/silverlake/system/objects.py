@@ -317,6 +317,42 @@ def grant(store: ProfileStore, actor: Profile, qualified: str, typ: str, session
     return _ok("Authority granted.") if users else _ok("Authorization list set.")
 
 
+def grant_from_reference(store: ProfileStore, actor: Profile, qualified: str, typ: str, ref_qualified: str,
+                         ref_typ: str, session, replace: bool) -> Done:
+    """GRTOBJAUT REFOBJ(): copy the reference object's public, owner and private authorities and its authorization
+    list onto the object. Ours, not captured: it adds to what is there, REPLACE(*YES) makes the object match, and the
+    reference's owner becomes a plain private entry (unless it owns the target) so ownership is never moved."""
+    obj, err = locate(store, actor, qualified, typ, session.search_order())
+    if err:
+        return _no(err)
+    ref_typ = typ if ref_typ == "*OBJTYPE" else ref_typ
+    ref, err = locate(store, actor, ref_qualified, ref_typ, session.search_order())
+    if err:
+        return _no(err)
+    key = (obj.name, obj.library, typ)
+    if not _can_manage(store, actor, obj):
+        return _no(messages.not_authorized_to_give(*key))
+    if not _can_manage(store, actor, ref):
+        return _no(messages.not_authorized_to_give(ref.name, ref.library, ref_typ))
+    if obj is ref:
+        return _ok("Authority granted.")
+    privileged = _allobj(store, actor) or actor.name == obj.owner
+    shared = {**ref.private, ref.owner: ref.owner_auth}
+    if not privileged and any(a is not None and Auth.OBJMGT in a for a in shared.values()):
+        return _no(messages.not_authorized_to_give(*key))
+    if replace:
+        obj.private.clear()
+    obj.autl = ref.autl
+    obj.public = ref.public if replace or ref.public is None or obj.public is None else _merge(obj.public, ref.public, False)
+    for who, a in shared.items():
+        if who == obj.owner:
+            obj.owner_auth = _merge(obj.owner_auth, a, replace)
+        else:
+            obj.private[who] = _merge(obj.private.get(who), a, replace)
+    store.on_change()
+    return _ok("Authority granted.")
+
+
 def _merge(current: Auth | None, aut: Auth, replace: bool) -> Auth:
     """REPLACE(*NO) adds to what is there. *EXCLUDE is nothing to add, so it
     always replaces. REPLACE(*YES) sets exactly this."""

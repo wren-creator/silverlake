@@ -77,7 +77,8 @@ DSPOBJAUT_PARAMS = [
 GRTOBJAUT_PARAMS = [
     Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
     Param("USER", "users", "", 50), Param("AUT", "autspec", "*CHANGE", 10),
-    Param("ASPDEV", "ignored", "*"), Param("AUTL", "name*", "*NONE"), Param("REPLACE", "yesno", "*NO"),
+    Param("ASPDEV", "ignored", "*"), Param("AUTL", "name*", "*NONE"), Param("REFOBJ", "qname", ""),
+    Param("REFOBJTYPE", "name*", "*OBJTYPE"), Param("REFASPDEV", "ignored", "*"), Param("REPLACE", "yesno", "*NO"),
 ]
 RVKOBJAUT_PARAMS = [
     Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
@@ -905,6 +906,11 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name in AUTL_COMMANDS:
         return _run_autl_command(store, actor, name, b)
     users = b.get("USER", [])
+    if name == "GRTOBJAUT" and b.get("REFOBJ"):
+        if users or b["AUTL"] != "*NONE":
+            return Outcome(messages.syntax("REFOBJ cannot be combined with USER or AUTL."))
+        return Outcome(objects.grant_from_reference(store, actor, b["OBJ"], b["OBJTYPE"], b["REFOBJ"],
+                                                    b["REFOBJTYPE"], session, b["REPLACE"]).message)
     if not users and b["AUTL"] == "*NONE":
         return Outcome(messages.syntax("Either USER or AUTL must be specified."))
     aut = resolve_aut(b["AUT"])

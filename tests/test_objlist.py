@@ -614,3 +614,26 @@ def test_add_new_users_grants_through_the_normal_rules(store):
     assert "not valid" in _text(s) and _field_map(s)[(0, 33)].text == "Add New Users"
     s = c.handle("ENTER", {"user0": "nosuchuser", "auth0": "*use"})
     assert _field_map(s)[(0, 33)].text == "Add New Users"
+
+
+# -- GRTOBJAUT REFOBJ (ours, not captured) ---------------------------------------------------------------------
+def test_grtobjaut_refobj_copies_the_reference_objects_authorities(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE) USER(STUDENT) AUT(*USE)")
+    out = run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) REFOBJ(APPLIB/PAYROLL)")
+    assert "Authority granted." in out
+    tgt, ref = (store.objects[("APPLIB", n, "*FILE")] for n in ("CUSTOMERS", "PAYROLL"))
+    assert tgt.private["STUDENT"] == ref.private["STUDENT"] and tgt.autl == ref.autl and tgt.public == ref.public
+
+
+def test_grtobjaut_refobj_rules(store):
+    assert "REFOBJ cannot be combined" in run(
+        store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*USE) REFOBJ(APPLIB/PAYROLL)")
+    assert "CPF" in run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) REFOBJ(APPLIB/NOPE)")
+    assert "Not authorized" in run(store, "STUDENT", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) REFOBJ(APPLIB/PAYROLL)")
+
+
+def test_grtobjaut_refobj_replace_makes_the_object_match(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*ALL)")
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) REFOBJ(APPLIB/PAYROLL) REPLACE(*YES)")
+    tgt, ref = (store.objects[("APPLIB", n, "*FILE")] for n in ("CUSTOMERS", "PAYROLL"))
+    assert tgt.private.get("STUDENT") == ref.private.get("STUDENT")
