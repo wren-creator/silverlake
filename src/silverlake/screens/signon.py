@@ -662,6 +662,8 @@ class SignonController:
                 return f"EDTOBJAUT {ref}", ""
             if opt == "8":
                 return f"DSPOBJD {ref} DETAIL(*FULL)", ""
+            if opt == "3" and wl.kind == "objects":
+                return f"@DUPOBJ {row.library}/{row.name} {row.type}", ""
             if opt == "7":
                 return (f"RNMOBJ {ref} NEWOBJ({param.split()[0]})", "") if param else \
                     (None, "Type the new name on the command line for option 7.")
@@ -680,6 +682,16 @@ class SignonController:
             self.parents.append(self.view)
             self.view = {"@SPOOL5": ("spoolview", f, 0), "@SPOOL8": ("spoolattr", f), "@SPOOL1": ("splprompt", "send", f),
                          "@SPOOL2": ("splprompt", "chg", f), "@SPOOL9": ("splprompt", "status", f)}[line.split()[0]]
+            return self._draw_view()
+        if line.startswith("@DUPOBJ "):                         # option 3: the Create Duplicate Object prompt
+            qualified, typ = line.split()[1:]
+            refused = prompt.Prompt.refused(self._ctx(), "CRTDUPOBJ")
+            if refused:
+                return self._draw_view(refused)
+            lib, name = qualified.split("/")
+            obj = self.store.objects[(lib, name, typ)]
+            self.parents.append(self.view)
+            self.view = ("widget", prompt.Prompt.for_duplicate(self._ctx(), obj))
             return self._draw_view()
         if line.startswith("@CHGJOB "):                         # option 2 with nothing typed: the Change Job prompt
             job = next(j for j in self.store.jobs.jobs if j.qualified == line.split()[1])
@@ -856,6 +868,8 @@ class SignonController:
         if step.go == "back":
             self.view = self.parents.pop() if self.parents else None
             if self.view is not None:
+                if self.view[0] == "work":                         # what a prompt made shows on the list under it
+                    self.view[1].refresh()
                 return self._draw_view(step.message)
             return self._base(step.message)
         return self._draw_view(step.message)

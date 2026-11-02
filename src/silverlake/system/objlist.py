@@ -30,7 +30,9 @@ Not on the pages, so ours: the options on the list displays (the pages do not li
 none are offered), and what the library gate means for a *USE check on a library you only
 reach through *PUBLIC. *AUTL objects are not in the object table yet, so they never appear."""
 
+import copy
 import fnmatch
+from dataclasses import replace
 
 from . import messages
 from .authority import ALL, USE, Auth, SecuredObject, SpecialAuthority
@@ -178,6 +180,44 @@ def rename_object(store: ProfileStore, actor: Profile, qualified: str, typ: str,
     store.objects[obj.key] = obj
     store.on_change()
     return _ok(f"Object {old} renamed to {new}.")
+
+
+def duplicate_object(store: ProfileStore, actor: Profile, name: str, fromlib: str, typ: str, tolib: str,
+                     newobj: str, search: list[str]) -> Done:
+    """CRTDUPOBJ, what option 3 on Work with Objects runs. The screen was captured; the rules are ours: *USE to the
+    object, *ADD and *EXECUTE to the library it goes to, nothing already there under the new name, never into a system
+    library. The copy keeps the text, the data, the public authority and the authorization list, and the private
+    authorities too, but it belongs to whoever ran the command, and the old owner keeps what they had as a private
+    entry."""
+    if typ == "*LIB":
+        return _no(messages.syntax("Object type *LIB is not duplicated here. Use CPYLIB."))
+    obj, err = locate(store, actor, name if fromlib == "*LIBL" else f"{fromlib}/{name}", typ, search)
+    if err:
+        return _no(err)
+    tolib = obj.library if tolib == "*FROMLIB" else tolib.upper()
+    newobj = obj.name if newobj == "*OBJ" else newobj.upper()
+    if not NAME.match(newobj):
+        return _no(messages.syntax(f"New object name {newobj} not valid."))
+    lib = store.find_library(tolib)
+    if lib is None:
+        return _no(messages.library_not_found_for_object(tolib))
+    if tolib in ("QSYS", "QSYS2", "QHLPSYS") or obj.library in ("QSYS", "QSYS2", "QHLPSYS"):
+        return _no(messages.protected_library(tolib if tolib in ("QSYS", "QSYS2", "QHLPSYS") else obj.library))
+    if not _allobj(store, actor):
+        if (Auth.OBJOPR | Auth.READ) & ~store.authority_to_object(actor, obj):
+            return _no(messages.not_authorized_to_object_2189(obj.name, obj.library, typ))
+        if (Auth.ADD | Auth.EXECUTE) & ~authority_to_library(store, actor, lib):
+            return _no(messages.not_authorized_to_library(tolib))
+    if (tolib, newobj, typ) in store.objects:
+        return _no(messages.object_already_exists(newobj, tolib))
+    private = dict(obj.private)
+    if obj.owner != actor.name:
+        private[obj.owner] = obj.owner_auth
+    private.pop(actor.name, None)
+    store.objects[(tolib, newobj, typ)] = replace(obj, name=newobj, library=tolib, owner=actor.name, owner_auth=ALL,
+                                                  private=private, data=copy.deepcopy(obj.data))
+    store.on_change()
+    return _ok(f"Object {obj.name} duplicated as {newobj} in {tolib}.")
 
 
 def change_description(store: ProfileStore, actor: Profile, qualified: str, typ: str, text: str,

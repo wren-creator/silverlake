@@ -178,6 +178,10 @@ DLTF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SYSTEM", "ignor
 DLTCMD_PARAMS = [Param("CMD", "qname", "", required=True)]
 DLTMNU_PARAMS = [Param("MENU", "qname", "", required=True), Param("DLTREFOBJ", "ignored", "*NONE", 3)]
 DLTPGM_PARAMS = [Param("PGM", "qname", "", required=True)]
+CRTDUPOBJ_PARAMS = [Param("OBJ", "qname", "", required=True), Param("FROMLIB", "name*", "*LIBL"),
+                    Param("OBJTYPE", "objtype", "", required=True), Param("TOLIB", "name*", "*FROMLIB"),
+                    Param("NEWOBJ", "name*", "*OBJ"), Param("ASPDEV", "ignored", "*"),
+                    Param("TOASPDEV", "ignored", "*ASPDEV")]
 EDTOBJAUT_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
                     Param("ASPDEV", "ignored", "*")]
 DSPPGM_PARAMS = [Param("PGM", "qname", "", required=True), Param("OUTPUT", "output", "*")]
@@ -250,7 +254,7 @@ COMMANDS = {
     "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "DSPJOB": DSPJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
-    "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS, "DSPPGM": DSPPGM_PARAMS,
+    "CRTDUPOBJ": CRTDUPOBJ_PARAMS, "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS, "DSPPGM": DSPPGM_PARAMS,
 }
 
 
@@ -842,6 +846,9 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name in DELETE_COMMANDS:
         key, typ = DELETE_COMMANDS[name]
         return Outcome(objlist.delete_object(store, actor, b[key], typ, session.search_order()).message)
+    if name == "CRTDUPOBJ":
+        return Outcome(objlist.duplicate_object(store, actor, b["OBJ"], b["FROMLIB"], b["OBJTYPE"], b["TOLIB"],
+                                                b["NEWOBJ"], session.search_order()).message)
     if name == "EDTOBJAUT":
         obj, err = objlist.edit_authority(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
         return Outcome(err) if err else Outcome(view=("edtobjaut", obj))

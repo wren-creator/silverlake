@@ -223,7 +223,7 @@ def test_wrkobjown_option_9_changes_the_owner(store):
 
 def test_unbuilt_options_say_so_and_bad_ones_are_invalid(store):
     c = _signed(store)
-    c.handle("ENTER", {"command": "wrkobj applib/*all *file"})
+    c.handle("ENTER", {"command": "wrkobjown qsecofr *file"})              # option 3 is built on Work with Objects only
     assert "Option 3 is not available" in " | ".join(f.text for f in c.handle("ENTER", {"opt0": "3"}).fields if isinstance(f, Text))
     assert "Option 6 is not valid" in " | ".join(f.text for f in c.handle("ENTER", {"opt0": "6"}).fields if isinstance(f, Text))
 
@@ -668,3 +668,40 @@ def test_f12_on_the_f10_prompt_goes_back_to_the_edit_screen(store):
     c, s = _edit(store)
     c.handle("F10", {})
     assert "Edit Object Authority" in _text(c.handle("F12", {}))
+
+
+# -- option 3 (copy) opens the CRTDUPOBJ prompt, captured in auth-copyobj -----------------------------------------
+def test_option_3_opens_crtdupobj_in_the_captured_layout(store):
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobj applib/customers *file"})
+    s = c.handle("ENTER", {"opt0": "3"})
+    f = _field_map(s)
+    assert f[(0, 23)].text == "Create Duplicate Object (CRTDUPOBJ)"
+    assert [f[(r, 49)].text for r in (4, 5, 6)] == ["CUSTOMERS", "APPLIB", "*FILE"] and f[(4, 45)].text == "  >"
+    ins = {(i.row, i.col): i for i in s.inputs()}
+    assert sorted(ins) == [(7, 49), (8, 49), (9, 49), (10, 49)]
+    assert [ins[(r, 49)].value for r in (7, 8, 9, 10)] == ["*FROMLIB", "*OBJ", "*", "*ASPDEV"]
+    assert "Function key not allowed." in _text(c.handle("F10", {}))
+    assert "Already at bottom of area." in _text(c.handle("ROLLUP", {}))
+
+
+def test_option_3_duplicates_the_object_and_the_list_shows_it(store):
+    c = _signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "wrkobj applib/*all *file"})
+    c.handle("ENTER", {"opt0": "3"})
+    s = c.handle("ENTER", {"NEWOBJ": "custcopy"})
+    assert ("APPLIB", "CUSTCOPY", "*FILE") in store.objects and "Work with Objects" in _text(s)
+    assert "CUSTCOPY" in _text(s)
+
+
+def test_crtdupobj_rules(store):
+    assert "duplicated" in run(store, "QSECOFR", "CRTDUPOBJ OBJ(CUSTOMERS) FROMLIB(APPLIB) OBJTYPE(*FILE) NEWOBJ(CUST2)")
+    new = store.objects[("APPLIB", "CUST2", "*FILE")]
+    old = store.objects[("APPLIB", "CUSTOMERS", "*FILE")]
+    assert new.owner == "QSECOFR" and new.public == old.public and new.text == old.text and new.data == old.data
+    assert new.data is not old.data
+    assert "CPF2132" in run(store, "QSECOFR", "CRTDUPOBJ OBJ(CUSTOMERS) FROMLIB(APPLIB) OBJTYPE(*FILE) NEWOBJ(CUST2)")
+    assert "CPF2209" in run(store, "QSECOFR", "CRTDUPOBJ OBJ(CUSTOMERS) FROMLIB(APPLIB) OBJTYPE(*FILE) TOLIB(NOPE)")
+    assert "not valid" in run(store, "QSECOFR", "CRTDUPOBJ OBJ(CUSTOMERS) FROMLIB(APPLIB) OBJTYPE(*FILE) NEWOBJ(1BAD)")
+    assert "CPF2189" in run(store, "STUDENT", "CRTDUPOBJ OBJ(PAYROLL) FROMLIB(APPLIB) OBJTYPE(*FILE) NEWOBJ(P2)")
+    assert "CPF9876" in run(store, "QSECOFR", "CRTDUPOBJ OBJ(CUSTOMERS) FROMLIB(APPLIB) OBJTYPE(*FILE) TOLIB(QSYS)")

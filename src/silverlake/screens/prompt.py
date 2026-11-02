@@ -34,7 +34,7 @@ DONE = (" placed in library ", " created in library ")
 # A command that ran and finished says so in a sentence with no message ID (the wording is ours). One that
 # did not has an ID, or reads "... not found." or "Cannot ...". This is a guess at the difference.
 _FINISHED = re.compile(r"\b(created|deleted|changed|added|removed|granted|revoked|renamed|placed|held|released|"
-                       r"cleared|sent|ended|copied|replaced|overridden|updated|moved)\b", re.I)
+                       r"cleared|sent|ended|copied|duplicated|replaced|overridden|updated|moved)\b", re.I)
 
 
 def _with_overrides(command: str, rows: list) -> list:
@@ -70,6 +70,22 @@ VARIANTS = {"GRTOBJAUT:REF": {
              (11, "Reference ASP device . . . . . . REFASPDEV", "REFASPDEV", 49, 10, "*")]}}
 
 
+# Option 3 on Work with Objects (captured, `auth-copyobj`): CRTDUPOBJ, with the object, its library and the type behind
+# the marker (all three drawn brighter, as the host did) and four fields. The host answered F10 with "Function key not
+# allowed.", and Roll Up with "Already at bottom of area.".
+VARIANTS["CRTDUPOBJ:OPT"] = {
+    "command": "CRTDUPOBJ", "title": ("Create Duplicate Object (CRTDUPOBJ)", 23), "bottom": "       Bottom",
+    "keys": CAPTURED["GRTOBJAUT"]["keys"], "required": ("OBJ", "FROMLIB", "OBJTYPE"),
+    "locked": ("OBJ", "FROMLIB", "OBJTYPE"), "no_f10": True,
+    "rows": [(4, "From object  . . . . . . . . . . OBJ", "OBJ", 49, 10, ""),
+             (5, "From library . . . . . . . . . . FROMLIB", "FROMLIB", 49, 10, ""),
+             (6, "Object type  . . . . . . . . . . OBJTYPE", "OBJTYPE", 49, 7, ""),
+             (7, "To library . . . . . . . . . . . TOLIB", "TOLIB", 49, 10, "*FROMLIB"),
+             (8, "New object . . . . . . . . . . . NEWOBJ", "NEWOBJ", 49, 10, "*OBJ"),
+             (9, "From ASP device  . . . . . . . . ASPDEV", "ASPDEV", 49, 10, "*"),
+             (10, "To ASP device  . . . . . . . . . TOASPDEV", "TOASPDEV", 49, 10, "*ASPDEV")]}
+
+
 def _build() -> dict[str, dict]:
     specs = {}
     for command, spec in {**CAPTURED, **LOCAL, **VARIANTS}.items():
@@ -77,7 +93,7 @@ def _build() -> dict[str, dict]:
         pages += [(_with_overrides(command, rows), bottom) for rows, bottom in spec.get("pages", [])]
         specs[command] = {"title": spec["title"], "pages": pages, "keys": spec["keys"],
                           "required": spec["required"], "note": spec.get("note", ""),
-                          "must": spec.get("must", ()), "locked": spec.get("locked", ()),
+                          "must": spec.get("must", ()), "locked": spec.get("locked", ()), "no_f10": spec.get("no_f10", False),
                           "command": spec.get("command", command)}
         if "more" in spec:                  # F10=Additional parameters: the whole prompt again, and what follows
             specs[command]["more"] = {"keys": spec["more"]["keys"],
@@ -156,6 +172,13 @@ class Prompt:
         values = _defaults(spec, ctx)
         values.update({"OBJ": obj.name, "OBJ@": obj.library, "OBJTYPE": obj.type})
         return cls(ctx, "GRTOBJAUT", {}, values, variant="GRTOBJAUT:REF")
+
+    @classmethod
+    def for_duplicate(cls, ctx: Context, obj) -> "Prompt":
+        """Option 3 on Work with Objects: CRTDUPOBJ for this object, the target still to choose."""
+        values = _defaults(_ALL["CRTDUPOBJ:OPT"], ctx)
+        values.update({"OBJ": obj.name, "FROMLIB": obj.library, "OBJTYPE": obj.type})
+        return cls(ctx, "CRTDUPOBJ", {}, values, variant="CRTDUPOBJ:OPT")
 
     @classmethod
     def refused(cls, ctx: Context, line: str) -> str:
@@ -311,6 +334,8 @@ class Prompt:
         for name in self.values:                                  # what was typed stays when the view changes
             if name in values:
                 self.values[name] = values[name].strip()
+        if aid == "F10" and spec["no_f10"]:                       # captured on the option 3 prompt
+            return Step("Function key not allowed.")
         if aid == "F10" and "more" in spec and not self.extra:    # captured: no check, straight to the view
             self.extra, self.page = True, 0
             return Step()
