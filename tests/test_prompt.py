@@ -333,14 +333,13 @@ def test_f24_swaps_the_key_lines_for_the_one_the_host_showed_and_a_second_turns_
     assert texts(c.handle("F24", {})) == texts(plain)                                              # ours
 
 
-def test_the_keys_on_the_other_line_say_they_are_not_built_and_do_not_run_the_command(store):
+def test_f9_on_the_other_line_says_it_is_not_built_and_does_not_run_the_command(store):
     c = signed(store)
     f4(c, "CRTPF")
     c.handle("F24", {})
-    for key in ("F9", "F11"):                                                # F14 is built, these two are not
-        s = c.handle(key, {"FILE": "NEWF", "SRCMBR": "X"})
-        assert "That key is not built here." in texts(s), key
-        assert inputs(s)["FILE"] == "NEWF"                                   # typed text kept, nothing ran
+    s = c.handle("F9", {"FILE": "NEWF", "SRCMBR": "X"})                      # F11 and F14 are built, F9 is not
+    assert "That key is not built here." in texts(s)
+    assert inputs(s)["FILE"] == "NEWF"                                       # typed text kept, nothing ran
     assert store.find_library("SCRATCH") is not None and not source_exists(store, "NEWF")
 
 
@@ -424,3 +423,46 @@ def test_the_help_text_comes_from_the_capture_with_its_colors(store):
     for row, col, attr, text in HELP["pages"][0]:
         assert drawn[(row, col)] == (attr, text)
     assert len(HELP["pages"]) == 15 and HELP["cursor"] == (1, 1)
+
+
+# -- F11 Choices, from the captured hint columns --------------------------------------------------------------
+def test_f11_moves_the_fields_left_and_adds_the_hints_as_captured(store):
+    c = signed(store)
+    plain = f4(c, "CRTPF")
+    s = c.handle("F11", {})
+    assert at(plain, 4, 49) and at(s, 4, 36) and at(s, 5, 38) and (4, 49) not in {(f.row, f.col) for f in s.fields}
+    assert at(s, 4, 50).text == "Name" and at(s, 5, 50).text == "Name, *CURLIB" and at(s, 10, 50).text == "0-30"
+    assert at(s, 4, 1).text == "File . . . . . . . . . . . . . ." and "FILE" not in texts(s)        # the keyword goes
+    assert [f.text for f in s.fields if f.row == 21][0].startswith("F3=Exit")
+    back = c.handle("F11", {})                                                                     # captured: a toggle
+    assert at(back, 4, 49) and texts(back) == texts(plain)
+
+
+def test_f11_keeps_what_was_typed_and_the_cursor_goes_to_the_first_field(store):
+    c = signed(store)
+    f4(c, "CRTPF")
+    s = c.handle("F11", {"FILE": "NEWF"})
+    assert inputs(s)["FILE"] == "NEWF" and s.cursor == "FILE"
+    assert inputs(c.handle("F11", {}))["FILE"] == "NEWF" and not source_exists(store, "NEWF")
+
+
+def test_f11_follows_f10_into_the_additional_parameters(store):
+    c = signed(store)
+    f4(c, "DSPMSG")
+    c.handle("F11", {})
+    s = c.handle("F10", {})
+    assert any(f.row == 10 and f.col == 36 for f in s.fields) and any(f.col == 50 and f.row == 10 for f in s.fields)
+
+
+def test_f11_on_a_prompt_with_no_captured_hints_or_a_locked_row_says_not_built(store):
+    from silverlake.screens import promptchoices
+    c = signed(store)
+    f4(c, "DSPMSG")
+    saved = promptchoices.CHOICES.pop("DSPMSG", None)
+    try:
+        import silverlake.screens.prompt as pr
+        pr.CHOICES.pop("DSPMSG", None)
+        assert "That key is not built here." in texts(c.handle("F11", {}))
+    finally:
+        if saved is not None:
+            promptchoices.CHOICES["DSPMSG"] = saved

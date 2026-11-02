@@ -5,9 +5,10 @@ What the captures showed, and this follows: the title, the rows, the labels, the
 "Bottom" or "More..." marker and the key lines; required parameters drawn brighter, with "Parameter X required."
 on Enter and on Roll Up while one is empty; F10=Additional parameters (no check first, the whole prompt again
 with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); F13 opening the help (one generic text for every prompt, 15 pages, F3 and F12 back to the prompt); F24 swapping the key lines for the other set (seen on CRTPF only, the same line is used for every prompt, and a second F24 turning it back is ours); Roll Up paging a prompt that is more than one page, and "Already at
-bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). F14 opens Display Command String (captured, `auth-prompt-keys`).
+bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). F14 opens Display Command String (captured, `auth-prompt-keys`) and F11 shows the Choices view (fields moved
+left, a hint beside each, from `promptchoices.py`, captured in `auth-f11-*`).
 Not captured, so ours: how a refused command reads on the prompt, the command string once something is typed, and F9 (All parameters, which shows
-parameters the prompt hides, such as CRTPF's IGCDTA, so it is its own layout) and F11 (Choices), which say they are not built, as does F10
+parameters the prompt hides, such as CRTPF's IGCDTA, so it is its own layout), which says it is not built, as does F10
 on a prompt with no additional parameters or when pressed a second time. CHGSPLFA's F10 view stops at its first page:
 the host will not page it without a spooled file that exists.
 
@@ -25,6 +26,7 @@ from ..cl import parser
 from ..proto import datastream as ds
 from .model import Input, Screen, Text
 from .pdm import Context, Step, _msg
+from .promptchoices import CHOICES
 from .promptspecs import HELP, SPECS as CAPTURED
 
 OVERRIDES = {("CRTDSPF", "SRCFILE"): "QDDSSRC", ("CRTDSPF", "SRCFILE@"): "*LIBL",
@@ -110,6 +112,8 @@ _ALL = _build()
 SPECS: dict[str, dict] = {k: v for k, v in _ALL.items() if k not in VARIANTS}
 
 
+CHOICES_COL, CHOICES_SHIFT = 50, 13        # captured (F11): the hint column, and how far each field moves left
+CHOICES_MORE_SHIFT = 11                    # ...and how far a "+ for more values" line moves (the host put it at column 16)
 MORE_KEYS = "F9=All parameters   F11=Choices   F14=Command string   F24=More keys"
 
 
@@ -161,6 +165,7 @@ class Prompt:
     extra: bool = False                             # F10 pressed: the additional parameters view
     flagged: set = field(default_factory=set)      # fields drawn in reverse image after a refusal
     cursor: str = ""                                # where the cursor goes after one
+    choices: bool = False                           # F11 pressed: every field moved left, a hint beside each
     cmdstring: bool = False                         # F14 pressed: Display Command String is on show
     variant: str = ""                               # a prompt that is not the plain one for its command (VARIANTS)
 
@@ -267,6 +272,15 @@ class Prompt:
             return Step("Wrong cursor position.")
         return Step("That key is not built here.")                # F13 (Information Assistant), F14 (Print help)
 
+    def _hints(self) -> dict[int, str]:
+        """The hint beside each field of the page on show, row by row. Empty when the host was never seen on it."""
+        known = CHOICES.get(self.command, {})
+        return known.get("more" if self.extra else "pages", {}).get(self.page, {})
+
+    def _hints_known(self) -> bool:
+        """F11 works where the hints were captured: this page of this view, or the one the toggle would land on."""
+        return self.choices or bool(self._hints())
+
     def _cmdstring_screen(self, message: str) -> Screen:
         """Captured: Display Command String shows the command as it stands (bare, on every prompt seen), a line to press
         Enter, and its own key line. What it shows once something is typed is ours: the command the fields make."""
@@ -302,8 +316,17 @@ class Prompt:
             return Screen(rows)
         pages, keys = self._view()
         page_rows, marker = pages[self.page]
+        hints = self._hints() if self.choices else {}
         rows.append(Text(2, 1, "Type choices, press Enter.", ds.ATTR_BLUE))
         for row, label, name, fcol, flen, _ in sorted(page_rows, key=lambda r: r[0]):
+            if hints:                                              # captured: the keyword goes, the field moves left
+                if label.lstrip().startswith("+ for more values"):    # a line with no label: it moves left with the field
+                    label = label[CHOICES_MORE_SHIFT:]
+                elif label.strip() != "Additional Parameters":      # (the divider has no keyword to drop)
+                    label = label[:33].rstrip()
+                fcol -= CHOICES_SHIFT
+                if row in hints:
+                    rows.append(Text(row, CHOICES_COL, hints[row], ds.ATTR_GREEN))
             if label:
                 rows.append(Text(row, 1, label, ds.ATTR_GREEN))
             if name in spec["locked"]:                             # captured: a value behind a marker, not a field
@@ -372,6 +395,9 @@ class Prompt:
             return Step("Function key not allowed.")
         if aid == "F10" and "more" in spec and not self.extra:    # captured: no check, straight to the view
             self.extra, self.page = True, 0
+            return Step()
+        if aid == "F11" and not spec["locked"] and self._hints_known():   # captured: a toggle, nothing checked
+            self.choices = not self.choices
             return Step()
         if aid == "F24":                                           # captured on CRTPF; pressing it again is ours
             self.more_keys = not self.more_keys

@@ -166,3 +166,30 @@ def test_the_help_is_read_as_pages_and_the_page_roll_up_repeated_past_the_end_is
     assert got["cursor"] == (1, 1) and len(got["pages"]) == 2
     assert (4, 5, 0x20, "one") in got["pages"][0] and all(run[0] < 23 for page in got["pages"] for run in page)
     assert promptspec.extract_help([{"snapshots": [_prompt()]}]) is None
+
+
+# -- the F11 hint table (`promptchoices.py`, generated from the auth-f11-* captures) ---------------------------------
+def test_every_hint_sits_on_a_row_of_the_page_it_was_matched_to():
+    from silverlake.oracle.promptchoices import _page_keys
+    from silverlake.screens.promptchoices import CHOICES
+    assert len(CHOICES) >= 69
+    for command, kinds in CHOICES.items():
+        pages = {(k, i): {row for row, _ in key} for k, i, key in _page_keys(command)}
+        for kind, by_page in kinds.items():
+            for i, hints in by_page.items():
+                assert hints and set(hints) <= pages[(kind, i)], (command, kind, i)
+
+
+def test_the_extractor_matches_hints_to_a_page_by_its_fields_and_ignores_other_screens():
+    from silverlake.oracle import promptchoices
+    runs = [{"row": 0, "col": 19, "attr": "0x22", "text": "    Delete library (DLTLIB)"},
+            {"row": 4, "col": 50, "attr": "0x20", "text": "Name"},
+            {"row": 5, "col": 50, "attr": "0x20", "text": "Name, *, *CURASPGRP, *SYSBAS"}]
+    fields = [{"row": 4, "length": 10}, {"row": 5, "length": 10}]
+    other = {"runs": [{"row": 0, "col": 1, "attr": "0x20", "text": "MAIN"}], "fields": []}
+    found, problems = promptchoices.extract([{"scenario": "t", "snapshots": [other, {"runs": runs, "fields": fields}]}])
+    assert found == {"DLTLIB": {"pages": {0: {4: "Name", 5: "Name, *, *CURASPGRP, *SYSBAS"}}, "more": {}}} and not problems
+    text = promptchoices.render(found)
+    assert "'DLTLIB'" in text and "'Name'" in text
+    found, problems = promptchoices.extract([{"snapshots": [{"runs": runs, "fields": fields[:1]}]}])
+    assert found == {} and "no page has fields" in problems[0]
