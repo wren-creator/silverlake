@@ -68,7 +68,8 @@
 - [x] Save Screen and Read Immediate replies: worked (help came back). F13 help captured: one generic 15 page text for every prompt (`auth-f13-help`, `auth-f13-helpall`)
 - [x] F13 help drawn on the prompts from the capture (15 pages, F3 and F12 back, Roll Up and Down)
 - [x] Edit Object Authority F11 detail views (Opr, Mgt, Exist, Alter, Ref and Read, Add, Update, Delete, Execute, with X marks) from `auth-edtauth-view`; F6 Add New Users was already built
-- [ ] Edit Object Authority F10 (Grant with reference object): the GRTOBJAUT prompt filled in with `>` markers and the three reference rows, plus REFOBJ support in GRTOBJAUT; and option 3 (copy), captured in `auth-objopts2-retry` and not read yet
+- [x] Edit Object Authority F10 (Grant with reference object): the captured GRTOBJAUT prompt with `>` markers and the reference rows, and REFOBJ support in GRTOBJAUT (ours)
+- [ ] Edit Object Authority option 3 (copy), captured in `auth-objopts2-retry` and not read yet
 - [ ] QP2TERM: the terminal opens and runs commands (send the field text bare), but its output arrives on later screens and overwrites itself, so `echo $PATH` and some lines were never seen; find a way to read it (a longer wait, or reading the screen after the last Enter) before building the PASE verification
 - [ ] F10 on the help with the cursor in the text (the key moves to the top, the capture only has it refused with the cursor in the corner), and retry QP2TERM and F10 on the edit screen, which went quiet the same way
 - [ ] F9, F11 and F14 on a prompt are not captured (say "not built"), and F13 gets no answer the client can read (15 s and 90 s, CRTPF), so it stays "not built" until the client can see what the host sends. Roll Down at the top is confirmed (`Already at top of area.`)

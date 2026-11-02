@@ -637,3 +637,34 @@ def test_grtobjaut_refobj_replace_makes_the_object_match(store):
     run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) REFOBJ(APPLIB/PAYROLL) REPLACE(*YES)")
     tgt, ref = (store.objects[("APPLIB", n, "*FILE")] for n in ("CUSTOMERS", "PAYROLL"))
     assert tgt.private.get("STUDENT") == ref.private.get("STUDENT")
+
+
+# -- F10 on Edit Object Authority: the GRTOBJAUT prompt with a reference object ---------------------------------
+def test_f10_opens_grtobjaut_for_the_object_in_the_captured_layout(store):
+    c, s = _edit(store)
+    s = c.handle("F10", {})
+    f = _field_map(s)
+    assert f[(0, 23)].text == "Grant Object Authority (GRTOBJAUT)" and f[(2, 1)].text == "Type choices, press Enter."
+    assert f[(4, 49)].text == "CUSTOMERS" and f[(4, 45)].text == "  >" and f[(5, 51)].text == "APPLIB"
+    assert f[(6, 49)].text == "*FILE" and f[(7, 49)].text == "*SYSBAS"
+    ins = {(i.row, i.col): i for i in s.inputs()}
+    assert sorted(ins) == [(8, 49), (9, 51), (10, 49), (11, 49)]
+    assert ins[(9, 51)].value == "*LIBL" and ins[(10, 49)].value == "*OBJTYPE" and ins[(11, 49)].value == "*"
+    assert f[(20, 66)].text.strip() == "Bottom" and f[(21, 1)].text.startswith("F3=Exit")
+
+
+def test_f10_prompt_runs_grtobjaut_with_the_reference_and_comes_back(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE) USER(STUDENT) AUT(*USE)")
+    c, s = _edit(store)
+    s = c.handle("F10", {})
+    s = c.handle("ENTER", {})
+    assert "Parameter REFOBJ required." in _text(s)
+    s = c.handle("ENTER", {"REFOBJ": "payroll", "REFOBJ@": "applib"})
+    assert "Edit Object Authority" in _text(s) and "Authority granted." in _text(s)
+    assert store.objects[("APPLIB", "CUSTOMERS", "*FILE")].private["STUDENT"] == Auth.OBJOPR | Auth.READ | Auth.EXECUTE
+
+
+def test_f12_on_the_f10_prompt_goes_back_to_the_edit_screen(store):
+    c, s = _edit(store)
+    c.handle("F10", {})
+    assert "Edit Object Authority" in _text(c.handle("F12", {}))

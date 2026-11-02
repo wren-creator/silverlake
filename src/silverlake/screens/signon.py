@@ -1109,8 +1109,13 @@ class SignonController:
         if aid == "F11":                                          # captured: plain, object rights, data rights, plain...
             ea.detail = (ea.detail + 1) % len(DETAIL_VIEWS)
             return self._draw_view()
-        if aid == "F10":
-            return self._draw_view("F10 is not available in Silverlake yet.")
+        if aid == "F10":                                          # captured: GRTOBJAUT, filled in for this object
+            refused = prompt.Prompt.refused(self._ctx(), "GRTOBJAUT")
+            if refused:
+                return self._draw_view(refused)
+            self.parents.append(self.view)
+            self.view = ("widget", prompt.Prompt.for_grant_reference(self._ctx(), ea.obj))
+            return self._draw_view()
         if aid == "F5":
             return self._draw_view()
         return self._draw_view(self._apply_edits(ea, values))

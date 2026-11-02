@@ -52,13 +52,33 @@ LOCAL = {"CRTLIB": {
              (6, "Text 'description' . . . . . . . TEXT", "TEXT", 49, 50, "*BLANK")]}}
 
 
+# F10 on Edit Object Authority (captured, `auth-objopts2` retry): the GRTOBJAUT prompt already filled in for the
+# object. The rows the edit screen knows (object, library, type, ASP device) are not fields but a value behind a
+# "  >" marker, and the reference object's four rows follow. Same title and key lines as the plain prompt.
+# REFOBJ is not drawn as required (the host's field was not), but Enter without it says it is (ours).
+VARIANTS = {"GRTOBJAUT:REF": {
+    "command": "GRTOBJAUT", "title": CAPTURED["GRTOBJAUT"]["title"], "bottom": "       Bottom",
+    "keys": CAPTURED["GRTOBJAUT"]["keys"], "required": ("OBJ", "OBJTYPE"), "must": ("REFOBJ",),
+    "locked": ("OBJ", "OBJ@", "OBJTYPE", "ASPDEV"),
+    "rows": [(4, "Object . . . . . . . . . . . . . OBJ", "OBJ", 49, 10, ""),
+             (5, "  Library  . . . . . . . . . . .", "OBJ@", 51, 10, "*LIBL"),
+             (6, "Object type  . . . . . . . . . . OBJTYPE", "OBJTYPE", 49, 7, ""),
+             (7, "ASP device . . . . . . . . . . . ASPDEV", "ASPDEV", 49, 10, "*SYSBAS"),
+             (8, "Reference object . . . . . . . . REFOBJ", "REFOBJ", 49, 10, ""),
+             (9, "  Library  . . . . . . . . . . .", "REFOBJ@", 51, 10, "*LIBL"),
+             (10, "Reference object type  . . . . . REFOBJTYPE", "REFOBJTYPE", 49, 8, "*OBJTYPE"),
+             (11, "Reference ASP device . . . . . . REFASPDEV", "REFASPDEV", 49, 10, "*")]}}
+
+
 def _build() -> dict[str, dict]:
     specs = {}
-    for command, spec in {**CAPTURED, **LOCAL}.items():
+    for command, spec in {**CAPTURED, **LOCAL, **VARIANTS}.items():
         pages = [(_with_overrides(command, spec["rows"]), spec["bottom"])]
         pages += [(_with_overrides(command, rows), bottom) for rows, bottom in spec.get("pages", [])]
         specs[command] = {"title": spec["title"], "pages": pages, "keys": spec["keys"],
-                          "required": spec["required"], "note": spec.get("note", "")}
+                          "required": spec["required"], "note": spec.get("note", ""),
+                          "must": spec.get("must", ()), "locked": spec.get("locked", ()),
+                          "command": spec.get("command", command)}
         if "more" in spec:                  # F10=Additional parameters: the whole prompt again, and what follows
             specs[command]["more"] = {"keys": spec["more"]["keys"],
                                       "pages": [(_with_overrides(command, rows), bottom)
@@ -68,7 +88,8 @@ def _build() -> dict[str, dict]:
     return specs
 
 
-SPECS: dict[str, dict] = _build()
+_ALL = _build()
+SPECS: dict[str, dict] = {k: v for k, v in _ALL.items() if k not in VARIANTS}
 
 
 MORE_KEYS = "F9=All parameters   F11=Choices   F14=Command string   F24=More keys"
@@ -122,6 +143,19 @@ class Prompt:
     extra: bool = False                             # F10 pressed: the additional parameters view
     flagged: set = field(default_factory=set)      # fields drawn in reverse image after a refusal
     cursor: str = ""                                # where the cursor goes after one
+    variant: str = ""                               # a prompt that is not the plain one for its command (VARIANTS)
+
+    @property
+    def spec(self) -> dict:
+        return _ALL[self.variant or self.command]
+
+    @classmethod
+    def for_grant_reference(cls, ctx: Context, obj) -> "Prompt":
+        """F10 on Edit Object Authority: GRTOBJAUT for this object, the reference object still to name."""
+        spec = _ALL["GRTOBJAUT:REF"]
+        values = _defaults(spec, ctx)
+        values.update({"OBJ": obj.name, "OBJ@": obj.library, "OBJTYPE": obj.type})
+        return cls(ctx, "GRTOBJAUT", {}, values, variant="GRTOBJAUT:REF")
 
     @classmethod
     def refused(cls, ctx: Context, line: str) -> str:
@@ -172,7 +206,7 @@ class Prompt:
 
     def _view(self) -> tuple[list, tuple]:
         """The pages and key lines on show: the plain prompt, or what F10 asks for."""
-        spec = SPECS[self.command]
+        spec = self.spec
         return (spec["more"]["pages"], spec["more"]["keys"]) if self.extra else (spec["pages"], spec["keys"])
 
     # -- drawing -----------------------------------------------------------------------------------------
@@ -210,7 +244,7 @@ class Prompt:
     def screen(self, message: str = "") -> Screen:
         if self.help_page is not None:
             return self._help_screen(message)
-        spec = SPECS[self.command]
+        spec = self.spec
         title, col = spec["title"]
         rows: list = [Text(0, col, title, ds.ATTR_WHITE)]
         if spec["note"]:                                           # CHGPWD: nothing to prompt for
@@ -223,7 +257,10 @@ class Prompt:
         for row, label, name, fcol, flen, _ in sorted(page_rows, key=lambda r: r[0]):
             if label:
                 rows.append(Text(row, 1, label, ds.ATTR_GREEN))
-            if name:
+            if name in spec["locked"]:                             # captured: a value behind a marker, not a field
+                attr = ds.ATTR_WHITE if name in spec["required"] else ds.ATTR_GREEN
+                rows += [Text(row, 45, "  >", ds.ATTR_GREEN), Text(row, fcol, self.values.get(name, ""), attr)]
+            elif name:
                 rows.append(Input(row, fcol, flen, name, value=self.values.get(name, ""),
                                   required=name in spec["required"], error=name in self.flagged))
         rows.append(Text(20, 79 - len(marker), marker, ds.ATTR_WHITE))
@@ -231,14 +268,16 @@ class Prompt:
             keys = (MORE_KEYS,)
         rows += [Text(21 + i, 1, line, ds.ATTR_BLUE) for i, line in enumerate(keys)]
         _msg(rows, message)
-        first = next(name for _, _, name, _, _, _ in sorted(page_rows, key=lambda r: r[0]) if name)
+        first = next(name for _, _, name, _, _, _ in sorted(page_rows, key=lambda r: r[0])
+                     if name and name not in spec["locked"])
         return Screen(rows, cursor=self.cursor or first)
 
     # -- keys --------------------------------------------------------------------------------------------
 
     def _missing(self) -> list[str]:
         """The parameters the host will not run without that are still empty, in the order of the prompt."""
-        return [n for n in SPECS[self.command]["required"] if not self.values.get(n)]
+        spec = self.spec
+        return [n for n in (*spec["required"], *spec["must"]) if not self.values.get(n)]
 
     def _refuse(self, missing: list[str]) -> Step:
         """Captured on every required parameter left empty: "Parameter X required." for the first, every field of
@@ -252,7 +291,7 @@ class Prompt:
         return Step(f"Parameter {first} required.")
 
     def handle(self, aid: str, values: dict[str, str]) -> Step:
-        spec = SPECS[self.command]
+        spec = self.spec
         self.flagged, self.cursor = set(), ""
         if self.help_page is not None:
             return self._help_key(aid)
@@ -309,7 +348,7 @@ class Prompt:
     def _line(self) -> str:
         """The command line these fields make. Only what is not the default goes in, so the job log reads like
         something a person would type. A required parameter always goes in."""
-        spec = SPECS[self.command]
+        spec = self.spec
         defaults = _defaults(spec, self.ctx)
         required = set(spec["required"])
         parts = []
