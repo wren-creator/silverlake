@@ -337,9 +337,10 @@ def test_the_keys_on_the_other_line_say_they_are_not_built_and_do_not_run_the_co
     c = signed(store)
     f4(c, "CRTPF")
     c.handle("F24", {})
-    s = c.handle("F11", {"FILE": "NEWF", "SRCMBR": "X"})                  # F9 and F14 are built, F11 is not
-    assert "That key is not built here." in texts(s)
-    assert inputs(s)["FILE"] == "NEWF"                                       # typed text kept, nothing ran
+    for key in ("F9", "F11"):                                                # F14 is built, these two are not
+        s = c.handle(key, {"FILE": "NEWF", "SRCMBR": "X"})
+        assert "That key is not built here." in texts(s), key
+        assert inputs(s)["FILE"] == "NEWF"                                   # typed text kept, nothing ran
     assert store.find_library("SCRATCH") is not None and not source_exists(store, "NEWF")
 
 
@@ -354,17 +355,6 @@ def test_f14_shows_the_command_string_as_captured_and_f12_or_enter_goes_back(sto
     assert "CRTPF FILE(NEWF)" in texts(c.handle("F5", {}))                   # ours: the command the fields make
     s = c.handle("ENTER", {})
     assert "Create Physical File (CRTPF)" in texts(s) and inputs(s)["FILE"] == "NEWF" and not source_exists(store, "NEWF")
-
-
-def test_f9_draws_the_same_view_as_f10_on_a_prompt_that_has_one(store):
-    c = signed(store)
-    f4(c, "CRTPF")
-    nine = c.handle("F9", {})
-    c2 = signed(store)
-    f4(c2, "CRTPF")
-    ten = c2.handle("F10", {})
-    assert texts(nine) == texts(ten) and inputs(nine) == inputs(ten)
-    assert any("Additional Parameters" in t for t in texts(nine)) and "F10=Additional parameters" not in " ".join(texts(nine))
 
 
 def source_exists(store, name):

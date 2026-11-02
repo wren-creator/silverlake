@@ -5,8 +5,9 @@ What the captures showed, and this follows: the title, the rows, the labels, the
 "Bottom" or "More..." marker and the key lines; required parameters drawn brighter, with "Parameter X required."
 on Enter and on Roll Up while one is empty; F10=Additional parameters (no check first, the whole prompt again
 with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); F13 opening the help (one generic text for every prompt, 15 pages, F3 and F12 back to the prompt); F24 swapping the key lines for the other set (seen on CRTPF only, the same line is used for every prompt, and a second F24 turning it back is ours); Roll Up paging a prompt that is more than one page, and "Already at
-bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). F9 (All parameters) draws the same view as F10 and F14 opens Display Command String (both captured, `auth-prompt-keys`).
-Not captured, so ours: how a refused command reads on the prompt, what F9 does on a prompt with no additional parameters and the command string once something is typed, and F11 (Choices), which says it is not built, as does F10
+bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). F14 opens Display Command String (captured, `auth-prompt-keys`).
+Not captured, so ours: how a refused command reads on the prompt, the command string once something is typed, and F9 (All parameters, which shows
+parameters the prompt hides, such as CRTPF's IGCDTA, so it is its own layout) and F11 (Choices), which say they are not built, as does F10
 on a prompt with no additional parameters or when pressed a second time. CHGSPLFA's F10 view stops at its first page:
 the host will not page it without a spooled file that exists.
 
@@ -369,8 +370,8 @@ class Prompt:
                 self.values[name] = values[name].strip()
         if aid == "F10" and spec["no_f10"]:                       # captured on the option 3 prompt
             return Step("Function key not allowed.")
-        if aid in ("F9", "F10") and "more" in spec and not self.extra:    # captured: no check, straight to the view
-            self.extra, self.page = True, 0                       # (F9, All parameters, drew the same view as F10)
+        if aid == "F10" and "more" in spec and not self.extra:    # captured: no check, straight to the view
+            self.extra, self.page = True, 0
             return Step()
         if aid == "F24":                                           # captured on CRTPF; pressing it again is ours
             self.more_keys = not self.more_keys
