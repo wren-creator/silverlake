@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13")):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13", "auth-edtauth-")):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -867,3 +867,13 @@ def test_the_raw_pase_scenario_runs_the_same_read_only_commands_as_the_plain_one
     raw = [a["fill"]["0"] for a in scenario.SCENARIOS["auth-qp2term-raw"] if "fill" in a and "1" not in a["fill"]]
     assert plain == raw and all(a["key"] in ("ENTER", "F3") for a in scenario.SCENARIOS["auth-qp2term-raw"])
     assert [a["fill"]["0"] for a in scenario.SCENARIOS["auth-qp2term-raw"] if a.get("raw") and "fill" in a] == plain[1:-1]
+
+
+def test_the_edit_authority_view_scenario_only_presses_f11_and_leaves_with_f12_and_f3():
+    actions = scenario.SCENARIOS["auth-edtauth-view"]
+    assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+    typed = [a["fill"]["0"].split()[0] for a in actions[1:-1] if "fill" in a]
+    assert typed == ["CRTDTAARA", "WRKOBJ", "2"]                       # a job-local data area, the list, option 2
+    assert [a["key"] for a in actions if a["key"] == "F11"] == ["F11"] * 4
+    assert all(a["key"] in ("ENTER", "F11", "F12", "F3") for a in actions)
+    assert all("QTEMP" in a["fill"]["0"] for a in actions if "fill" in a and a["fill"]["0"].startswith("CRTDTAARA"))

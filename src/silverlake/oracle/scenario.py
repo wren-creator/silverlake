@@ -462,6 +462,21 @@ AUTHENTICATED["auth-qp2term-raw"] = [
     {"key": "F3", "always": True}, {"key": "F3", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Edit Object Authority's F11 on the same kind of throwaway job-local data area as auth-objopts2: the first run of that
+# got to F11 once and showed the object rights (Opr, Mgt, Exist, Alter, Ref) with the key line turning into
+# "F11=Display data authorities". This presses F11 four times to see where it goes from there and whether it cycles,
+# then backs out. Nothing is typed on the screen and Enter is never pressed on it, so no authority changes.
+AUTHENTICATED["auth-edtauth-view"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTDTAARA DTAARA({_QT}) TYPE(*CHAR) LEN(10) TEXT('Silverlake oracle test, job-local')"},
+     "key": "ENTER", "proceed_if": _MADE},
+    {"fill": {"0": f"WRKOBJ OBJ({_QT}) OBJTYPE(*DTAARA)"}, "key": "ENTER", **_LIST},
+    _optkey("2", **_LIST),
+    *[{"key": "F11", "proceed_if": [_TESTLIB]}] * 4,
+    {"key": "F12", "always": True}, {"key": "F12", "always": True},
+    *[{"key": "F3", "always": True}] * 3,
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host
