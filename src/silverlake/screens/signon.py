@@ -21,13 +21,13 @@ from datetime import datetime
 from ..cl import commands
 from ..proto import datastream as ds
 from ..system import admin, autls, jobctl, menus, messages, msgq, objects, profiles, rpg, spool
-from ..system.authority import ALL, CHANGE, EXCLUDE
+from ..system.authority import ALL, CHANGE, EXCLUDE, Auth
 from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, wrklib_screen
-from .worklists import (EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
+from .worklists import (DETAIL_VIEWS, EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
                         WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from . import jobextra, pdm, pfm, prompt
 from . import pase as paseui
@@ -1106,8 +1106,11 @@ class SignonController:
             self.parents.append(self.view)
             self.view = ("add", ea, {})
             return self._draw_view()
-        if aid in ("F10", "F11"):
-            return self._draw_view(f"{aid} is not available in Silverlake yet.")
+        if aid == "F11":                                          # captured: plain, object rights, data rights, plain...
+            ea.detail = (ea.detail + 1) % len(DETAIL_VIEWS)
+            return self._draw_view()
+        if aid == "F10":
+            return self._draw_view("F10 is not available in Silverlake yet.")
         if aid == "F5":
             return self._draw_view()
         return self._draw_view(self._apply_edits(ea, values))
@@ -1119,10 +1122,32 @@ class SignonController:
         obj, store, who = ea.obj, self.store, self.profile
         ref = f"{obj.library}/{obj.name}"
         changed = False
-        for i, (user, current) in enumerate(ea.shown()):
-            if f"auth{i}" not in values:
+        cols = DETAIL_VIEWS[ea.detail].get("cols", [])
+        for i, ((user, current), (_, held)) in enumerate(zip(ea.shown(), ea.shown_rights())):
+            if f"auth{i}" not in values and not any(f"x{i}_{j}" in values for j in range(len(cols))):
                 continue
-            typed = values[f"auth{i}"].strip().upper()
+            typed = values.get(f"auth{i}", current).strip().upper()
+            if typed == current and cols and held is not None:
+                # Ours, the host's answer to a typed X was not captured: the marks on the row become exactly the
+                # rights of that view, and the rights of the other views are left alone.
+                marks = Auth.NONE
+                for j, (_, _, _, right) in enumerate(cols):
+                    if values.get(f"x{i}_{j}", "").strip():
+                        marks |= right
+                inview = Auth.NONE
+                for _, _, _, right in cols:
+                    inview |= right
+                want = (held & ~inview) | marks
+                if want == held:
+                    continue
+                if want == Auth.NONE and user not in ("*PUBLIC", obj.owner):
+                    done = objects.revoke(store, who, ref, obj.type, self.session, [user], ALL, "*NONE")
+                else:
+                    done = objects.grant(store, who, ref, obj.type, self.session, [user], want, "*NONE", True)
+                if not done.ok:
+                    return done.message.text
+                changed = True
+                continue
             if typed == current:
                 continue
             if not typed:

@@ -865,24 +865,61 @@ def confirm_delete_screen(picks: list) -> Screen:
     return Screen(rows)
 
 
+# F11 on Edit Object Authority goes round three views (captured, `auth-edtauth-view`): the plain one, the object
+# rights (Opr, Mgt, Exist, Alter, Ref) and the data rights (Read, Add, Update, Delete, Execute), each right an X in
+# a one character field that can be typed over. Per view: the heading over the columns, then each column as
+# (title, title column, X column, the right it stands for), and where the key lines sit.
+def _detail_views() -> list[dict]:
+    from ..system.authority import Auth
+    return [
+        {},
+        {"head": "----------Object-----------", "cols": [("Opr", 36, 37, Auth.OBJOPR), ("Mgt", 41, 42, Auth.OBJMGT),
+                                                         ("Exist", 46, 48, Auth.OBJEXIST), ("Alter", 53, 55, Auth.OBJALTER),
+                                                         ("Ref", 60, 61, Auth.OBJREF)],
+         "keys": [(21, 1, "F3=Exit"), (21, 11, "F5=Refresh"), (21, 24, "F6=Add new users"),
+                  (21, 45, "F10=Grant with reference object"), (22, 1, "F11=Display data authorities"),
+                  (22, 32, "F12=Cancel"), (22, 45, "F17=Top"), (22, 55, "F18=Bottom")]},
+        {"head": "---------------Data---------------", "cols": [("Read", 36, 37, Auth.READ), ("Add", 42, 43, Auth.ADD),
+                                                                ("Update", 47, 49, Auth.UPD), ("Delete", 55, 57, Auth.DLT),
+                                                                ("Execute", 63, 66, Auth.EXECUTE)],
+         "keys": [(21, 1, "F3=Exit"), (21, 11, "F5=Refresh"), (21, 25, "F6=Add new users"),
+                  (21, 44, "F10=Grant with reference object"), (22, 1, "F11=Nondisplay detail"),
+                  (22, 25, "F12=Cancel"), (22, 44, "F17=Top"), (22, 54, "F18=Bottom")]},
+    ]
+
+
+DETAIL_VIEWS = _detail_views()
+PLAIN_KEYS = [(21, 1, "F3=Exit"), (21, 11, "F5=Refresh"), (21, 24, "F6=Add new users"),
+              (21, 43, "F10=Grant with reference object"), (22, 1, "F11=Display detail object authorities"),
+              (22, 43, "F12=Cancel"), (22, 56, "F17=Top"), (22, 66, "F18=Bottom")]
+
+
 @dataclass
 class EditAuth:
     """State of one Edit Object Authority display."""
     obj: object
     page: int = 0
     per_page: int = 8
+    detail: int = 0          # which of the three views F11 has reached: 0 plain, 1 object rights, 2 data rights
+
+    def rights(self) -> list[tuple[str, object]]:
+        """User and the rights behind each row (None is *AUTL), in the order the display lists them."""
+        o = self.obj
+        return [("*PUBLIC", o.public), (o.owner, o.owner_auth)] + sorted(o.private.items())
 
     def rows(self) -> list[tuple[str, str]]:
-        from ..system.authority import SPECIAL_VALUES, Auth, name_auth
+        from ..system.authority import SPECIAL_VALUES, name_auth
 
         def show(a):
             if a is None:
                 return "*AUTL"
             text = name_auth(a)
             return text if a in SPECIAL_VALUES.values() else "USER DEF"
-        o = self.obj
-        out = [("*PUBLIC", show(o.public)), (o.owner, show(o.owner_auth))]
-        return out + [(u, show(a)) for u, a in sorted(o.private.items())]
+        return [(u, show(a)) for u, a in self.rights()]
+
+    def shown_rights(self) -> list[tuple[str, object]]:
+        self.page = max(0, min(self.page, self.pages - 1))
+        return self.rights()[self.page * self.per_page:(self.page + 1) * self.per_page]
 
     @property
     def pages(self) -> int:
@@ -909,15 +946,19 @@ class EditAuth:
             Text(11, 1, "User", ds.ATTR_WHITE), Text(11, 13, "Group", ds.ATTR_WHITE),
             Text(11, 25, "Authority", ds.ATTR_WHITE),
         ]
-        for i, (user, auth) in enumerate(self.shown()):
+        view = DETAIL_VIEWS[self.detail]
+        if view:
+            rows += [Text(10, 36, view["head"], ds.ATTR_WHITE)]
+            rows += [Text(11, col, title, ds.ATTR_WHITE) for title, col, _, _ in view["cols"]]
+        for i, ((user, auth), (_, held)) in enumerate(zip(self.shown(), self.shown_rights())):
             r = 12 + i
             rows += [Text(r, 1, user, ds.ATTR_GREEN),
                      Input(r, 25, 8, f"auth{i}", monocase=True, value=auth)]
+            for j, (_, _, xcol, right) in enumerate(view.get("cols", [])):
+                on = held is not None and right in held
+                rows.append(Input(r, xcol, 1, f"x{i}_{j}", monocase=True, value="X" if on else ""))
         rows.append(Text(20, 72 if self.page < self.pages - 1 else 73, "More..." if self.page < self.pages - 1 else "Bottom", ds.ATTR_WHITE))
-        rows += [Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F5=Refresh", ds.ATTR_BLUE),
-                 Text(21, 24, "F6=Add new users", ds.ATTR_BLUE), Text(21, 43, "F10=Grant with reference object", ds.ATTR_BLUE),
-                 Text(22, 1, "F11=Display detail object authorities", ds.ATTR_BLUE), Text(22, 43, "F12=Cancel", ds.ATTR_BLUE),
-                 Text(22, 56, "F17=Top", ds.ATTR_BLUE), Text(22, 66, "F18=Bottom", ds.ATTR_BLUE)]
+        rows += [Text(row, col, text, ds.ATTR_BLUE) for row, col, text in (view.get("keys") or PLAIN_KEYS)]
         rows.append(Text(23, 1, message[:77] if message else "SILVERLAKE SIMULATION. NOT IBM.", ds.ATTR_WHITE))
         return Screen(rows, cursor="autl")
 

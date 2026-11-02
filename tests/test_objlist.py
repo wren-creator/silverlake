@@ -377,6 +377,85 @@ def test_edit_authority_applies_what_is_typed_and_blank_removes_a_user(store):
     assert store.objects[("APPLIB", "CUSTOMERS", "*FILE")].autl is None
 
 
+def _edit(store, user="QSECOFR"):
+    c = _signed(store, user)
+    c.handle("ENTER", {"command": "wrkobj applib/customers *file"})
+    return c, c.handle("ENTER", {"opt0": "2"})
+
+
+def test_f11_goes_round_plain_object_data_plain_as_captured(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*USE)")
+    c, s = _edit(store)
+    assert _field_map(s)[(22, 1)].text == "F11=Display detail object authorities"
+    s = c.handle("F11", {})
+    f = _field_map(s)
+    assert f[(10, 36)].text == "----------Object-----------" and f[(11, 36)].text == "Opr" and f[(11, 60)].text == "Ref"
+    assert f[(22, 1)].text == "F11=Display data authorities" and f[(21, 45)].text == "F10=Grant with reference object"
+    ins = {(i.row, i.col): i for i in s.inputs()}
+    assert all((12, col) in ins and ins[(12, col)].length == 1 for col in (37, 42, 48, 55, 61))
+    s = c.handle("F11", {})
+    f = _field_map(s)
+    assert f[(10, 36)].text == "---------------Data---------------" and f[(11, 63)].text == "Execute"
+    assert f[(22, 1)].text == "F11=Nondisplay detail" and f[(22, 25)].text == "F12=Cancel"
+    s = c.handle("F11", {})
+    assert _field_map(s)[(22, 1)].text == "F11=Display detail object authorities" and (10, 36) not in _field_map(s)
+    s = c.handle("F11", {})
+    assert (10, 36) in _field_map(s)
+
+
+def test_the_detail_views_mark_the_rights_a_user_holds(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*OBJOPR *READ)")
+    c, s = _edit(store)
+    rows = [r for r, _ in c.view[1].rows()]
+    i = rows.index("STUDENT")
+    s = c.handle("F11", {})
+    ins = {(i2.row, i2.col): i2 for i2 in s.inputs()}
+    assert ins[(12 + i, 37)].value == "X" and ins[(12 + i, 42)].value == ""
+    s = c.handle("F11", {})
+    ins = {(i2.row, i2.col): i2 for i2 in s.inputs()}
+    assert ins[(12 + i, 37)].value == "X" and ins[(12 + i, 43)].value == ""
+
+
+def test_typing_an_x_in_a_detail_view_changes_only_that_views_rights(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*OBJOPR *READ)")
+    c, s = _edit(store)
+    obj = store.objects[("APPLIB", "CUSTOMERS", "*FILE")]
+    i = [r for r, _ in c.view[1].rows()].index("STUDENT")
+    c.handle("F11", {})                                              # object rights: Opr, Mgt, Exist, Alter, Ref
+    c.handle("ENTER", {f"x{i}_0": "", f"x{i}_3": "X"})               # drop Opr, add Alter
+    held = obj.private["STUDENT"]
+    assert Auth.OBJALTER in held and Auth.OBJOPR not in held and Auth.READ in held
+    c.handle("F11", {})                                              # data rights
+    c.handle("ENTER", {f"x{i}_0": "", f"x{i}_1": "X"})               # drop Read, add Add
+    held = obj.private["STUDENT"]
+    assert Auth.ADD in held and Auth.READ not in held and Auth.OBJALTER in held
+    c.handle("ENTER", {f"x{i}_1": ""})                               # nothing left in this view
+    assert Auth.ADD not in obj.private["STUDENT"] and Auth.OBJALTER in obj.private["STUDENT"]
+
+
+def test_clearing_every_x_of_a_private_user_revokes_and_of_public_excludes(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*READ)")
+    c, s = _edit(store)
+    obj = store.objects[("APPLIB", "CUSTOMERS", "*FILE")]
+    rows = [r for r, _ in c.view[1].rows()]
+    i = rows.index("STUDENT")
+    c.handle("F11", {})
+    c.handle("F11", {})                                              # data view
+    c.handle("ENTER", {f"x{i}_0": ""})
+    assert "STUDENT" not in obj.private
+    c.handle("ENTER", {"x0_0": "", "x0_1": "", "x0_2": "", "x0_3": "", "x0_4": ""})
+    assert obj.public == Auth.NONE or not (obj.public & (Auth.READ | Auth.ADD | Auth.UPD | Auth.DLT | Auth.EXECUTE))
+
+
+def test_f5_and_f12_still_work_in_a_detail_view(store):
+    c, s = _edit(store)
+    c.handle("F11", {})
+    s = c.handle("F5", {})
+    assert (10, 36) in _field_map(s)
+    s = c.handle("F12", {})
+    assert "Work with Objects" in _text(s)
+
+
 def test_edit_authority_is_refused_without_object_management_in_the_captured_words(store):
     assert run(store, "STUDENT", "EDTOBJAUT APPLIB/CUSTOMERS *FILE") == "CPF22B8 - Not authorized to change authorities."
     c = _signed(store, "STUDENT")
