@@ -286,6 +286,21 @@ AUTHENTICATED["auth-objopts2"] = [
     *[{"key": "F3", "always": True}] * 3,
     {**_SIGNOFF, "always": True},
 ]
+# Option 3 (Copy) on Work with Objects, which the objopts2 retry never reached (its "3" went to the main menu). A
+# job-local data area in QTEMP (gone at sign-off, the same write as auth-objopts) is listed, option 3 is pressed, and
+# whatever comes up is rolled once, then F10 and F12 pressed on it and left with F12 and F3. Enter is never pressed
+# after the option, so nothing is copied.
+AUTHENTICATED["auth-copyobj"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTDTAARA DTAARA({_QT}) TYPE(*CHAR) LEN(10) TEXT('Silverlake oracle test, job-local')"},
+     "key": "ENTER", "proceed_if": _MADE},
+    {"fill": {"0": f"WRKOBJ OBJ({_QT}) OBJTYPE(*DTAARA)"}, "key": "ENTER", **_LIST},
+    _optkey("3", **_LIST),
+    {"key": "ROLLUP", "always": True}, {"key": "F10", "always": True}, {"key": "F12", "always": True},
+    *[{"key": "F12", "always": True}] * 2,
+    *[{"key": "F3", "always": True}] * 3,
+    {**_SIGNOFF, "always": True},
+]
 # An authorization list nobody here owns, looked at through the edit screen and left with F12.
 AUTHENTICATED["auth-edtautl"] = [
     _SIGNON, {"fill": {"0": "EDTAUTL AUTL(QPWFSERVER)"}, "key": "ENTER"},
