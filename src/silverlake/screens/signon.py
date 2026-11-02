@@ -689,7 +689,9 @@ class SignonController:
             if refused:
                 return self._draw_view(refused)
             lib, name = qualified.split("/")
-            obj = self.store.objects[(lib, name, typ)]
+            obj = self.store.objects.get((lib, name, typ))
+            if obj is None:
+                return self._draw_view(f"Object {name} in {lib} type {typ} not found.")
             self.parents.append(self.view)
             self.view = ("widget", prompt.Prompt.for_duplicate(self._ctx(), obj))
             return self._draw_view()
@@ -1146,7 +1148,7 @@ class SignonController:
             if f"auth{i}" not in values and not any(f"x{i}_{j}" in values for j in range(len(cols))):
                 continue
             typed = values.get(f"auth{i}", current).strip().upper()
-            if typed == current and cols and held is not None:
+            if typed == current and cols:
                 # Ours, the host's answer to a typed X was not captured: the marks on the row become exactly the
                 # rights of that view, and the rights of the other views are left alone.
                 marks = Auth.NONE
@@ -1156,16 +1158,18 @@ class SignonController:
                 inview = Auth.NONE
                 for _, _, _, right in cols:
                     inview |= right
-                want = (held & ~inview) | marks
-                if want == held:
-                    continue
-                if want == Auth.NONE and user not in ("*PUBLIC", obj.owner):
-                    done = objects.revoke(store, who, ref, obj.type, self.session, [user], ALL, "*NONE")
-                else:
-                    done = objects.grant(store, who, ref, obj.type, self.session, [user], want, "*NONE", True)
-                if not done.ok:
-                    return done.message.text
-                changed = True
+                base = Auth.NONE if held is None else held            # *PUBLIC on *AUTL shows no marks
+                added, removed = marks & ~base, (base & inview) & ~marks
+                # Only the difference goes through the rules, so keeping *OBJMGT on a row (which only the owner may
+                # hand out) is never asked for again just because another right changed.
+                for run, aut in ((objects.grant, added), (objects.revoke, removed)):
+                    if not aut:
+                        continue
+                    args = ([user], aut, "*NONE", False) if run is objects.grant else ([user], aut, "*NONE")
+                    done = run(store, who, ref, obj.type, self.session, *args)
+                    if not done.ok:
+                        return done.message.text
+                    changed = True
                 continue
             if typed == current:
                 continue

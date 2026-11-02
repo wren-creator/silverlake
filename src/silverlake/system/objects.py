@@ -337,18 +337,17 @@ def grant_from_reference(store: ProfileStore, actor: Profile, qualified: str, ty
     if obj is ref:
         return _ok("Authority granted.")
     privileged = _allobj(store, actor) or actor.name == obj.owner
-    shared = {**ref.private, ref.owner: ref.owner_auth}
+    # Ownership is not an authority entry, so neither owner's *ALL travels; and the object's own owner keeps theirs.
+    shared = {who: a for who, a in ref.private.items() if who != obj.owner}
     if not privileged and any(a is not None and Auth.OBJMGT in a for a in shared.values()):
         return _no(messages.not_authorized_to_give(*key))
     if replace:
         obj.private.clear()
-    obj.autl = ref.autl
+    if ref.autl or replace:                                   # REPLACE(*NO) never drops a list the object already has
+        obj.autl = ref.autl
     obj.public = ref.public if replace or ref.public is None or obj.public is None else _merge(obj.public, ref.public, False)
     for who, a in shared.items():
-        if who == obj.owner:
-            obj.owner_auth = _merge(obj.owner_auth, a, replace)
-        else:
-            obj.private[who] = _merge(obj.private.get(who), a, replace)
+        obj.private[who] = _merge(obj.private.get(who), a, replace)
     store.on_change()
     return _ok("Authority granted.")
 

@@ -705,3 +705,63 @@ def test_crtdupobj_rules(store):
     assert "not valid" in run(store, "QSECOFR", "CRTDUPOBJ OBJ(CUSTOMERS) FROMLIB(APPLIB) OBJTYPE(*FILE) NEWOBJ(1BAD)")
     assert "CPF2189" in run(store, "STUDENT", "CRTDUPOBJ OBJ(PAYROLL) FROMLIB(APPLIB) OBJTYPE(*FILE) NEWOBJ(P2)")
     assert "CPF9876" in run(store, "QSECOFR", "CRTDUPOBJ OBJ(CUSTOMERS) FROMLIB(APPLIB) OBJTYPE(*FILE) TOLIB(QSYS)")
+
+
+# -- review fixes (found by a second model reading the six commits) --------------------------------------------
+def test_refobj_leaves_the_targets_owner_and_list_alone_and_does_not_copy_the_references_owner(store):
+    tgt, ref = (store.objects[("APPLIB", n, "*FILE")] for n in ("CUSTOMERS", "PAYROLL"))
+    ref.private["DEVELOPER"] = Auth.OBJOPR | Auth.READ
+    ref.private["QSECOFR"] = Auth.READ               # an entry for the target's owner must not shrink the owner's rights
+    ref.autl = None
+    tgt.autl = "PAYAUTL"
+    before_owner = tgt.owner_auth
+    for line in ("", " REPLACE(*YES)"):
+        out = run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) REFOBJ(APPLIB/PAYROLL)" + line)
+        assert "Authority granted." in out and (Auth.OBJOPR | Auth.READ) in tgt.private["DEVELOPER"]
+        assert (tgt.private["DEVELOPER"] == Auth.OBJOPR | Auth.READ) == bool(line)      # REPLACE(*YES) makes it match
+        assert tgt.owner_auth == before_owner
+        if not line:
+            assert tgt.autl == "PAYAUTL"                       # REPLACE(*NO) keeps a list the object already has
+
+
+def test_refobj_by_someone_who_may_not_hand_out_objmgt_is_refused_when_the_reference_carries_it(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*OBJMGT *OBJOPR)")
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE) USER(STUDENT) AUT(*OBJMGT *OBJOPR)")
+    assert "CPF2223" in run(store, "STUDENT", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) REFOBJ(APPLIB/PAYROLL)")
+
+
+def test_a_detail_view_edit_by_someone_who_may_not_hand_out_objmgt_still_works_on_other_rights(store):
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(STUDENT) AUT(*OBJMGT *OBJOPR)")
+    run(store, "QSECOFR", "GRTOBJAUT OBJ(APPLIB/CUSTOMERS) OBJTYPE(*FILE) USER(DEVELOPER) AUT(*OBJMGT *READ)")
+    c = _signed(store, "STUDENT")
+    c.handle("ENTER", {"command": "edtobjaut applib/customers *file"})
+    i = [r for r, _ in c.view[1].rows()].index("DEVELOPER")
+    c.handle("F11", {})
+    c.handle("F11", {})                                              # data rights
+    s = c.handle("ENTER", {f"x{i}_0": "X", f"x{i}_1": "X"})          # Read stays, Add is new
+    obj = store.objects[("APPLIB", "CUSTOMERS", "*FILE")]
+    assert Auth.ADD in obj.private["DEVELOPER"] and Auth.OBJMGT in obj.private["DEVELOPER"]
+    assert "Not authorized" not in _text(s)
+
+
+def test_x_marks_on_a_public_row_that_follows_an_authorization_list_are_applied(store):
+    c, s = _edit(store)
+    obj = store.objects[("APPLIB", "CUSTOMERS", "*FILE")]
+    obj.public = None
+    obj.autl = "PAYAUTL"
+    c.view[1].obj = obj
+    c.handle("F11", {})
+    c.handle("F11", {})
+    c.handle("ENTER", {"x0_0": "X"})
+    assert obj.public is not None and Auth.READ in obj.public
+
+
+def test_a_copy_into_qtemp_belongs_to_the_job_and_is_visible_to_it(store):
+    c = _signed(store)
+    s = c.session
+    out = execute(store, store.get("QSECOFR"), "CRTDUPOBJ OBJ(CUSTOMERS) FROMLIB(APPLIB) OBJTYPE(*FILE) TOLIB(QTEMP)", s)
+    new = store.objects.get(("QTEMP", "CUSTOMERS", "*FILE"))
+    if new is None:                                                   # no QTEMP library in this store: nothing to test
+        assert "CPF2209" in out.message.line()
+    else:
+        assert new.data.get("job") == getattr(s.search_order(), "job", None)

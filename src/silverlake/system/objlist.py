@@ -214,8 +214,13 @@ def duplicate_object(store: ProfileStore, actor: Profile, name: str, fromlib: st
     if obj.owner != actor.name:
         private[obj.owner] = obj.owner_auth
     private.pop(actor.name, None)
-    store.objects[(tolib, newobj, typ)] = replace(obj, name=newobj, library=tolib, owner=actor.name, owner_auth=ALL,
-                                                  private=private, data=copy.deepcopy(obj.data))
+    new = replace(obj, name=newobj, library=tolib, owner=actor.name, owner_auth=ALL, private=private,
+                  data=copy.deepcopy(obj.data))
+    if tolib == "QTEMP":                                      # in QTEMP it belongs to this job, and goes with it
+        new.data["job"] = getattr(search, "job", None)
+    else:
+        new.data.pop("job", None)
+    store.objects[(tolib, newobj, typ)] = new
     store.on_change()
     return _ok(f"Object {obj.name} duplicated as {newobj} in {tolib}.")
 
