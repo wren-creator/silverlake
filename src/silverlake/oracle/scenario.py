@@ -346,6 +346,23 @@ for _batch, _cmds in PROMPT_BATCHES.items():
                        {"key": "F12", "always": True})],
         {**_SIGNOFF, "always": True},
     ]
+# Read only: what F11=Choices shows on every prompt (the hint column: `Name, *CURLIB`, `0-30`). It was captured on
+# three prompts (auth-prompt-keys); these are all the rest, in the same batches as the F4 captures. Each command is
+# typed bare, F4 opens the prompt, F11 shows the choices, Roll Up looks at the next page of them, F10 asks for the
+# additional parameters (the prompt's whole first screen, still in the choices view) and Roll Up pages those, then F12
+# three times gets back to the command line. CHGPWD has no prompt and CRTLIB is refused at F4, so neither is here.
+# Enter is never pressed and nothing is typed into a prompt, so nothing runs.
+F11_SKIP = ("CHGPWD", "CRTLIB")
+F11_BATCHES = {**PROMPT_BATCHES, "i": ("CRTPF", "CRTBNDRPG", "CRTDSPF", "CRTPRTF", "CRTSRCPF")}   # i: the PDM era prompts
+for _batch, _cmds in F11_BATCHES.items():
+    AUTHENTICATED["auth-f11-" + _batch] = [
+        _SIGNON,
+        *[step for cmd in _cmds if cmd not in F11_SKIP
+          for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F11"}, {"key": "ROLLUP"}, {"key": "F10"},
+                       {"key": "ROLLUP"}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
+                       {"key": "F12", "always": True})],
+        {**_SIGNOFF, "always": True},
+    ]
 # Read only: the second page of the two prompts whose Roll Up complained about a missing parameter (the
 # host checks the required name before it rolls). The first field gets a made-up name, the prompt is rolled
 # once and left with F12. Enter is never pressed on a prompt, so nothing is run and the name is never looked up.

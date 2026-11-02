@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13", "auth-edtauth-", "auth-copyobj", "auth-prompt-keys")):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13", "auth-edtauth-", "auth-copyobj", "auth-prompt-keys", "auth-f11-")):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -896,3 +896,18 @@ def test_the_prompt_keys_scenario_presses_only_f9_f11_f14_and_f12_and_never_ente
     for a in actions[1:-1]:
         assert a["key"] in ("F4", "F9", "F11", "F14", "F12"), a
         assert ("fill" in a) == (a["key"] == "F4") and (a["key"] != "F12" or a.get("always"))
+
+
+def test_the_f11_scenarios_cover_every_prompt_but_two_and_never_press_enter():
+    seen = []
+    for batch in scenario.F11_BATCHES:
+        actions = scenario.SCENARIOS["auth-f11-" + batch]
+        assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+        for a in actions[1:-1]:
+            assert a["key"] in ("F4", "F11", "ROLLUP", "F10", "F12"), a
+            assert ("fill" in a) == (a["key"] == "F4") and (a["key"] != "F12" or a.get("always"))
+        seen += [a["fill"]["0"] for a in actions if a["key"] == "F4"]
+    every = [c for cmds in scenario.F11_BATCHES.values() for c in cmds]
+    from silverlake.screens.promptspecs import SPECS
+    assert set(every) | set(scenario.F11_SKIP) >= set(SPECS)                  # every prompt the table has is covered
+    assert sorted(seen) == sorted(c for c in every if c not in scenario.F11_SKIP) and "CHGPWD" not in seen
