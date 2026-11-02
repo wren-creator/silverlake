@@ -442,6 +442,19 @@ AUTHENTICATED["auth-f13-one"] = [
     {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Read only: F9 (All parameters), F11 (Choices) and F14 (Command string) on a prompt, the three keys the prompt still
+# says are not built. Three commands, each typed bare, F4 opens the prompt, then F9, F11 twice (it should toggle) and
+# F14, and F12 three times gets back to the command line. Nothing is typed into a prompt and Enter is never pressed,
+# so nothing runs. F14 here is the prompt's Command string, not the help's Print help (that one makes a spooled file
+# and is never pressed).
+PROMPT_KEY_COMMANDS = ("CRTPF", "DSPMSG", "WRKSPLF")
+AUTHENTICATED["auth-prompt-keys"] = [
+    _SIGNON,
+    *[step for cmd in PROMPT_KEY_COMMANDS
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F9"}, {"key": "F11"}, {"key": "F11"}, {"key": "F14"},
+                   {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+    {**_SIGNOFF, "always": True},
+]
 # Read only: the F13 help of the six prompts of auth-f13, now that the client answers Save Screen. Each command is
 # typed bare, F4 opens its prompt, F13 opens the help, Roll Up eight times pages through it (past the last page is
 # only a message), and F12 three times gets back to the command line (help, then prompt, then one too many).

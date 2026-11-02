@@ -5,7 +5,8 @@ What the captures showed, and this follows: the title, the rows, the labels, the
 "Bottom" or "More..." marker and the key lines; required parameters drawn brighter, with "Parameter X required."
 on Enter and on Roll Up while one is empty; F10=Additional parameters (no check first, the whole prompt again
 with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); F13 opening the help (one generic text for every prompt, 15 pages, F3 and F12 back to the prompt); F24 swapping the key lines for the other set (seen on CRTPF only, the same line is used for every prompt, and a second F24 turning it back is ours); Roll Up paging a prompt that is more than one page, and "Already at
-bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). Not captured, so ours: how a refused command reads on the prompt, and F9, F11 and F14, which say they are not built, as does F10
+bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). F9 (All parameters) draws the same view as F10 and F14 opens Display Command String (both captured, `auth-prompt-keys`).
+Not captured, so ours: how a refused command reads on the prompt, what F9 does on a prompt with no additional parameters and the command string once something is typed, and F11 (Choices), which says it is not built, as does F10
 on a prompt with no additional parameters or when pressed a second time. CHGSPLFA's F10 view stops at its first page:
 the host will not page it without a spooled file that exists.
 
@@ -159,6 +160,7 @@ class Prompt:
     extra: bool = False                             # F10 pressed: the additional parameters view
     flagged: set = field(default_factory=set)      # fields drawn in reverse image after a refusal
     cursor: str = ""                                # where the cursor goes after one
+    cmdstring: bool = False                         # F14 pressed: Display Command String is on show
     variant: str = ""                               # a prompt that is not the plain one for its command (VARIANTS)
 
     @property
@@ -264,7 +266,30 @@ class Prompt:
             return Step("Wrong cursor position.")
         return Step("That key is not built here.")                # F13 (Information Assistant), F14 (Print help)
 
+    def _cmdstring_screen(self, message: str) -> Screen:
+        """Captured: Display Command String shows the command as it stands (bare, on every prompt seen), a line to press
+        Enter, and its own key line. What it shows once something is typed is ours: the command the fields make."""
+        rows: list = [Text(0, 22, "Display Command String", ds.ATTR_WHITE), Text(2, 1, self._line(), ds.ATTR_GREEN),
+                      Text(19, 1, "Press ENTER to continue.", ds.ATTR_BLUE),
+                      Text(21, 1, "F3=Exit   F5=Refresh   F12=Cancel   F13=How to use this display   F24=More keys",
+                           ds.ATTR_BLUE)]
+        _msg(rows, message)
+        return Screen(rows)
+
+    def _cmdstring_key(self, aid: str) -> Step:
+        """Enter and F12 go back to the prompt (F12 captured, Enter is ours), F3 leaves, F5 redraws."""
+        if aid in ("ENTER", "F12"):
+            self.cmdstring = False
+            return Step()
+        if aid == "F3":
+            return Step(go="menu")
+        if aid == "F5":
+            return Step()
+        return Step("That key is not built here.")
+
     def screen(self, message: str = "") -> Screen:
+        if self.cmdstring:
+            return self._cmdstring_screen(message)
         if self.help_page is not None:
             return self._help_screen(message)
         spec = self.spec
@@ -318,6 +343,14 @@ class Prompt:
         self.flagged, self.cursor = set(), ""
         if self.help_page is not None:
             return self._help_key(aid)
+        if self.cmdstring:
+            return self._cmdstring_key(aid)
+        if aid == "F14":                                           # captured: Display Command String, nothing checked
+            for name in self.values:
+                if name in values:
+                    self.values[name] = values[name].strip()
+            self.cmdstring = True
+            return Step()
         if aid == "F13":                                           # captured: opens the help, nothing checked first
             for name in self.values:
                 if name in values:
@@ -336,8 +369,8 @@ class Prompt:
                 self.values[name] = values[name].strip()
         if aid == "F10" and spec["no_f10"]:                       # captured on the option 3 prompt
             return Step("Function key not allowed.")
-        if aid == "F10" and "more" in spec and not self.extra:    # captured: no check, straight to the view
-            self.extra, self.page = True, 0
+        if aid in ("F9", "F10") and "more" in spec and not self.extra:    # captured: no check, straight to the view
+            self.extra, self.page = True, 0                       # (F9, All parameters, drew the same view as F10)
             return Step()
         if aid == "F24":                                           # captured on CRTPF; pressing it again is ours
             self.more_keys = not self.more_keys
