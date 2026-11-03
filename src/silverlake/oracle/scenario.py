@@ -363,6 +363,33 @@ for _batch, _cmds in F11_BATCHES.items():
                        {"key": "F12", "always": True})],
         {**_SIGNOFF, "always": True},
     ]
+# Read only: what F9=All parameters shows on every prompt. It is not F10 under another key (on CRTPF it adds IGCDTA,
+# which F10 hides), so each prompt needs its own look. Same batches as the F11 captures. Each command is typed bare, F4
+# opens the prompt, F9 shows all the parameters and Roll Up looks at the next page of them, then F12 three times gets back
+# to the command line. CHGPWD has no prompt and CRTLIB is refused at F4. Enter is never pressed and nothing is typed into
+# a prompt, so nothing runs.
+for _batch, _cmds in F11_BATCHES.items():
+    AUTHENTICATED["auth-f9-" + _batch] = [
+        _SIGNON,
+        *[step for cmd in _cmds if cmd not in F11_SKIP
+          for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F9"}, {"key": "ROLLUP"},
+                       {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+        {**_SIGNOFF, "always": True},
+    ]
+# Read only: the pages after the first one of the F9 view, on the six prompts where it ends in More... (the other nine
+# that F9 changes end in Bottom on the first page). As in auth-f10-pages, the required name gets a made-up value so the
+# first Roll Up pages instead of complaining, and the prompt is rolled on until past the bottom. Enter is never pressed
+# on a prompt, so the made-up names are never looked up and nothing runs.
+F9_PAGES = {"CRTBNDRPG": {}, "CRTDSPF": {"0": "SLPLACE"}, "CRTOUTQ": {"0": "SLPLACE"}, "CRTPF": {"0": "SLPLACE"},
+            "CRTPRTF": {"0": "SLPLACE"}, "CRTSRCPF": {"0": "SLPLACE"}}
+AUTHENTICATED["auth-f9-pages"] = [
+    _SIGNON,
+    *[step for cmd, fill in F9_PAGES.items()
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F9"},
+                   {"key": "ROLLUP", **({"fill": fill} if fill else {})}, *[{"key": "ROLLUP"}] * 6,
+                   {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+    {**_SIGNOFF, "always": True},
+]
 # Read only: the second page of the two prompts whose Roll Up complained about a missing parameter (the
 # host checks the required name before it rolls). The first field gets a made-up name, the prompt is rolled
 # once and left with F12. Enter is never pressed on a prompt, so nothing is run and the name is never looked up.

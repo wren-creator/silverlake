@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13", "auth-edtauth-", "auth-copyobj", "auth-prompt-keys", "auth-f11-")):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13", "auth-edtauth-", "auth-copyobj", "auth-prompt-keys", "auth-f11-", "auth-f9-")):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -911,3 +911,22 @@ def test_the_f11_scenarios_cover_every_prompt_but_two_and_never_press_enter():
     from silverlake.screens.promptspecs import SPECS
     assert set(every) | set(scenario.F11_SKIP) >= set(SPECS)                  # every prompt the table has is covered
     assert sorted(seen) == sorted(c for c in every if c not in scenario.F11_SKIP) and "CHGPWD" not in seen
+
+
+def test_the_f9_scenarios_cover_the_same_prompts_as_f11_and_never_press_enter():
+    for batch, cmds in scenario.F11_BATCHES.items():
+        actions = scenario.SCENARIOS["auth-f9-" + batch]
+        assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+        for a in actions[1:-1]:
+            assert a["key"] in ("F4", "F9", "ROLLUP", "F12"), a
+            assert ("fill" in a) == (a["key"] == "F4") and (a["key"] != "F12" or a.get("always"))
+        assert [a["fill"]["0"] for a in actions if a["key"] == "F4"] == [c for c in cmds if c not in scenario.F11_SKIP]
+
+
+def test_the_f9_pages_scenario_presses_only_f4_f9_roll_up_and_f12_and_never_enter():
+    actions = scenario.SCENARIOS["auth-f9-pages"]
+    assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+    assert [a["fill"]["0"] for a in actions if a["key"] == "F4"] == list(scenario.F9_PAGES)
+    for a in actions[1:-1]:
+        assert a["key"] in ("F4", "F9", "ROLLUP", "F12"), a
+        assert a["key"] != "F12" or a.get("always")
