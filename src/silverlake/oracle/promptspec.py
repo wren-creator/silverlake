@@ -195,7 +195,7 @@ def extract_f9(captures: list[dict], more: dict[str, dict]) -> dict[str, dict]:
     adds parameters F10 hides (CRTPF's IGCDTA), and on a prompt with no F10 view it can still show some. It is kept only
     where it differs from what F10 shows over the pages that were seen, so a command left out here does what F10 does,
     or nothing when it has no F10 view either. A chain that ends in More... where the pages seen so far are the very
-    pages F10 has goes on with F10's remaining ones (ours, the host was not rolled that far)."""
+    pages F10 has goes on with F10's remaining ones (ours, the host was not rolled that far; CRTPRTF was, and its last two pages differ)."""
     found: dict[str, dict] = {}
     for cap in captures:
         snaps = cap["snapshots"]

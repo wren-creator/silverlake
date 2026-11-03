@@ -930,3 +930,12 @@ def test_the_f9_pages_scenario_presses_only_f4_f9_roll_up_and_f12_and_never_ente
     for a in actions[1:-1]:
         assert a["key"] in ("F4", "F9", "ROLLUP", "F12"), a
         assert a["key"] != "F12" or a.get("always")
+
+
+def test_the_f9_prtf_scenario_rolls_only_crtprtf_and_never_presses_enter():
+    actions = scenario.SCENARIOS["auth-f9-prtf"]
+    assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+    assert [a["fill"]["0"] for a in actions if a["key"] == "F4"] == ["CRTPRTF"]
+    for a in actions[1:-1]:
+        assert a["key"] in ("F4", "F9", "ROLLUP", "F12"), a
+        assert a["key"] != "F12" or a.get("always")

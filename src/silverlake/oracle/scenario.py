@@ -390,6 +390,16 @@ AUTHENTICATED["auth-f9-pages"] = [
                    {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the rest of CRTPRTF in the F9 view. auth-f9-pages was still on More... after seven Roll Ups (the F10 view has
+# eleven pages), so this one rolls twelve times from the made-up name and stops wherever the Bottom marker is. Enter is
+# never pressed on a prompt, so the made-up name is never looked up and nothing runs.
+AUTHENTICATED["auth-f9-prtf"] = [
+    _SIGNON,
+    {"fill": {"0": "CRTPRTF"}, "key": "F4"}, {"key": "F9"}, {"key": "ROLLUP", "fill": {"0": "SLPLACE"}},
+    *[{"key": "ROLLUP"}] * 11,
+    {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 # Read only: the second page of the two prompts whose Roll Up complained about a missing parameter (the
 # host checks the required name before it rolls). The first field gets a made-up name, the prompt is rolled
 # once and left with F12. Enter is never pressed on a prompt, so nothing is run and the name is never looked up.
