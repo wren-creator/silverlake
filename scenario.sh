@@ -24,7 +24,8 @@ case "${1:-}" in
     .venv/bin/python -m silverlake.scenarios "$@"
     rc=$?
     if [ -n "$was_up" ]; then
-      if [ -f "$STATE_DIR/services.on" ]; then ./start.sh --services; else ./start.sh; fi
+      lan=(); [ ! -f "$STATE_DIR/lan.host" ] || lan=(--lan "$(cat "$STATE_DIR/lan.host")")
+      if [ -f "$STATE_DIR/services.on" ]; then ./start.sh --services ${lan[@]+"${lan[@]}"}; else ./start.sh ${lan[@]+"${lan[@]}"}; fi
     fi
     exit $rc
     ;;

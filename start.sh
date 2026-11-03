@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Bring Silverlake up. Refuses to launch if the listener would bind beyond
-# loopback.
+# loopback, unless --lan names one private IPv4 address.
 set -uo pipefail
 cd "$(dirname "$0")"
 source ./lib.sh
 
 usage() {
-  echo "usage: ./start.sh [-p PORT | --port PORT] [--services] [--real-ports]"
+  echo "usage: ./start.sh [-p PORT | --port PORT] [--services] [--real-ports] [--lan ADDRESS]"
   echo "  Listens on 127.0.0.1, default port 5250. SILVERLAKE_PORT does the same."
   echo "  --services also starts the network services (HTTP Admin 2001, FTP 2121, host servers 4449 and 8476, and TLS ports when ./setup.sh made a certificate), loopback only."
+  echo "  --lan ADDRESS listens on one private IPv4 address of this machine (10.x, 172.16-31.x, 192.168.x) instead of loopback, for a lab server reached over the LAN. Never 0.0.0.0, never a public address. The range is vulnerable on purpose: only do this on a network you trust. SILVERLAKE_HOST with SILVERLAKE_ALLOW_LAN=1 does the same."
   echo "  SILVERLAKE_SERVICES=1 does the same, and ./scenario.sh keeps it across its restart."
   echo "  --real-ports uses the real IBM i numbers where they differ (23, 992, 21, 990, 449, 22). Those are below 1024, so the account must be allowed to bind them (root, or a Linux sysctl, see docs/services.md). SILVERLAKE_REAL_PORTS=1 does the same. A SILVERLAKE_*_PORT you set yourself wins."
 }
@@ -25,6 +26,10 @@ while [ $# -gt 0 ]; do
     --port=*) PORT="${1#--port=}"; shift ;;
     --services) SERVICES=1; shift ;;
     --real-ports) REAL_PORTS=1; shift ;;
+    --lan)
+      [ $# -ge 2 ] || { bad "--lan needs an address"; usage >&2; exit 2; }
+      HOST="$2"; LAN_OK=1; shift 2 ;;
+    --lan=*) HOST="${1#--lan=}"; LAN_OK=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) bad "unknown option: $1"; usage >&2; exit 2 ;;
   esac
@@ -42,7 +47,8 @@ case "$PORT" in
   ''|*[!0-9]*) bad "port must be a number, not '$PORT'"; exit 2 ;;
 esac
 { [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; } || { bad "port must be between 1 and 65535, not $PORT"; exit 2; }
-export SILVERLAKE_PORT="$PORT"
+export SILVERLAKE_PORT="$PORT" SILVERLAKE_HOST="$HOST"
+[ -z "$LAN_OK" ] || export SILVERLAKE_ALLOW_LAN=1
 mkdir -p "$STATE_DIR"
 case "$SERVICES" in
   ''|0|off|no) SERVICES=""; rm -f "$SERVICES_MARK" ;;
@@ -51,9 +57,10 @@ esac
 
 [ -x .venv/bin/python ] || { bad "no .venv, run ./setup.sh first"; exit 1; }
 
-info "loopback-only guard"
+info "bind guard"
 assert_loopback_only || { bad "not starting"; exit 1; }
 ok "listener binds to $HOST only"
+case "$HOST" in 127.*|::1) ;; *) warn "serving on the LAN address $HOST: anyone who can reach it can attack this range (that is the point, but only on a network you trust)" ;; esac
 
 if pid="$(running_pid)"; then
   warn "already running (pid $pid)"
@@ -81,6 +88,8 @@ if [ -n "$SERVICES" ]; then
   done
 fi
 info "starting on $HOST:$PORT"
+# Remembered so scenario.sh, reset.sh and status.sh keep the same address. Written only once we really start.
+case "$HOST" in 127.*|::1) rm -f "$STATE_DIR/lan.host" ;; *) printf '%s' "$HOST" >"$STATE_DIR/lan.host" ;; esac
 nohup .venv/bin/python -m silverlake >"$LOG_FILE" 2>&1 &
 echo $! >"$PID_FILE"
 

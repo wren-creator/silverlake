@@ -14,7 +14,7 @@ import logging
 import os
 from collections.abc import Callable
 
-from ..config import check_loopback
+from ..config import check_bind
 from ..system.profiles import ProfileStore
 from . import certs, ftpd, hostsvr, httpd, httpadmin, sshd
 from . import server as telnet
@@ -49,9 +49,9 @@ def ports(env: dict[str, str] | None = None) -> dict[str, int]:
 
 async def start(host: str, store_of: Callable[[], ProfileStore], env: dict[str, str] | None = None,
                 make_controller: Callable | None = None) -> list[asyncio.Server]:
-    """Start every service on `host`, which must be loopback. Returns the servers so the caller can keep them
+    """Start every service on `host`, which must be loopback, or a private LAN address with SILVERLAKE_ALLOW_LAN. Returns the servers so the caller can keep them
     open; a service that cannot bind stops the rest and raises, so a half started range is never left up."""
-    check_loopback(host)
+    check_bind(host)
     chosen = ports(env)
     tls = certs.server_context()
     if tls is None:

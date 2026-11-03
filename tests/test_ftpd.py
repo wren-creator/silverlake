@@ -166,3 +166,23 @@ def test_the_exit_program_turns_away_rcmd_for_a_limited_profile_too(store):
     assert code(s.handle("RCMD DSPMSG MSGQ(QSYSOPR)")) == 250
     store.objects[("QUSRSYS", "FTPEXIT", "*PGM")].data["registered"] = "yes"
     assert code(s.handle("RCMD DSPMSG MSGQ(QSYSOPR)")) == 550
+
+
+def test_pasv_names_the_address_the_client_connected_to(store):
+    """The 227 reply carries the control connection's own address, so a client on the LAN is sent back to the LAN
+    address and not to 127.0.0.1. Loopback is the only address a test machine is sure to have."""
+    async def go():
+        port = free_port()
+        server = await ftpd.serve("127.0.0.1", port, lambda: store)
+        try:
+            r, w = await asyncio.open_connection("127.0.0.1", port)
+            await r.readline(); await r.readline()
+            for line in (b"USER STUDENT\r\n", b"PASS STUDENT\r\n"):
+                w.write(line); await w.drain(); await r.readline()
+            w.write(b"PASV\r\n"); await w.drain()
+            reply = (await r.readline()).decode()
+            w.close()
+            return reply
+        finally:
+            server.close()
+    assert asyncio.run(go()).startswith("227 Entering Passive Mode (127,0,0,1,")

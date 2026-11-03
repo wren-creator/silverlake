@@ -18,7 +18,9 @@ RPG programs run: `CALL PGM(APPLIB/ADVENTURE)` after `./setup.sh` has installed 
 
 ## Safety
 
-Everything binds to `127.0.0.1` and `start.sh` refuses to launch otherwise. A deliberately vulnerable IBM i has no business being reachable from anywhere but the machine running it.
+Everything binds to `127.0.0.1` by default, and `start.sh` refuses to launch otherwise. A deliberately vulnerable IBM i has no business being reachable from anywhere but the machine running it.
+
+For a lab server that students reach over the network there is one opt in: `./start.sh --lan 192.168.x.x` (or `SILVERLAKE_HOST` with `SILVERLAKE_ALLOW_LAN=1`) listens on that one private IPv4 address instead of loopback. It takes 10.x, 172.16 to 31.x, 192.168.x and link-local only, never `0.0.0.0`, a hostname or a public address, and it prints a warning every time. Do it only on a network you trust, behind a firewall. See [docs/services.md](docs/services.md#serving-on-a-lan).
 
 ## Clean-room rules
 

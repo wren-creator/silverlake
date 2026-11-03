@@ -1,6 +1,6 @@
 # Network services
 
-Everything in Silverlake is reached through 5250 unless you start it with `./start.sh --services`. That adds listeners for the other doors an IBM i has. They are off by default, bind only to 127.0.0.1 (the same guard as the 5250 listener, checked again in `net/services.py`), and live in the same process and event loop, so they answer from the same profiles and authority and see a lesson toggle the moment it is saved. `./scenario.sh` keeps them on across its restart.
+Everything in Silverlake is reached through 5250 unless you start it with `./start.sh --services`. That adds listeners for the other doors an IBM i has. They are off by default, bind only to 127.0.0.1 unless you opt in to a LAN address ([below](#serving-on-a-lan)) (the same guard as the 5250 listener, checked again in `net/services.py`), and live in the same process and event loop, so they answer from the same profiles and authority and see a lesson toggle the moment it is saved. `./scenario.sh` keeps them on across its restart.
 
 ## Ports
 
@@ -41,7 +41,7 @@ Things to know when you point a tool at it:
 - **Scanners** need the port list: `nmap -p 5250,5992,2001,2010,2121,2990,4449,8476,9476,2222 127.0.0.1`. A default scan of 127.0.0.1 will not find 5250, 5992, 2121, 2990, 2222 or 4449, and a scan of the real port numbers will find nothing at 23, 992, 21, 990 or 449. The `ibmi-httpadmin-nse` script works as is, because 2001 and 2010 are the real ports.
 - **A port in use:** `start.sh` checks the 5250 port and each service port before it starts and names the variable to change.
 - **Restarts:** `./scenario.sh` restarts with `--services` if the range was started with it, but it does not remember a custom port. Export the `SILVERLAKE_*_PORT` variables in the shell you run it from.
-- `./status.sh` lists every socket the process holds and fails if any is beyond loopback.
+- `./status.sh` lists every socket the process holds and fails if any is beyond loopback, unless the range was started with `--lan`, in which case the one LAN address it was told to use is reported as a warning and anything else still fails.
 
 ## TLS
 
@@ -98,3 +98,20 @@ Lesson `httpadmin-ssi-injection`: the server description is put on the Manage pa
 What is not faked: IBM has not published the vulnerable parameter of CVE-2026-96119, so this models the weakness class (CWE-94), not the real bug. Servers created in the console live in memory and a restart puts the three seeded ones back. No TLS port yet.
 
 Real systems differ here. A real console on PUB400 answers `Server: Apache` and realm `HTTP Admin`, and Silverlake's headers are the mock's, not that capture.
+
+## Serving on a LAN
+
+By default every port is on 127.0.0.1. For a lab server that students reach from other machines, opt in:
+
+```
+./start.sh --lan 192.168.68.125 --services
+```
+
+or `SILVERLAKE_HOST=192.168.68.125 SILVERLAKE_ALLOW_LAN=1 ./start.sh --services`. Every listener (5250, the console, FTP, host servers, TLS ports, ssh) binds to that one address, and loopback is then not listening. The rules:
+
+- **One private IPv4 address of the machine.** 10.x, 172.16 to 31.x, 192.168.x, or link-local. `0.0.0.0`, `::`, a public address and a hostname are refused, in `config.check_bind` and again in `lib.sh`, so one typo cannot put the range on the internet. The address has to belong to the machine or the bind fails.
+- **It warns every time**, and `./status.sh` reports the sockets as "opted in". `./scenario.sh` and `./reset.sh` keep the address across their restart (it is remembered in `state/lan.host`).
+- **FTP passive mode** answers with the address the client connected to, so a LAN client is not sent to 127.0.0.1.
+- **The TLS certificate** is made for `localhost` and 127.0.0.1. To add the LAN address, set it before setup: `SILVERLAKE_CERT_IPS=192.168.68.125 ./setup.sh --force-tls`. It is self-signed either way, so most clients will ask you to trust it.
+- **Open the ports on the host firewall** that you want students to reach, and nothing else. This range is vulnerable on purpose, and its passwords cross the wire in clear text on the plain ports. Keep it on a network you trust.
+- Not changed: the lessons still assume one student per range, and nothing here adds a login or rate limit in front of it.

@@ -26,6 +26,17 @@ ROOT = Path(__file__).resolve().parents[3]
 DAYS = 825
 
 
+def san(env: dict[str, str] | None = None) -> str:
+    """The names the certificate is good for: localhost and 127.0.0.1, plus each IP in SILVERLAKE_CERT_IPS (comma
+    separated) for a range served on a LAN address."""
+    import ipaddress
+    out = "DNS:localhost,IP:127.0.0.1"
+    for item in (env if env is not None else os.environ).get("SILVERLAKE_CERT_IPS", "").split(","):
+        if item.strip():
+            out += f",IP:{ipaddress.ip_address(item.strip())}"
+    return out
+
+
 def cert_dir() -> Path:
     return Path(os.environ.get("SILVERLAKE_TLS_DIR", ROOT / ".tls"))
 
@@ -50,7 +61,7 @@ def make_weak(directory: Path | None = None) -> bool:
     run = subprocess.run(
         [exe, "req", "-x509", "-new", "-key", str(key), "-sha256", "-days", str(WEAK_DAYS), "-out", str(weak_path(directory)),
          "-subj", f"/CN=SYSTEM1.LOCAL/O=Silverlake range/OU={flags.flag(LESSON)}",
-         "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1"],
+         "-addext", f"subjectAltName={san()}"],
         capture_output=True, text=True)
     if run.returncode != 0:
         log.warning("openssl could not make the console certificate: %s", run.stderr.strip()[:200])
@@ -71,7 +82,7 @@ def make(directory: Path | None = None, force: bool = False) -> bool:
     run = subprocess.run(
         [exe, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", str(DAYS),
          "-keyout", str(key), "-out", str(cert), "-subj", "/CN=SILVERLAKE/O=Silverlake range",
-         "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1"],
+         "-addext", f"subjectAltName={san()}"],
         capture_output=True, text=True)
     if run.returncode != 0:
         log.warning("openssl could not make a certificate: %s", run.stderr.strip()[:200])

@@ -34,13 +34,13 @@ A real IBM i (PUB400, read-only, human paced, no scans) is the reference for how
 
 ## Network posture
 
-Loopback only. The listener refuses to bind to anything but 127.0.0.1, and `start.sh` checks it again before launching.
+Loopback by default. The listener refuses to bind to anything but 127.0.0.1, and `start.sh` checks it again before launching. The one exception is the LAN opt in (`./start.sh --lan ADDRESS`, or `SILVERLAKE_HOST` plus `SILVERLAKE_ALLOW_LAN=1`): a single private IPv4 address, never a wildcard, a name or a public address. `config.check_bind` is the Python guard and `assert_loopback_only` in `lib.sh` the second lock.
 
 ## What exists today (through Phase 3b)
 
 ```
 src/silverlake/
-  config.py            loopback-only listen address
+  config.py            listen address guard (loopback, or one private LAN address by opt in)
   proto/telnet.py      telnet framing, NEW-ENVIRON parsing
   proto/datastream.py  GDS records, AID keys, terminal input decoder
   proto/ebcdic.py      code page 037

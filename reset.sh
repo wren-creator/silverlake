@@ -4,7 +4,8 @@ set -uo pipefail
 cd "$(dirname "$0")"
 source ./lib.sh
 
+lan=(); [ ! -f "$STATE_DIR/lan.host" ] || lan=(--lan "$(cat "$STATE_DIR/lan.host")")
 ./stop.sh
 info "wiping $STATE_DIR"
 rm -rf "$STATE_DIR"
-./start.sh
+./start.sh ${lan[@]+"${lan[@]}"}

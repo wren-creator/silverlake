@@ -18,13 +18,30 @@ LOG_FILE="$STATE_DIR/silverlake.log"
 HOST="${SILVERLAKE_HOST:-127.0.0.1}"
 PORT="${SILVERLAKE_PORT:-5250}"
 
-# Fail unless the configured host is a loopback address. The Python side
-# refuses too; this is the second lock on the same door.
+LAN_OK="${SILVERLAKE_ALLOW_LAN:-}"
+case "$LAN_OK" in ''|0|off|no) LAN_OK="" ;; *) LAN_OK=1 ;; esac
+
+# True for one private IPv4 address: 10.x, 172.16-31.x, 192.168.x, or link-local 169.254.x.
+is_private_ipv4() {
+  case "$1" in
+    10.*|192.168.*|169.254.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Fail unless the configured host is loopback, or a private LAN address with SILVERLAKE_ALLOW_LAN set. Never 0.0.0.0
+# or a public address. The Python side refuses too; this is the second lock on the same door.
 assert_loopback_only() {
   case "$HOST" in
     127.*|::1) return 0 ;;
-    *) bad "refusing to continue: SILVERLAKE_HOST=$HOST is not loopback"; return 1 ;;
   esac
+  if [ -n "$LAN_OK" ] && is_private_ipv4 "$HOST"; then return 0; fi
+  if [ -z "$LAN_OK" ]; then
+    bad "refusing to continue: SILVERLAKE_HOST=$HOST is not loopback (./start.sh --lan ADDRESS opts in to a private LAN address)"
+  else
+    bad "refusing to continue: SILVERLAKE_HOST=$HOST is not a private IPv4 address (10.x, 172.16-31.x, 192.168.x)"
+  fi
+  return 1
 }
 
 running_pid() {

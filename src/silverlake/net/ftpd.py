@@ -309,7 +309,9 @@ async def serve(host: str, port: int, store_of: Callable[[], ProfileStore], ssl_
                     data_server = await asyncio.start_server(accepted, host, 0,
                                                              ssl=ssl_context if session.prot_private else None)
                     p = data_server.sockets[0].getsockname()[1]
-                    send([(227, f"Entering Passive Mode (127,0,0,1,{p >> 8},{p & 255}).")])
+                    local = (writer.get_extra_info("sockname") or (host,))[0]
+                    quad = local.replace(".", ",") if local.count(".") == 3 else "127,0,0,1"
+                    send([(227, f"Entering Passive Mode ({quad},{p >> 8},{p & 255}).")])
                 elif step.data is not None:
                     if data_conn is None:
                         send([(425, "Use PASV first.")])
