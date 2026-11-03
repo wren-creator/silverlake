@@ -137,6 +137,20 @@ def test_the_f10_view_is_read_whole_and_a_roll_up_that_complained_does_not_page(
     assert any(r[2] == "COLOUR" for r in found["DLTTHG"]["pages"][0][0])
 
 
+def test_the_f9_view_is_kept_where_it_adds_parameters_and_dropped_where_it_is_f10s_view():
+    plain, more = _f10_pair()
+    hidden = {**more, "runs": [*more["runs"], _run(18, 1, "Hidden  . . . . . . . . . . . ."), _run(18, 34, "HIDDEN")],
+              "fields": [*more["fields"], _field(18, 49, 10)]}
+    other = _screen([_run(0, 19, "      Delete Other (DLTOTH)"), _run(2, 1, "Type choices, press Enter."),
+                     _run(4, 1, "Thing  . . . . . . . . . . . . ."), _run(4, 34, "THING"), _run(20, 66, "       Bottom"),
+                     _run(21, 1, "F3=Exit   F4=Prompt")], [_field(4, 49, 10)])
+    f10 = promptspec.extract_f10([{"snapshots": [plain, more]}])
+    kept = promptspec.extract_f9([{"snapshots": [plain, hidden]}], f10)
+    assert [r[2] for r in kept["DLTTHG"]["pages"][0][0]].count("HIDDEN") == 1
+    assert promptspec.extract_f9([{"snapshots": [plain, more]}], f10) == {}                  # F10's view: nothing to keep
+    assert promptspec.extract_f9([{"snapshots": [other, other]}], {}) == {}                  # F9 changed nothing
+
+
 def test_a_field_with_no_label_and_no_text_is_still_a_field_of_the_keyword_above():
     plain, _ = _f10_pair()
     snap = {**plain, "fields": [*plain["fields"], _field(5, 49, 10)]}                  # an empty second value

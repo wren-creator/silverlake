@@ -333,13 +333,57 @@ def test_f24_swaps_the_key_lines_for_the_one_the_host_showed_and_a_second_turns_
     assert texts(c.handle("F24", {})) == texts(plain)                                              # ours
 
 
-def test_f9_on_the_other_line_says_it_is_not_built_and_does_not_run_the_command(store):
+def test_f9_shows_the_parameters_f10_hides_in_their_own_place_and_keeps_what_was_typed(store):
+    c = signed(store)
+    f4(c, "CRTPF")
+    f10 = c.handle("F10", {})
+    c2 = signed(store)
+    f4(c2, "CRTPF")
+    s = c2.handle("F9", {"FILE": "NEWF"})
+    s.validate()
+    shown = lambda screen: any("User specified DBCS data" in t for t in texts(screen))
+    assert shown(s) and not shown(f10)                                                    # captured
+    assert inputs(s)["FILE"] == "NEWF" and "IGCDTA" in inputs(s)
+    assert "Additional Parameters" in " ".join(texts(s)) and "F10=Additional parameters" not in " ".join(texts(s))
+    assert "That key is not built here." in texts(c2.handle("F9", {}))                    # a second one is ours
+    assert store.find_library("SCRATCH") is not None and not source_exists(store, "NEWF")
+
+
+def test_f10_in_the_f9_view_does_not_leave_the_prompt_half_in_both(store):
+    c = signed(store)
+    f4(c, "CRTPF")
+    c.handle("F9", {})
+    s = c.handle("F10", {})                                                                # the F9 view has no F10 key (ours)
+    assert "That key is not built here." in texts(s) and "IGCDTA" in inputs(s)
+    assert "That key is not built here." in texts(c.handle("F9", {}))                      # still the F9 view, not both
+
+
+def test_f9_is_f10s_view_where_it_hides_nothing_and_a_redraw_where_there_is_neither(store):
+    c, d = signed(store), signed(store)
+    f4(c, "DSPMSG")
+    f4(d, "DSPMSG")
+    assert texts(c.handle("F9", {})) == texts(d.handle("F10", {}))                         # captured on 20 prompts
+    c = signed(store)
+    plain = f4(c, "DLTLIB")
+    s = c.handle("F9", {})                                                                 # captured: nothing, no message
+    assert texts(s) == texts(plain) and inputs(s) == inputs(plain)
+
+
+def test_f9_where_f10_has_no_view_shows_the_output_file_parameters(store):
+    c = signed(store)
+    plain = f4(c, "DSPOBJD")
+    s = c.handle("F9", {})
+    has = lambda screen: any("File to receive output" in t for t in texts(screen))
+    assert has(s) and not has(plain)
+    assert "OUTFILE" in inputs(s)
+
+
+def test_f9_on_the_other_line_still_works_and_does_not_run_the_command(store):
     c = signed(store)
     f4(c, "CRTPF")
     c.handle("F24", {})
-    s = c.handle("F9", {"FILE": "NEWF", "SRCMBR": "X"})                      # F11 and F14 are built, F9 is not
-    assert "That key is not built here." in texts(s)
-    assert inputs(s)["FILE"] == "NEWF"                                       # typed text kept, nothing ran
+    s = c.handle("F9", {"FILE": "NEWF", "SRCMBR": "X"})
+    assert inputs(s)["FILE"] == "NEWF" and "IGCDTA" in inputs(s)
     assert store.find_library("SCRATCH") is not None and not source_exists(store, "NEWF")
 
 

@@ -7,9 +7,9 @@ on Enter and on Roll Up while one is empty; F10=Additional parameters (no check 
 with the rest below an "Additional Parameters" line and its own key lines, F12 leaving the prompt from there); F13 opening the help (one generic text for every prompt, 15 pages, F3 and F12 back to the prompt); F24 swapping the key lines for the other set (seen on CRTPF only, the same line is used for every prompt, and a second F24 turning it back is ours); Roll Up paging a prompt that is more than one page, and "Already at
 bottom of area." on the last. CHGPWD has nothing to prompt for and says so. CRTLIB is the one prompt not captured (the host refused it first), so its layout is ours (LOCAL). F14 opens Display Command String (captured, `auth-prompt-keys`) and F11 shows the Choices view (fields moved
 left, a hint beside each, from `promptchoices.py`, captured in `auth-f11-*`).
-Not captured, so ours: how a refused command reads on the prompt, the command string once something is typed, and F9 (All parameters, which shows
-parameters the prompt hides, such as CRTPF's IGCDTA, so it is its own layout), which says it is not built, as does F10
-on a prompt with no additional parameters or when pressed a second time. CHGSPLFA's F10 view stops at its first page:
+F9 shows All parameters (captured, `auth-f9-*`): the parameters F10 hides on 15 prompts, such as CRTPF's IGCDTA, F10's view on 20 and the prompt drawn again on the rest.
+Not captured, so ours: how a refused command reads on the prompt, the command string once something is typed, and what a second F9 does, which says
+it is not built, as does F10 on a prompt with no additional parameters or when pressed a second time. CHGSPLFA's F10 view stops at its first page:
 the host will not page it without a spooled file that exists.
 
 Where this differs from the captured host on purpose: its CRTDSPF and CRTPRTF offered SRCFILE *NONE with a blank
@@ -103,6 +103,10 @@ def _build() -> dict[str, dict]:
             specs[command]["more"] = {"keys": spec["more"]["keys"],
                                       "pages": [(_with_overrides(command, rows), bottom)
                                                 for rows, bottom in spec["more"]["pages"]]}
+        if "all" in spec:                   # F9=All parameters, where it shows what F10 does not
+            specs[command]["all"] = {"keys": spec["all"]["keys"],
+                                     "pages": [(_with_overrides(command, rows), bottom)
+                                               for rows, bottom in spec["all"]["pages"]]}
         # the first page's rows, for the callers that only want to know what the prompt holds
         specs[command]["rows"] = pages[0][0]
     return specs
@@ -127,7 +131,7 @@ def _split_qualified(value: str) -> tuple[str, str]:
 
 
 def _all_rows(spec: dict) -> list:
-    pages = spec["pages"] + spec.get("more", {}).get("pages", [])
+    pages = spec["pages"] + spec.get("more", {}).get("pages", []) + spec.get("all", {}).get("pages", [])
     return [row for rows, _ in pages for row in rows]
 
 
@@ -163,6 +167,7 @@ class Prompt:
     help_page: int | None = None                    # F13 pressed: the help is on show, at this page
     more_keys: bool = False                         # F24 pressed: the other key line is showing
     extra: bool = False                             # F10 pressed: the additional parameters view
+    everything: bool = False                        # F9 pressed: the all parameters view (it, or F10's, on show)
     flagged: set = field(default_factory=set)      # fields drawn in reverse image after a refusal
     cursor: str = ""                                # where the cursor goes after one
     choices: bool = False                           # F11 pressed: every field moved left, a hint beside each
@@ -236,8 +241,10 @@ class Prompt:
         return cls(ctx, parsed.command, given, values)
 
     def _view(self) -> tuple[list, tuple]:
-        """The pages and key lines on show: the plain prompt, or what F10 asks for."""
+        """The pages and key lines on show: the plain prompt, or what F10 or F9 asks for."""
         spec = self.spec
+        if self.everything and "all" in spec:
+            return spec["all"]["pages"], spec["all"]["keys"]
         return (spec["more"]["pages"], spec["more"]["keys"]) if self.extra else (spec["pages"], spec["keys"])
 
     # -- drawing -----------------------------------------------------------------------------------------
@@ -274,6 +281,8 @@ class Prompt:
 
     def _hints(self) -> dict[int, str]:
         """The hint beside each field of the page on show, row by row. Empty when the host was never seen on it."""
+        if self.everything and "all" in self.spec:                 # never captured in the choices view
+            return {}
         known = CHOICES.get(self.command, {})
         return known.get("more" if self.extra else "pages", {}).get(self.page, {})
 
@@ -393,8 +402,16 @@ class Prompt:
                 self.values[name] = values[name].strip()
         if aid == "F10" and spec["no_f10"]:                       # captured on the option 3 prompt
             return Step("Function key not allowed.")
-        if aid == "F10" and "more" in spec and not self.extra:    # captured: no check, straight to the view
+        if aid == "F10" and "more" in spec and not self.extra and not self.everything:   # captured: no check, straight to the view
             self.extra, self.page = True, 0
+            return Step()
+        if aid == "F9" and not spec["locked"] and not self.extra and not self.everything and not self.choices:
+            # captured on every prompt: the all parameters view where it has parameters F10 hides, F10's view where it
+            # does not, and where there is neither the prompt drawn again with no message
+            if "all" in spec:
+                self.everything, self.page = True, 0
+            elif "more" in spec:
+                self.extra, self.page = True, 0
             return Step()
         if aid == "F11" and not spec["locked"] and self._hints_known():   # captured: a toggle, nothing checked
             self.choices = not self.choices
@@ -414,7 +431,7 @@ class Prompt:
                 self.page -= 1
                 return Step()
             return Step("Already at top of area.")                # captured
-        if aid != "ENTER":                                        # F9, F11, F13, F14, a second F10, F4...
+        if aid != "ENTER":                                        # F11 where not seen, a second F9 or F10, F4...
             return Step("That key is not built here.")
         if (missing := self._missing()):
             return self._refuse(missing)                          # captured
