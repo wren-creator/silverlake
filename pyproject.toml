@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,7 +7,8 @@ name = "silverlake"
 version = "0.0.1"
 description = "A clean-room IBM i (AS/400) security range"
 requires-python = ">=3.12"
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 dependencies = []
 
 [project.optional-dependencies]
