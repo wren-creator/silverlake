@@ -43,7 +43,7 @@ For a lab server that students reach over the network there is one opt in: `./st
 ./scenario.sh reset runcmd-qcmdexc       # vulnerable again, exploit leftovers cleared
 ./scenario.sh mode secure                # the whole range
 # or, with the range running and no restart, as QSECOFR on a command line:
-#   SLSCENARIO ID(runcmd-qcmdexc) STATE(*SECURE)    (also *VULNERABLE, *RESET, and ID(*ALL))
+#   SLSCENARIO ID(runcmd-qcmdexc) STATE(*SECURE)    (also *VULNERABLE, *RESET, *LIST, and ID(*ALL); F4 prompts it, and MAIN option 6 is the menu)
 ./check-flags.sh submission.txt          # score a trainee (--show for the instructor's answers)
 ```
 

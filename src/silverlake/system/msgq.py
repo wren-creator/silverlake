@@ -90,6 +90,14 @@ def can_change(store: ProfileStore, actor: Profile, q: SecuredObject) -> bool:
     return CHANGE_NEEDS & ~store.authority_to_object(actor, q) == Auth.NONE
 
 
+def log_event(store: ProfileStore, text: str) -> None:
+    """A system event on QSYSOPR (no From line), for things an operator should be able to see, such as the
+    instructor flipping a lesson. Does nothing if the queue is not there. The caller saves the store."""
+    q = store.objects.get(SYSOPR)
+    if q is not None:
+        messages_of(q).append({"from": "", "when": datetime.now().isoformat(timespec="seconds"), "text": text})
+
+
 def messages_of(q: SecuredObject) -> list[dict]:
     return q.data.setdefault("messages", [])
 

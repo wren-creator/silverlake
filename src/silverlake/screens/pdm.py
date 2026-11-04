@@ -41,7 +41,7 @@ class Context:
 @dataclass
 class Step:
     message: str = ""
-    go: str = "stay"                    # stay, back (one level), menu (all the way out), open
+    go: str = "stay"                    # stay, back (one level), menu (all the way out), open, view (a command's view over this one)
     widget: object = None
 
 

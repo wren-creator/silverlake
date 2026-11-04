@@ -747,6 +747,41 @@ opt = "5"
 text = "Command entry"
 cmd = "CALL QCMD"
 [[object.data.items]]
+opt = "6"
+text = "Lesson control (instructor)"
+cmd = "GO MENU(QSYS/SLADMIN)"
+[[object.data.items]]
+opt = "90"
+text = "Sign off"
+cmd = "SIGNOFF"
+
+# The instructor's menu. Every option runs SLSCENARIO, which only QSECOFR may run, so a student who finds it gets
+# the same refusal as typing the command.
+[[object]]
+name = "SLADMIN"
+type = "*MENU"
+owner = "QSYS"
+public = "*USE"
+text = "Lesson control menu"
+[object.data]
+title = "Lesson Control"
+[[object.data.items]]
+opt = "1"
+text = "List every lesson and its state"
+cmd = "SLSCENARIO STATE(*LIST)"
+[[object.data.items]]
+opt = "2"
+text = "Make the whole range secure"
+cmd = "SLSCENARIO ID(*ALL) STATE(*SECURE)"
+[[object.data.items]]
+opt = "3"
+text = "Make the whole range vulnerable"
+cmd = "SLSCENARIO ID(*ALL) STATE(*VULNERABLE)"
+[[object.data.items]]
+opt = "4"
+text = "Reset every lesson, clearing what exploits left"
+cmd = "SLSCENARIO ID(*ALL) STATE(*RESET)"
+[[object.data.items]]
 opt = "90"
 text = "Sign off"
 cmd = "SIGNOFF"

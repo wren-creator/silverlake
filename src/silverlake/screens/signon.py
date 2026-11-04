@@ -26,7 +26,7 @@ from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
-from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, wrklib_screen
+from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, slscenario_screen, wrklib_screen
 from .worklists import (DETAIL_VIEWS, EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
                         WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
 from . import jobextra, pdm, pfm, prompt
@@ -362,6 +362,9 @@ class SignonController:
         if kind == "dspobjaut":
             obj = spec[1]
             return _plist(spec[2], lambda rows, page: dspobjaut_screen(obj, rows, page), DSPOBJAUT_ROWS)
+        if kind == "slslist":
+            mode = spec[2]
+            return ("plist", spec[1], 0, lambda rows, page: slscenario_screen(mode, rows, page))
         if kind == "dspautl":
             autl = spec[1]
             return _plist(spec[2], lambda rows, page: dspautl_screen(autl, rows, page), 11)
@@ -861,6 +864,10 @@ class SignonController:
         if step.go == "open":
             self.parents.append(self.view)
             self.view = ("widget", step.widget)
+            return self._draw_view(step.message)
+        if step.go == "view":
+            self.parents.append(self.view)
+            self.view = self._open_view(step.widget)
             return self._draw_view(step.message)
         if step.go == "menu":
             self._release_widgets()

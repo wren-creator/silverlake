@@ -53,7 +53,13 @@ LOCAL = {"CRTLIB": {
     "keys": CAPTURED["CRTMSGQ"]["keys"],
     "rows": [(4, "Library  . . . . . . . . . . . LIB", "LIB", 49, 10, ""),
              (5, "Library type  . . . . . . . . . TYPE", "TYPE", 49, 7, "*PROD"),
-             (6, "Text 'description' . . . . . . . TEXT", "TEXT", 49, 50, "*BLANK")]}}
+             (6, "Text 'description' . . . . . . . TEXT", "TEXT", 49, 50, "*BLANK")]},
+    # Silverlake's own command, so no real host has a layout for it: the same columns and key lines as CRTLIB.
+    "SLSCENARIO": {
+    "title": ("Set Lesson State (SLSCENARIO)", 26), "bottom": "Bottom", "required": ("STATE",),
+    "keys": CAPTURED["CRTMSGQ"]["keys"],
+    "rows": [(4, "Lesson id  . . . . . . . . . . . ID", "ID", 49, 26, "*ALL"),
+             (5, "State . . . . . . . . . . . . . STATE", "STATE", 49, 11, "")]}}
 
 
 # F10 on Edit Object Authority (captured, `auth-objopts2` retry): the GRTOBJAUT prompt already filled in for the
@@ -439,7 +445,9 @@ class Prompt:
             if cmd == self.command and self.values.get(kw):
                 return Step(why)
         out = self.ctx.run(self._line())
-        if out.view or out.go or out.cmdentry or out.signoff:
+        if out.view:                                              # the view opens over the prompt, F12 comes back to it
+            return Step(go="view", widget=out.view)
+        if out.go or out.cmdentry or out.signoff:
             return Step()
         text = out.message.text if out.message else ""
         if any(d in text for d in DONE) or (out.message and not out.message.id and _FINISHED.search(text)

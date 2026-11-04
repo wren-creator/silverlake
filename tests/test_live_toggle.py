@@ -5,7 +5,7 @@ import pytest
 from silverlake import scenarios
 from silverlake.cl.commands import execute
 from silverlake.net import ftpd
-from silverlake.system import commandobjs, profiles
+from silverlake.system import commandobjs, msgq, profiles
 
 REG = scenarios.registry()
 LESSON = "ftp-console-cleartext"
@@ -77,3 +77,47 @@ def test_a_state_saved_before_the_command_existed_gets_it_closed(store):
     del store.objects[("QSYS", "SLSCENARIO", "*CMD")]
     commandobjs.ensure_commands(store)
     assert run(store, "STUDENT", f"SLSCENARIO ID({LESSON}) STATE(*SECURE)").startswith("Not authorized")
+
+
+def test_list_shows_every_lesson_and_its_state_and_changes_nothing(store):
+    run(store, "QSECOFR", f"SLSCENARIO ID({LESSON}) STATE(*SECURE)")
+    out = execute(store, store.get("QSECOFR"), "SLSCENARIO STATE(*LIST)")
+    kind, rows, mode = out.view
+    assert kind == "slslist" and mode == store.system.mode
+    assert {r[2] for r in rows} == set(REG)
+    assert next(r for r in rows if r[2] == LESSON)[0] == "secure"
+    assert [r[2] for r in execute(store, store.get("QSECOFR"), f"SLSCENARIO ID({LESSON}) STATE(*LIST)").view[1]] == [LESSON]
+    assert run(store, "QSECOFR", "SLSCENARIO ID(no-such-lesson) STATE(*LIST)") == "Lesson no-such-lesson not found."
+
+
+def test_list_is_still_the_instructors_alone(store):
+    assert run(store, "STUDENT", "SLSCENARIO STATE(*LIST)").startswith("Not authorized to command")
+
+
+def test_a_flip_leaves_a_line_on_qsysopr_that_students_can_read(store):
+    before = len(msgq.messages_of(store.objects[msgq.SYSOPR]))
+    run(store, "QSECOFR", f"SLSCENARIO ID({LESSON}) STATE(*SECURE)")
+    run(store, "QSECOFR", "SLSCENARIO ID(*ALL) STATE(*RESET)")
+    log = [m["text"] for m in msgq.messages_of(store.objects[msgq.SYSOPR])][before:]
+    assert log == [f"SLSCENARIO: QSECOFR set {LESSON} to *SECURE.", "SLSCENARIO: QSECOFR set all lessons to *RESET."]
+    assert run(store, "STUDENT", "SLSCENARIO ID(*ALL) STATE(*SECURE)").startswith("Not authorized")
+    assert len(msgq.messages_of(store.objects[msgq.SYSOPR])) == before + 2       # a refusal logs nothing
+
+
+def test_list_runs_in_the_text_services_too(store):
+    from silverlake.net import textview
+    text = textview.run(store, store.get("QSECOFR"), "SLSCENARIO STATE(*LIST)")
+    assert text.startswith("range mode:") and LESSON in text
+
+
+def test_the_lesson_control_menu_is_reached_from_main_and_every_option_is_the_instructors(store):
+    from silverlake.system import menus
+    main = menus.parse(store.objects[("QSYS", "MAIN", "*MENU")].data)
+    assert main.find("6").cmd == "GO MENU(QSYS/SLADMIN)"
+    admin = menus.parse(store.objects[("QSYS", "SLADMIN", "*MENU")].data)
+    cmds = [i.cmd for i in admin.items if i.cmd != "SIGNOFF"]
+    assert len(cmds) == 4 and all(c.startswith("SLSCENARIO ") for c in cmds)
+    for c in cmds:
+        assert run(store, "STUDENT", c).startswith("Not authorized to command SLSCENARIO")
+    assert execute(store, store.get("QSECOFR"), cmds[0]).view[0] == "slslist"
+    assert run(store, "QSECOFR", cmds[1]) == "all lessons: now secure."

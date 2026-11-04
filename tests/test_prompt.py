@@ -510,3 +510,14 @@ def test_f11_on_a_prompt_with_no_captured_hints_or_a_locked_row_says_not_built(s
     finally:
         if saved is not None:
             promptchoices.CHOICES["DSPMSG"] = saved
+
+
+def test_slscenario_prompt_is_the_instructors_and_runs_the_command_it_builds(store):
+    s = f4(signed(store, "QSECOFR"), "SLSCENARIO")
+    assert "Set Lesson State (SLSCENARIO)" in texts(s) and inputs(s)["ID"] == "*ALL" and inputs(s)["STATE"] == ""
+    c = signed(store, "QSECOFR")
+    f4(c, "SLSCENARIO")
+    assert "Parameter STATE required." in texts(c.handle("ENTER", {"ID": "*ALL", "STATE": ""}))
+    assert "Silverlake Lesson States" in texts(c.handle("ENTER", {"ID": "*ALL", "STATE": "*LIST"}))
+    s = f4(signed(store), "SLSCENARIO")                                      # a student is refused before any prompt
+    assert "Not authorized to command SLSCENARIO in library *LIBL." in texts(s)

@@ -23,6 +23,9 @@ def outcome_text(store: ProfileStore, outcome, line: str = "") -> str:
         if kind == "dspmsg":
             return "\n".join(f"{m.get('from') or '*SYSTEM':<10} {m.get('when', '')}  {m.get('text', '')}"
                              for m in outcome.view[1].data.get("messages", [])) or "No messages."
+        if kind == "slslist":
+            return "\n".join([f"range mode: {outcome.view[2]}"] +
+                              [f"{st:<10} {g} {i:<26} {t}" for st, g, i, t in outcome.view[1]])
         if kind == "wrkusrprf":
             return "\n".join(f"{p.name:<10} {p.status:<10} {p.text}" for p in outcome.view[1])
         if kind == "dspusrprf":

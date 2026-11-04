@@ -76,6 +76,23 @@ def wrklib_screen(libs: list, page: int = 0) -> Screen:
     return Screen(rows)
 
 
+def slscenario_screen(mode: str, lessons: list, page: int = 0) -> Screen:
+    """SLSCENARIO STATE(*LIST): every lesson and the state it is in. Ours, not a capture: a plain paged list."""
+    page, shown = _clamp(lessons, page)
+    rows: list[Text | Input] = [
+        Text(0, 24, "Silverlake Lesson States", ds.ATTR_WHITE),
+        Text(2, 2, "Range mode . . . :", ds.ATTR_GREEN), Text(2, 21, mode, ds.ATTR_GREEN),
+        Text(4, 2, "State", ds.ATTR_WHITE), Text(4, 14, "Grp", ds.ATTR_WHITE), Text(4, 19, "Lesson", ds.ATTR_WHITE),
+        Text(4, 47, "Title", ds.ATTR_WHITE),
+    ]
+    for i, (state, group, sid, title) in enumerate(shown):
+        r = FIRST_ROW + i
+        rows += [Text(r, 2, state, ds.ATTR_GREEN), Text(r, 14, group, ds.ATTR_GREEN), Text(r, 19, sid[:27], ds.ATTR_GREEN),
+                 Text(r, 47, title[:32], ds.ATTR_GREEN)]
+    _footer(rows, page, len(lessons), "F3=Exit   F12=Cancel   Page Up/Down")
+    return Screen(rows)
+
+
 def dspobjaut_screen(obj, authority_rows: list[tuple[str, str]], page: int = 0) -> Screen:
     """Laid out like the real Display Object Authority captured from PUB400: the header block,
     the authorization list line, a User, Group and Authority table from row 10, and the keys

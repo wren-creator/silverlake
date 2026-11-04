@@ -146,7 +146,7 @@ GO_PARAMS = [Param("MENU", "qname", "", required=True), Param("RTNPNT", "yesno",
 CALL_PARAMS = [Param("PGM", "qname", "", required=True)]
 CHGPWD_PARAMS = [Param("PASSWORD", "plain", "", required=True), Param("NEWPASSWORD", "plain", "", required=True),
                  Param("NEWPASSWORD2", "plain", "", required=True)]
-SLSCENARIO_PARAMS = [Param("ID", "scenid", "", required=True), Param("STATE", "scenstate", "", required=True)]
+SLSCENARIO_PARAMS = [Param("ID", "scenid", "*ALL"), Param("STATE", "scenstate", "", required=True)]
 CHGPRF_PARAMS = [Param("INLPGM", "qname*", SAME), Param("INLMNU", "qname*", SAME), Param("CURLIB", "name*", SAME)]
 
 CRTAUTL_PARAMS = [Param("AUTL", "autl", "", required=True), Param("AUT", "aut", "*CHANGE"),
@@ -299,7 +299,7 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
             raise BindError("Value for parameter ID not valid. Use a lesson id or *ALL.")
         return values[0].lower() if values[0] != "*ALL" else values[0]
     if k == "scenstate":
-        return _one(p.key, values, ("*SECURE", "*VULNERABLE", "*RESET"))
+        return _one(p.key, values, ("*SECURE", "*VULNERABLE", "*RESET", "*LIST"))
     if k == "pwdintv":
         v = _one(p.key, values, ("*SYSVAL", "*NOMAX")) if values[0].startswith("*") else values[0]
         if v == "*SYSVAL":
@@ -756,7 +756,7 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
     return _run_library_command(store, actor, session, name, b)
 
 
-def _set_scenario(store: ProfileStore, actor: Profile, sid: str, state: str) -> messages.Message:
+def _set_scenario(store: ProfileStore, actor: Profile, sid: str, state: str) -> "messages.Message | Outcome":
     """Flip a lesson on the running range, the way ./scenario.sh does with a restart. Only QSECOFR may, whoever else
     holds *USE to the command. Sessions already open stay open and see the new state at once. *RESET also clears what
     an exploit left behind."""
@@ -766,6 +766,10 @@ def _set_scenario(store: ProfileStore, actor: Profile, sid: str, state: str) -> 
     reg = scenarios.registry()
     if sid != "*ALL" and sid not in reg:
         return messages.syntax(f"Lesson {sid} not found.")
+    if state == "*LIST":
+        rows = [s for s in reg.values() if sid in ("*ALL", s.id)]
+        return Outcome(view=("slslist", [(scenarios.current(store, s.id), s.group, s.id, s.title) for s in rows],
+                             store.system.mode))
     chosen = list(reg.values()) if sid == "*ALL" else [reg[sid]]
     for s in chosen:
         if state == "*RESET":
@@ -774,8 +778,9 @@ def _set_scenario(store: ProfileStore, actor: Profile, sid: str, state: str) -> 
             scenarios.apply(store, s, state[1:].lower())
     if sid == "*ALL" and state != "*RESET":
         store.system.mode = state[1:].lower()
-    store.on_change()
     what = "all lessons" if sid == "*ALL" else sid
+    msgq.log_event(store, f"SLSCENARIO: {actor.name} set {what} to {state}.")
+    store.on_change()
     return messages.info(f"{what}: {'reset to vulnerable' if state == '*RESET' else 'now ' + state[1:].lower()}.")
 
 
@@ -821,7 +826,8 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
             return Outcome(messages.info(f"Program {prog.name} ended abnormally: {run.error}") if run.error else None)
         return Outcome(view=("rpgrun", run))
     if name == "SLSCENARIO":
-        return Outcome(_set_scenario(store, actor, b["ID"], b["STATE"]))
+        done = _set_scenario(store, actor, b["ID"], b["STATE"])
+        return done if isinstance(done, Outcome) else Outcome(done)
     if name == "CHGPWD":
         err = store.change_password(actor, b["PASSWORD"], b["NEWPASSWORD"], b["NEWPASSWORD2"])
         return Outcome(err or messages.info("Password changed."))
