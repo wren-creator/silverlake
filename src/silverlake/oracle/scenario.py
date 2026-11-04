@@ -400,6 +400,39 @@ AUTHENTICATED["auth-f9-prtf"] = [
     {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Read only: the F9 pages auth-f9-pages never reached, on the three prompts where F9 hands back F10's pages (CHGUSRPRF,
+# CPYF, CHGJOB: ours stop at the first page of them). Same rules as auth-f10-deep: the required names get a made-up value
+# (CHGUSRPRF looks the profile up, so it gets the signed-on one, which only reads it), the prompt is rolled on eight times,
+# and F12 three times gets back. Then F9 followed by F11, which was never pressed together, on three prompts. Enter is
+# never pressed on a prompt, so nothing runs.
+F9_DEEP = {"CHGUSRPRF": {"0": "${%s}" % USER_ENV}, "CPYF": {"0": "SLPLACE", "2": "SLPLACE"}, "CHGJOB": {}}
+F9_F11 = ("CRTPF", "CHGJOB", "DSPMSG")
+AUTHENTICATED["auth-f9-gaps"] = [
+    _SIGNON,
+    *[step for cmd, fill in F9_DEEP.items()
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F9"},
+                   {"key": "ROLLUP", **({"fill": fill} if fill else {})}, *[{"key": "ROLLUP"}] * 8,
+                   {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+    *[step for cmd in F9_F11
+      for step in ({"fill": {"0": cmd}, "key": "F4"}, {"key": "F9"}, {"key": "F11"}, {"key": "ROLLUP"},
+                   {"key": "F11"}, {"key": "ROLLUP"},
+                   {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True})],
+    {**_SIGNOFF, "always": True},
+]
+# Read only: the three prompt pages the F4 table is missing, seen in the F11 captures. CHGOBJD page two (Text and Days
+# used count), SNDMSG's choices layout (it wraps differently from the others), and CHGSPLFA, which cannot be paged
+# without a spooled file that exists and is left out. Made-up names only, typed so Roll Up pages instead of complaining
+# (as auth-prompts-pages did), F11 and F10 then looked at, F12 three times to get back. Enter is never pressed.
+AUTHENTICATED["auth-prompts-gaps"] = [
+    _SIGNON,
+    {"fill": {"0": "CHGOBJD"}, "key": "F4"}, {"key": "ROLLUP", "fill": {"0": "SLPLACE", "2": "*FILE"}}, {"key": "ROLLUP"},
+    {"key": "F11"}, {"key": "ROLLUP"}, {"key": "F10"}, {"key": "ROLLUP"}, {"key": "ROLLUP"},
+    {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
+    {"fill": {"0": "SNDMSG"}, "key": "F4"}, {"key": "F11"}, {"key": "ROLLUP", "fill": {"0": "SLPLACE"}}, {"key": "ROLLUP"},
+    {"key": "F10"}, {"key": "ROLLUP"}, {"key": "ROLLUP"},
+    {"key": "F12", "always": True}, {"key": "F12", "always": True}, {"key": "F12", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 # Read only: the second page of the two prompts whose Roll Up complained about a missing parameter (the
 # host checks the required name before it rolls). The first field gets a made-up name, the prompt is rolled
 # once and left with F12. Enter is never pressed on a prompt, so nothing is run and the name is never looked up.

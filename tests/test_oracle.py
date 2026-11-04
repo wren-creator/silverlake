@@ -618,7 +618,7 @@ def test_save_and_restore_screen_are_decoded_not_refused():
 
 
 def test_the_prompt_scenarios_press_f4_and_never_enter_on_a_prompt():
-    names = [n for n in scenario.AUTHENTICATED if n.startswith("auth-prompts-") and n != "auth-prompts-pages"]
+    names = [n for n in scenario.AUTHENTICATED if n.startswith("auth-prompts-") and n not in ("auth-prompts-pages", "auth-prompts-gaps")]
     assert names
     for name in names:
         actions = scenario.SCENARIOS[name]
@@ -939,3 +939,17 @@ def test_the_f9_prtf_scenario_rolls_only_crtprtf_and_never_presses_enter():
     for a in actions[1:-1]:
         assert a["key"] in ("F4", "F9", "ROLLUP", "F12"), a
         assert a["key"] != "F12" or a.get("always")
+
+
+def test_the_prompt_gap_scenarios_press_only_prompt_keys_and_never_enter():
+    allowed = {"auth-f9-gaps": ("F4", "F9", "F11", "ROLLUP", "F12"), "auth-prompts-gaps": ("F4", "F10", "F11", "ROLLUP", "F12")}
+    for name, keys in allowed.items():
+        actions = scenario.SCENARIOS[name]
+        assert actions[-1]["fill"] == {"0": "SIGNOFF"} and actions[-1].get("always")
+        for a in actions[1:-1]:
+            assert a["key"] in keys, (name, a)
+            assert a["key"] != "F12" or a.get("always")
+            assert a["key"] != "F4" or set(a["fill"]) == {"0"}
+    assert [a["fill"]["0"] for a in scenario.SCENARIOS["auth-f9-gaps"] if a["key"] == "F4"] == \
+        [*scenario.F9_DEEP, *scenario.F9_F11]
+    assert [a["fill"]["0"] for a in scenario.SCENARIOS["auth-prompts-gaps"] if a["key"] == "F4"] == ["CHGOBJD", "SNDMSG"]
