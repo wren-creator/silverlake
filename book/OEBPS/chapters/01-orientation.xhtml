@@ -1,0 +1,166 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8"/>
+<title>Session 1: Sign-On, Objects, Authority and the Library List</title>
+<link rel="stylesheet" type="text/css" href="../styles.css"/>
+</head>
+<body>
+<h1>Session 1: Sign-On, Objects, Authority and the Library List</h1>
+<p>Goal for this session: sign on as an ordinary profile and map, by hand, what that profile can see and what it can't. Everything in the next four sessions starts from this map.</p>
+<h2>1.1 What You Are Looking At</h2>
+<p>If you come from Linux, forget the filesystem for a minute. IBM i has no tree of directories holding files. It has <em>objects</em>, and every object has a name, a type and a home library. A program is an object of type <code>*PGM</code>. A data file is a <code>*FILE</code>. A menu is a <code>*MENU</code>, a printer queue is an <code>*OUTQ</code>, a user profile is a <code>*USRPRF</code>, and a library is itself an object of type <code>*LIB</code>. Name, type and library together identify one thing, written <code>LIBRARY/NAME</code>, so <code>QGPL/QPRINT</code> is the output queue called QPRINT in the library called QGPL.</p>
+<p>Two things follow from that, and both matter for security. First, authority hangs on objects, one by one, so the question "who can touch this?" always has an answer you can look up. Second, a library is a container with its own authority, so reaching an object takes two checks: you need authority to the library and authority to the object. Sessions 3 and 4 spend a lot of time on what happens when someone gets one check right and the other one wrong.</p>
+<p>The screens are 5250 green screens. A session is a terminal talking to the system, and what you type goes into fields. A few keys carry the whole interface: <code>Enter</code> runs what you typed, <code>F3</code> exits, <code>F12</code> goes back one level, and <code>F4</code> prompts a command so you can see its parameters. Roll Up and Roll Down (Page Down and Page Up on most keyboards) move through a long list.</p>
+<h2>1.2 Sign On</h2>
+<p>Connect your 5250 client to <code>127.0.0.1</code> on port <code>5250</code>. You get the Sign On screen:</p>
+<pre>                                  Sign On
+                                               System  . . . . . :   SILVERLK
+                                               Subsystem . . . . :   QINTER
+                                               Display . . . . . :   QPADEV0001
+
+              User  . . . . . . . . . . . . . . .   __________
+              Password  . . . . . . . . . . . . .   __________
+              Program/procedure . . . . . . . . .   __________
+              Menu  . . . . . . . . . . . . . . .   __________
+              Current library . . . . . . . . . .   __________
+
+                                       SILVERLAKE SIMULATION. NOT IBM.</pre>
+<p>The last line of the screen is there on purpose. It tells you where you are every time you look.</p>
+<p>Sign on as <code>STUDENT</code> with the password <code>STUDENT</code>. STUDENT is an ordinary profile, the kind of account most attacks on a real system start from, and it is the one you will use for most of Sessions 1 through 4.</p>
+<p>Before you move on, do one thing that feels wrong: sign off with F3, then sign on as STUDENT with a bad password. The system answers on the bottom line:</p>
+<pre>CPF1107 - Password not correct for user profile.</pre>
+<p>That message is worth remembering, because a real system says the same thing and the ID is how you find it in a log. It is also a warning. The range enforces a limit on bad attempts, three in a row, and a profile that hits it is disabled. On a real system that means a call to the help desk. Here it means <code>./reset.sh</code> and a lost minute. In Session 2 you will see how little a limit like that stops someone who already knows the password.</p>
+<h2>1.3 The Menu and the Command Line</h2>
+<p>A good sign-on lands you on the main menu:</p>
+<pre> MAIN                         Silverlake Main Menu
+                                                             System:   SILVERLK
+ Select one of the following:
+
+      1. Display the library list
+      2. Work with libraries
+      3. Work with user profiles
+      4. Application menu
+      5. Command entry
+      6. Lesson control (instructor)
+
+     90. Sign off
+
+ Selection or command
+ ===&gt; _______________________________________
+
+ F3=Exit   F12=Cancel</pre>
+<p>The line at the bottom, <code>===&gt;</code>, takes either a menu number or a command. Type <code>1</code> and press Enter to run option 1. Type a command name and press Enter to run that. Real IBM i menus work exactly this way, and the menu is just a list of commands with numbers in front of them.</p>
+<p>Option 6 is the instructor's control menu. You will see it, and you can open it, but every option behind it runs a command that only the security officer may run. Try one if you want to. You will get <code>Not authorized to command SLSCENARIO in library *LIBL.</code>, and that refusal is your first lesson in how the system says no.</p>
+<h2>1.4 The Library List</h2>
+<p>When you type a bare name like <code>PAYROLL</code>, the system has to decide which library to look in. It uses the <em>library list</em>, an ordered list of libraries it searches from the top, taking the first match. Look at yours:</p>
+<pre>DSPLIBL</pre>
+<pre>                            Display Library List
+                                                             System:   SILVERLK
+                            ASP
+     Library     Type      Device      Text
+     QSYS        SYS                   System library
+     QSYS2       SYS                   System library for CPI's
+     QUSRSYS     SYS                   System library for users
+     QHLPSYS     SYS                   System help library
+     QGPL        USR                   General purpose library
+     QTEMP       USR                   Temporary library, one per job on a real</pre>
+<p>Read the order. System libraries first, then the user part of the list. Notice what is <em>not</em> there: the application library, <code>APPLIB</code>, is not on your list, so a bare name that lives only in APPLIB would not be found. You reach it by naming the library, <code>APPLIB/NAME</code>, or by adding it to your list.</p>
+<p>Hold on to that ordering. In Session 4 the single most important fact is that the first match wins, and that a program which searches the list instead of naming a library can be handed the wrong object by anyone who can put a library earlier in line. Right now it is just something you have looked at.</p>
+<p>To see every library on the system that you have some authority to, use:</p>
+<pre>WRKLIB LIB(*ALL)</pre>
+<pre>                            Work with Libraries
+ Libraries you have some authority to.
+
+ Library     Owner       Text
+ APPLIB      QSECOFR     Application library
+ QGPL        QSYS        General purpose library
+ QHLPSYS     QSYS        System help library
+ QHTTPSVR    QSYS        HTTP server product library
+ QSYS        QSYS        System library
+ QSYS2       QSYS        System library for CPI's
+ QTEMP       QSYS        Temporary library, one per job on a real system
+ QUSRSYS     QSYS        System library for users
+ SCRATCH     STUDENT     Student scratch library.</pre>
+<p>Two libraries are interesting right away. <code>APPLIB</code> is owned by QSECOFR, the security officer, and it is where the application's programs and data live. <code>SCRATCH</code> is owned by STUDENT, which makes it yours: the one place you are allowed to create things. Keep both in mind.</p>
+<h2>1.5 Objects</h2>
+<p>List what is inside a library with <code>WRKOBJ</code>:</p>
+<pre>WRKOBJ OBJ(QGPL/*ALL) OBJTYPE(*ALL)</pre>
+<pre>                               Work with Objects
+
+ Type options, press Enter.
+   2=Edit authority        3=Copy   4=Delete   5=Display authority   7=Rename
+   8=Display description   13=Change description
+
+ Opt  Object      Type      Library     Attribute   Text
+ __   QPRINT      *OUTQ     QGPL                    Default printer output</pre>
+<p>One object, the default printer queue. Now try the application library:</p>
+<pre>WRKOBJ OBJ(APPLIB/*ALL) OBJTYPE(*ALL)</pre>
+<p>This list is longer: programs, files, a menu, an output queue. Read the <em>Text</em> column slowly. The people who wrote these descriptions were describing what each object was for, and on a real system that column is often the most honest documentation anyone left behind. Some of these descriptions will turn out to matter a great deal in Session 4.</p>
+<p>The options at the top of the screen are the work list. Type a number in the Opt column next to an object and press Enter. Option 5 displays its authority, which is where we go next. Options 2, 4, 7 and 13 change things, and what they let you do depends on what you are allowed to do to that object. You will find out which ones work for STUDENT by trying them, and you should try them only on objects in <code>SCRATCH</code>.</p>
+<h2>1.6 Authority</h2>
+<p>Authority on IBM i comes in layers, and it helps to keep them straight from the start.</p>
+<p><strong>The user profile</strong> is the identity. It has a <em>user class</em> (<code>*USER</code>, <code>*SYSOPR</code>, <code>*PGMR</code>, <code>*SECADM</code>, <code>*SECOFR</code>) that sets a default bundle of powers, and a list of <em>special authorities</em> that can be given or taken away one at a time. The big ones for this course are <code>*ALLOBJ</code>, which passes every object authority check, <code>*SECADM</code>, which manages user profiles, and <code>*JOBCTL</code>, which controls other people's jobs and output.</p>
+<p><strong>Object authority</strong> is what a particular profile may do to a particular object: use it, change it, delete it, manage who else can touch it. Every object also has a <em>public</em> authority that applies to anyone with no more specific entry.</p>
+<p>Look at your own profile first:</p>
+<pre>DSPUSRPRF STUDENT</pre>
+<pre>                          Display User Profile - Basic
+
+  User profile .................. : STUDENT
+  Status ........................ : *ENABLED
+  Password ...................... : set
+  User class .................... : *USER
+  Special authority from ........ : *USRCLS
+  Special authorities ........... : (none)
+  Group profile ................. : *NONE
+  Owner ......................... : SECADMIN
+  Public authority (AUT) ........ : *EXCLUDE
+  Limited capabilities .......... : *NO
+  Initial menu .................. : MAIN
+  Text .......................... : Ordinary user. The account most attacks
+                                    start from.</pre>
+<p>No special authorities at all, and <em>limited capabilities</em> is off, meaning STUDENT may type any command it is authorised to run. Now look at how a library and a queue are secured:</p>
+<pre>DSPOBJAUT OBJ(QGPL) OBJTYPE(*LIB)</pre>
+<pre>                            Display Object Authority
+
+ Object . . . . . . . :   QGPL            Owner  . . . . . . . :   QSYS
+   Library  . . . . . :     QSYS          Primary group  . . . :   *NONE
+ Object type  . . . . :   *LIB            ASP device . . . . . :   *SYSBAS
+
+ Object secured by authorization list  . . . . . . . . . . . . :   *NONE
+
+                          Object
+ User        Group       Authority
+ *PUBLIC                 *CHANGE</pre>
+<p>QGPL, the general purpose library, gives <code>*PUBLIC</code> the authority <code>*CHANGE</code>. Everyone can put things in it and change what they find there, and that is by design: it is a shared space. Now compare it to the application library:</p>
+<pre>DSPOBJAUT OBJ(APPLIB) OBJTYPE(*LIB)</pre>
+<p>APPLIB gives <code>*PUBLIC</code> only <code>*USE</code>. STUDENT may look inside the library and may use objects in it, but may not add, change or delete anything at the library level. Whether STUDENT may use a given object <em>inside</em> it is a separate question with a separate answer.</p>
+<p>Now compare two objects from the application library and see how different the answers are. The menu, <code>DSPOBJAUT OBJ(APPLIB/APPMENU) OBJTYPE(*MENU)</code>, shows you a public authority of <code>*USE</code>. The payroll file does not even let you ask:</p>
+<pre>DSPPFM FILE(APPLIB/PAYROLL)</pre>
+<pre>Not authorized to use object PAYROLL in library APPLIB type *FILE.</pre>
+<p>That is the message a locked object gives you, and it is the system doing its job. STUDENT can see that <code>PAYROLL</code> exists, because it can read the library, and STUDENT cannot read what is in it. Notice the shape of that: <em>seeing</em> an object and <em>using</em> it are two different rights. A lot of real findings live in the gap between them.</p>
+<h2>1.7 What the System Refuses</h2>
+<p>A system that never said no would not be teaching you much, so spend a few minutes collecting refusals. Each of these is something STUDENT may not do, and each message tells you which check stopped it:</p>
+<table>
+<tr><th>Command</th><th>What STUDENT gets</th></tr>
+<tr><td><code>CRTUSRPRF USRPRF(X) PASSWORD(X)</code></td><td><code>*SECADM special authority is required to create or change user profiles.</code></td></tr>
+<tr><td><code>DSPUSRPRF QSECOFR</code></td><td><code>Not authorized to user profile QSECOFR.</code></td></tr>
+<tr><td><code>DSPPFM FILE(APPLIB/PAYROLL)</code></td><td><code>Not authorized to use object PAYROLL in library APPLIB type *FILE.</code></td></tr>
+<tr><td><code>WRKUSRPRF</code></td><td>A list with one row in it: STUDENT. You only see the profiles you are authorised to.</td></tr>
+</table>
+<p>Look at the last row again, because it is the quietest and the most useful. The system did not refuse <code>WRKUSRPRF</code>. It ran it and showed you only what you may see. Filtering instead of refusing is common on IBM i, and it means that an empty-looking screen is not the same as an empty system.</p>
+<h2>1.8 Take-Home: Map STUDENT</h2>
+<p>This is the deliverable for the session, and you will refer back to it all week. Build a table, on paper or in a text file, with one row for each thing you tried and four columns: the command, the object, what happened, and which check you think stopped it or allowed it (library, object, special authority, or filtered). Aim for at least ten rows. At a minimum include:</p>
+<ul>
+<li>the libraries you can see, and which of them you own</li>
+<li>every object type you can find in <code>APPLIB</code></li>
+<li>for each file in <code>APPLIB</code>, whether you can display its contents</li>
+<li>what <code>DSPOBJAUT</code> shows, or refuses, for the library and for two objects inside it</li>
+<li>three commands the system refuses, with the exact message</li>
+</ul>
+<p>Do not worry about being clever. The point is to build the habit of reading the answer the system gives you, word for word, and asking what it is telling you about how it was configured. Every exploit in the next four sessions starts from a row in a table like this one.</p>
+<h2>1.9 Honest Limits</h2>
+<p>Silverlake is a simulator, and it is worth knowing where it stops. The screens and messages are written fresh, laid out to follow what a real IBM i draws, and where the layouts came from a real system they were checked against it. What is not here, on purpose: the machine interface, licensed internal code, a real database engine, native ILE program binding, and real printers and tape. The range implements what the lessons need and says so plainly in <code>docs/not-faked.md</code>. If something behaves differently from a system you know, that is worth writing down and sending in.</p>
+</body>
+</html>

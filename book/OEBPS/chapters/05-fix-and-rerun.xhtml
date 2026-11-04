@@ -1,0 +1,105 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8"/>
+<title>Session 5: Fix and Re-Run</title>
+<link rel="stylesheet" type="text/css" href="../styles.css"/>
+</head>
+<body>
+<h1>Session 5: Fix and Re-Run</h1>
+<p>Goal for this session: close every weakness you found in Sessions 2 through 4, prove each one is closed by running the same steps again, and write down exactly where each one stops working. Finding a problem is half the job. A finding with no fix and no proof is a complaint.</p>
+<h2>5.1 Same Range, Other State</h2>
+<p>Silverlake has two states for every lesson. In the <em>vulnerable</em> state, which is how the range starts, the weakness is there. In the <em>secure</em> state, the setting, authority or object that made the weakness possible has been changed, and nothing else has. Each lesson is a short list of settings with a vulnerable value and a secure value for each, so flipping a lesson is a precise, repeatable change and not a vague "hardening".</p>
+<p>That shapes how you think about fixing. You are not looking for a switch labelled "make it safe". You are looking for the specific thing that made each exploit work, and the exercise is to name it. This book will not tell you the fix for each lesson. The system will, if you ask it the right way, and the rest of this session is about asking.</p>
+<h2>5.2 Three Ways to Change a Lesson</h2>
+<h3>From the shell: scenario.sh</h3>
+<p>On the machine running the range:</p>
+<pre>./scenario.sh list                       # the lessons and which are fixed
+./scenario.sh set LESSON secure          # fix one
+./scenario.sh set LESSON vulnerable      # put one back
+./scenario.sh reset LESSON               # vulnerable again, with what an exploit left behind cleared
+./scenario.sh mode secure                # the whole range at once</pre>
+<p>Know what these do before you run them. They stop the server, change the saved state and start it again, so everyone who is signed on is signed off. That is fine on your own machine and rude in a classroom, so say so first.</p>
+<h3>From a command line: SLSCENARIO</h3>
+<p>The security officer can change a lesson on the running range with no restart and nobody signed off. Sign on as <code>QSECOFR</code> and type:</p>
+<pre>SLSCENARIO ID(LESSON) STATE(*SECURE)</pre>
+<p>The states are <code>*SECURE</code>, <code>*VULNERABLE</code>, <code>*RESET</code> and <code>*LIST</code>, and <code>ID(*ALL)</code> means every lesson. <code>*LIST</code> shows where the whole range stands, with the lesson group, its id and its title. Press F4 on the command for a prompt.</p>
+<h3>From the menu</h3>
+<p>Option 6 on the main menu opens Lesson Control, a short menu that lists the lessons and moves the whole range. Every option runs <code>SLSCENARIO</code>, so only the security officer gets anywhere with it. Sign on as STUDENT and try one, and the refusal is a small reminder that a menu is only a list of commands with numbers in front of them.</p>
+<h2>5.3 The Instructor Leaves a Trail</h2>
+<p>Every change made with <code>SLSCENARIO</code> leaves a line on the operator's message queue, <code>QSYSOPR</code>:</p>
+<pre>SLSCENARIO: QSECOFR set qsysopr-recon to *SECURE.</pre>
+<p>This is on purpose. A real administrator changing a security setting should leave a record someone else can read, and the people who need to read it are exactly the ones who would notice something odd. If you can read <code>QSYSOPR</code>, check it after a change and find your line. A refused attempt, from a profile that is not allowed, leaves nothing.</p>
+<h2>5.4 The Loop</h2>
+<p>For each lesson from Sessions 2 through 4, do the same five steps, in this order:</p>
+<ol>
+<li><strong>Run it vulnerable.</strong> Run the exploit steps and keep the evidence: the screen, the message, the line of output.</li>
+<li><strong>Name the mechanism.</strong> Before you change anything, write one sentence saying what made it work. Not "the password was weak" but what, precisely, let that one thing lead to the next.</li>
+<li><strong>Flip it.</strong> Set that one lesson to secure, and only that lesson.</li>
+<li><strong>Run it again.</strong> The same steps, the same profile. Record where it stops, and what the system said when it did.</li>
+<li><strong>Put it back.</strong> Reset the lesson so the next one starts from a known state.</li>
+</ol>
+<p>One lesson at a time matters because lessons tangle. Fixing the default passwords changes passwords that later lessons sign on with, so a student who flips everything at once loses the way into the next exploit and cannot tell which fix stopped which step. Flip one, test one, reset one.</p>
+<h3>A worked example</h3>
+<p>Take Lesson 3, the operator's message queue. As <code>STUDENT</code>, in the vulnerable state, <code>DSPMSG MSGQ(QSYSOPR)</code> shows the queue. Now sign on as <code>QSECOFR</code> and run:</p>
+<pre>SLSCENARIO ID(qsysopr-recon) STATE(*SECURE)</pre>
+<pre>qsysopr-recon: now secure.</pre>
+<p>Run the same command as STUDENT again:</p>
+<pre>DSPMSG MSGQ(QSYSOPR)</pre>
+<pre>Not authorized to message queue QSYSOPR.</pre>
+<p>That is where it stops, and the message says which check stopped it. Your write-up for this lesson records the command, the profile, the message, and, from Session 1, the command that shows why: <code>DSPOBJAUT OBJ(QSYS/QSYSOPR) OBJTYPE(*MSGQ)</code> before and after. Compare what it showed you in each state and you have named the mechanism without anyone telling you.</p>
+<p>Notice what did <em>not</em> change. <code>QSECOFR</code> can still read the queue. The fix did not take the queue away from the people who need it. It stopped everyone else from reading it, which is what a good fix does.</p>
+<h2>5.5 Reading Where It Stops</h2>
+<p>Different lessons stop in different ways, and part of the skill is recognising which kind of stop you are looking at. In your write-up, classify each one:</p>
+<table>
+<tr><th>What you see</th><th>What it tells you</th></tr>
+<tr><td>A refused sign-on</td><td>The credential no longer works. The fix is on the profile or its password.</td></tr>
+<tr><td>A <code>Not authorized</code> message</td><td>An authority check now says no. Find which object, and which layer: library, object or special authority.</td></tr>
+<tr><td>An empty list or a missing object</td><td>The system filtered what you may see, or the object is not where it was. An empty screen is not an empty system.</td></tr>
+<tr><td>The program runs, but does less</td><td>The code now uses a different authority or name than it did. Read the program's description and its owner again.</td></tr>
+<tr><td>A different flag, or no flag</td><td>The data moved or changed. Check that you did not break your own test.</td></tr>
+</table>
+<h2>5.6 Naming the Mechanism</h2>
+<p>The word "mechanism" is the one that separates a good write-up from a command log. Across the eleven lessons there are only a handful of underlying ideas, and you have met every one of them:</p>
+<ul>
+<li>a credential that is guessable or shared</li>
+<li>special authority held by an account that does not need it</li>
+<li>public authority on an object that should be restricted</li>
+<li>a way out of a restricted menu, or around a command line that was supposed to be limited</li>
+<li>protection that does not travel with a copy</li>
+<li>a program that adopts its owner's authority and trusts what the caller gives it</li>
+<li>a name resolved by library list order, so whoever controls the order controls the result</li>
+</ul>
+<p>For each lesson, pick the one that fits and say why. If two fit, say both. If none fit, you have found something worth writing up for its own sake.</p>
+<h2>5.7 Flags</h2>
+<p>Some lessons hide a flag, a string that looks like <code>FLAG{...}</code>, in the data the exploit reaches. Flags are how the range checks that you reached the data and did not just describe it. Every machine makes its own secret when it is set up, so your flags are yours alone, and a flag from a classmate's machine is no good on yours.</p>
+<p>Write what you found into a text file, one lesson per line, in the form <code>lesson-id = FLAG{...}</code>, and check it:</p>
+<pre>./check-flags.sh submission.txt</pre>
+<p>Some lessons have no text to find. They are won by a change, such as a new profile with <code>*ALLOBJ</code> or a copy of a file that should not be readable, and those are checked from the saved state without any submission.</p>
+<p>A flag is not the lesson. The flag shows that you reached the data. The write-up shows that you understand why you could.</p>
+<h2>5.8 The Write-Up</h2>
+<p>The deliverable for the course is a write-up covering the eleven lessons. For each one, give the reader four things: a short narrative of what you did, the evidence that proves it, the impact on the data in plain language, and the remediation in terms of what to change on a real system. Write it so that a manager and an auditor could both follow it, and include the exact commands.</p>
+<p>It is graded out of 100:</p>
+<table>
+<tr><th>Part</th><th>Points</th><th>What earns full marks</th></tr>
+<tr><td>Exploits executed</td><td>30</td><td>At least ten lessons run, each with the evidence and what it means for the data</td></tr>
+<tr><td>Write-up quality</td><td>25</td><td>Narrative, evidence, impact and remediation for each, readable by a manager and an auditor</td></tr>
+<tr><td>Remediation and mechanism</td><td>25</td><td>Every lesson names the mechanism and the fix, in terms of what to change on a real system</td></tr>
+<tr><td>Secure range proof</td><td>20</td><td>Every exploit re-run after the fix, with where it stops recorded and why</td></tr>
+</table>
+<p>Points come off for aiming anything at a real system instead of the range, for leaving out a statement of the authorised use rule, and for claiming an effect the simulator does not produce. Honest limits earn credit. Silverlake is a behavioural simulator, and some of its wording and rules come from IBM's documentation and not from a real system. A report that says where it is unsure beats one that pretends it is certain.</p>
+<h2>5.9 Tabletop: An Auditor Finds It in Production</h2>
+<p>Put the keyboard away for this one. Imagine an auditor has found a program like <code>RUNCMD</code> on a production system, one that hands a command to the system as its owner. Work through these questions in a group, out loud, before you write anything:</p>
+<ul>
+<li>Who owns the program, and what authority does that owner hold?</li>
+<li>Who is allowed to call it?</li>
+<li>What is the first thing you would check on a real system, and what would you not touch until you had a copy of the evidence?</li>
+<li>How would you know whether anyone had already used it?</li>
+<li>What is the smallest change that stops the problem, and what would break if you made it today?</li>
+</ul>
+<p>The last question is the hard one. A fix that breaks the nightly run gets reversed by Tuesday. A good remediation plan names its own risk.</p>
+<h2>5.10 Honest Limits</h2>
+<p>Everything in this session happens on the simulator, and the states it flips are the ones this range defines. A real system has more settings, more history and more people who depend on it staying as it is. Treat the loop as practice for the discipline: run it, name it, change one thing, prove it, and write it down. The habit transfers even where the screens do not.</p>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8"/>
+<title>Session 3: Authority and Data Exposure</title>
+<link rel="stylesheet" type="text/css" href="../styles.css"/>
+</head>
+<body>
+<h1>Session 3: Authority and Data Exposure</h1>
+<p>Goal for this session: watch data get out through features that were never broken, a menu doing exactly what it was built to do, a copy command doing exactly what copy commands do, a printer queue showing exactly what was sent to it. Session 2 was about who gets in. This one is about what happens to information once an ordinary, unremarkable feature is pointed somewhere nobody expected.</p>
+<p>Work in pairs if you can for this session. One person drives, the other reads the screen out loud and writes down what the exploit actually needed, not just what it did. Swap halfway through.</p>
+<h2>3.1 A Menu Is Only as Strong as Its Options</h2>
+<p>Sign on as <code>CLERK</code>, with the password <code>CLERK</code>:</p>
+<pre> RESTRICT                          Clerk Menu
+                                                             System:   SILVERLK
+ Select one of the following:
+
+      1. Who can use the customer file
+      2. Display the library list
+      9. Maintenance
+
+     90. Sign off
+
+ Selection or command
+ ===&gt; _______________________________________
+
+ F3=Exit   F12=Cancel</pre>
+<p>Try typing a command at that prompt, anything, <code>DSPLIBL</code> will do:</p>
+<pre>Commands cannot be run from a command line with limited capabilities.</pre>
+<p>That is <code>LMTCPB(*YES)</code> doing its job. CLERK's profile says this account may not type commands, and the system means it, right up until you look at what the menu itself offers. Choose option 9, Maintenance:</p>
+<pre>                                 Command Entry
+ Previous commands and messages:
+
+ Type command, press Enter.
+ ===&gt; _______________________________________
+
+ F3=Exit   F12=Cancel</pre>
+<p>Read what just happened plainly: option 9 runs <code>CALL QCMD</code>, the system program that opens a command line, and <code>LMTCPB</code> restricts what a profile may type at <em>its</em> command line, not what a program it calls on its behalf is allowed to open. The restriction never moved. The menu simply offered a door the restriction does not cover. From here, CLERK can run whatever its own authority permits, which includes reading a file it has no business reason to see:</p>
+<pre>DSPPFM FILE(APPLIB/MAINTLOG)</pre>
+<p>Whoever built this menu almost certainly needed option 9 for something real, a way for a clerk to run one specific maintenance task without calling the help desk. What they built instead was a command line with an extra click in front of it.</p>
+<p><strong>What a defender checks:</strong> every menu option available to a limited-capability profile, specifically whether any of them calls <code>QCMD</code>, a general program entry point, or anything else that hands the caller an open command line. A restriction that can be routed around through a menu option is not a restriction.</p>
+<h2>3.2 Authority to Read Is Authority to Copy</h2>
+<p>Sign on as <code>OPERATOR</code>. Check what OPERATOR can do to the payroll file before doing anything to it:</p>
+<pre>DSPOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE)</pre>
+<pre>                            Display Object Authority
+
+ Object . . . . . . . :   PAYROLL         Owner  . . . . . . . :   QSECOFR
+ Object secured by authorization list  . . . . . . . . . . . . :   PAYAUTL
+
+                          Object
+ User        Group       Authority
+ *PUBLIC                 *AUTL</pre>
+<p>PAYROLL is secured by an authorization list, and OPERATOR's membership on that list is why OPERATOR can use it at all, with <code>*USE</code>, enough to read the file and nothing more. <code>*USE</code> sounds narrow, and for most purposes it is. It is not narrow enough to stop this:</p>
+<pre>CPYF FROMFILE(APPLIB/PAYROLL) TOFILE(SCRATCH/LOOT) CRTFILE(*YES)</pre>
+<pre>File LOOT created in library SCRATCH. 7 records copied from file PAYROLL to file LOOT.</pre>
+<p><code>CPYF</code> reads the source file, which <code>*USE</code> permits, and writes every record into a brand new file in a different library. That new file is not the original. It has its own authority, decided fresh, by the library it was created in, not inherited from the file it was copied out of. Check what library SCRATCH hands out to a new object, and you will see why this matters. Now sign on as STUDENT, a profile with no authority to PAYROLL at all, and read the copy:</p>
+<pre>DSPPFM FILE(SCRATCH/LOOT)</pre>
+<p>It opens. Every salary and name in the file, visible to a profile that could not have opened the original. Nothing about this broke any rule. CPYF copied what it was told to copy, to where it was told to put it, and the destination library's own authority took over from there, as destination libraries are supposed to.</p>
+<p><strong>What a defender checks:</strong> what authority a library hands new objects created in it by default, and whether anyone with read access to a sensitive file can also run <code>CPYF</code> against it into a library they do not control. Read access and copy access are the same access, and a copy carries none of the original's protection unless someone builds that in on purpose.</p>
+<h2>3.3 What Is Already Sitting on the Default Queue</h2>
+<p>Sign back on as STUDENT, an ordinary profile with no special standing at all, and look at the system's default printer output queue:</p>
+<pre>WRKOUTQ OUTQ(QGPL/QPRINT)</pre>
+<pre>                             Work with Output Queue
+
+ Queue:   QPRINT         Library:   QGPL           Status:   RLS
+
+ Opt  File        User        User Data   Sts   Pages   Copies  Form Type   Pty
+  _   PAYRPT      DEVELOPER   PAYROLL     RDY       1       1   *STD         5</pre>
+<p>STUDENT did not run this report and does not know what DEVELOPER was doing when it printed. STUDENT can see it sitting there regardless, with a <em>User Data</em> column that says, unhelpfully but accurately, exactly what it is. Display it:</p>
+<pre>5=Display</pre>
+<p>What comes up is a full payroll register, names, departments, gross pay, a masked but present social security number per row, and a line near the bottom that most spooled files would not carry at all: an audit tag, placed there specifically so a review could tell whether this exact exposure had ever been found before.</p>
+<p>The reason this works has nothing to do with STUDENT. It is a property of the queue itself: QPRINT is configured so that any user who can reach it may open any other user's spooled file sitting on it. That is a shipped default on a real IBM i, not something this range invented, and it means the file's owner, DEVELOPER, never made a decision that exposed this report. The queue made it for them, before the report ever printed.</p>
+<p><strong>What a defender checks:</strong> the <code>DSPDTA</code> setting on every output queue that regularly holds anything sensitive, and who is allowed to even open the queue in the first place. A report is only as private as the queue it lands on.</p>
+<h2>3.4 Following the Report Back to Where It Lands</h2>
+<p>The previous lesson looked at a report that was already there. This one asks where it came from. Sign on as OPERATOR, join the library list so the program can be found, and run the report that produces it:</p>
+<pre>ADDLIBLE APPLIB
+CALL PGM(APPLIB/REGRPT)</pre>
+<p>Nothing on OPERATOR's screen says where the output went. Programs that print do not generally announce their output queue; they were written to send a report to a queue, full stop, and whoever wrote REGRPT decided which one. Sign back on as STUDENT and look at the same queue from Session 3.3:</p>
+<pre>WRKOUTQ OUTQ(QGPL/QPRINT)</pre>
+<p>A second file has joined the first, owned by OPERATOR this time, and STUDENT can open it for the same reason as before: the queue itself, not anything about this particular file, decides who may look. Display it and read the heading closely. It carries its own report identifier, printed in the header the way a real report would carry a form number or a run ID, there specifically so that if this report turned up somewhere it should not, someone could trace which run produced it.</p>
+<p>Put 3.3 and 3.4 together and the point sharpens: the printer file behind REGRPT is not misconfigured in some exotic way. It names <code>QGPL/QPRINT</code>, the ordinary default queue, as its destination, the same way a hundred other programs on a hundred other systems name it because nobody told them to name anything else. A report becomes a finding not when someone does something wrong with it, but when the queue it was always going to land on was never the private place anyone assumed it was.</p>
+<p><strong>What a defender checks:</strong> which printer files on the system send sensitive output to a shared, low-friction queue like the default, simply because nobody ever reviewed where <code>*OUTQ</code> pointed. The fix is rarely the program. It is almost always the one line naming the queue.</p>
+<h2>3.5 One Thread Through All Four</h2>
+<p>Look back at this session as a whole before moving on. A menu option, a copy command, and a queue's own display setting are three completely different pieces of IBM i, with no shared code and no shared author. What they share is a pattern: each one is a legitimate feature operating exactly as designed, placed next to something it was never meant to reach. The lesson is not "menus are dangerous" or "CPYF is dangerous." It is that authority has to be checked at the point data actually moves, not assumed to follow the data because it followed it once, at the source, under different conditions.</p>
+<h2>3.6 Take-Home</h2>
+<p>Pick one more output queue on the range you have not looked at yet and run <code>WRKOUTQ</code> against it as STUDENT. Write down whether you can see files that are not yours, and if you can, write down which setting you would check first to find out why, before you look it up. You already have the answer from this session; the exercise is reaching for it on your own.</p>
+</body>
+</html>

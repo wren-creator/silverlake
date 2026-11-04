@@ -53,7 +53,7 @@ The network services (the HTTP Admin console, FTP and the host servers) are opt 
 
 PASE is simulated: `CALL PGM(QP2TERM)` (or ssh on 2222 with `./setup.sh --ssh`) opens a small shell over a virtual IFS, with a writable IFS, scripts, `$PATH` lookup, `system` for CL, `db2` for SQL (inside `qsh -c`, as on the real host), 95 commands in all from `sort` and `sed` to `awk`, `tar` and `ssh-keygen`, and eight lessons built on it. No host process is ever started. See [docs/pase.md](docs/pase.md).
 
-Teaching it? [instructor/](instructor/) has the agenda, answer key, rubric, setup runbook and session slides.
+Teaching it? [instructor/](instructor/) has the agenda, answer key, rubric, setup runbook and session slides. There's also [Silverlake 101](silverlake-101.epub), a free five session EPUB covering the Group A, B and C lessons end to end (`book/`, `python3 book/build.py` to rebuild it from the chapters).
 
 Connect with any 5250 client, for example `tn5250 127.0.0.1:5250`. `start.sh` refuses a port that is already in use and tells you the next one to try, and it only says "up" once the server reports it is listening, so a crash during startup shows up as a failure with the log tail instead of a false "up". It always binds to 127.0.0.1. `SILVERLAKE_PORT` does the same as `--port`.
 

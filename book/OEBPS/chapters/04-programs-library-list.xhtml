@@ -1,0 +1,108 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8"/>
+<title>Session 4: Programs and the Library List</title>
+<link rel="stylesheet" type="text/css" href="../styles.css"/>
+</head>
+<body>
+<h1>Session 4: Programs and the Library List</h1>
+<p>Goal for this session: see what happens when a program borrows someone else's authority and does not check carefully what it is handed, or does not check carefully where the thing it calls actually comes from. This is the session where an ordinary profile ends up with power nobody meant to give it, and it is worth slowing down for, because the mechanism underneath each lesson here is the same mechanism behind a large share of real IBM i findings.</p>
+<h2>4.1 Adopted Authority, in One Paragraph</h2>
+<p>A program can be written to run with its <em>owner's</em> authority instead of its caller's, a feature called adopted authority. The idea is reasonable: a clerk should be able to run a payroll report without being given direct access to the payroll file, so the report program adopts an owner who has that access, and the clerk's own profile never needs it. The feature is not the problem. The problem is always the same question, asked and not asked: what does this program let the caller choose, and does the owner's authority follow that choice anywhere it shouldn't?</p>
+<p>Four programs in <code>APPLIB</code> answer that question four different ways. You are signed on as STUDENT for all of them. Add the application library to your list first, since it does not come with MAIN's default list:</p>
+<pre>ADDLIBLE APPLIB</pre>
+<h2>4.2 A Directory Program That Opens a File by Name</h2>
+<p>Look at the staff directory program before running it:</p>
+<pre>DSPOBJAUT OBJ(APPLIB/EMPDIR) OBJTYPE(*PGM)</pre>
+<p>EMPDIR is owned by OPERATOR, and <em>Text</em> on the object list told you it adopts that owner. Run it and look up an ordinary employee number:</p>
+<pre>CALL PGM(APPLIB/EMPDIR)</pre>
+<pre>                             PAYROLL LOOKUP
+
+ Employee number: 10099
+
+ Name:
+ Department:
+ Salary:          0000000
+
+                       No such employee</pre>
+<p>Nothing there yet, because that employee number is not in the file EMPDIR actually reads, called <code>STAFF</code>. Here is the detail that matters: EMPDIR opens <code>STAFF</code> by its bare name. It does not say which library, and it trusts that whatever is open under that name when it runs is the right thing.</p>
+<p><code>OVRDBF</code>, Override Database File, changes what a bare file name means for the rest of the job, and it needs no authority to the file it points at, only to run the command. Point <code>STAFF</code> at the payroll file instead:</p>
+<pre>OVRDBF FILE(STAFF) TOFILE(APPLIB/PAYROLL)</pre>
+<p>Run EMPDIR again and look up the same employee number:</p>
+<pre>                             PAYROLL LOOKUP
+
+ Employee number: 10099
+
+ Name:            FLAG{...}
+ Department:      AUDT
+ Salary:          0000001</pre>
+<p>EMPDIR opened the name <code>STAFF</code> exactly as it was told to, found your override instead, and read it with OPERATOR's authority, the authority that can open <code>PAYROLL</code>. STUDENT never touched that file directly. STUDENT redirected what a trusted program believed it was opening, and the program's adopted authority did the rest. Sign off or run <code>DLTOVR FILE(STAFF)</code> when you are done, since the override follows your job, not the file.</p>
+<p><strong>What a defender checks:</strong> whether a program that adopts authority opens its files by qualified name, <code>LIBRARY/FILE</code>, which a caller's override cannot redirect, or by a bare name, which it can.</p>
+<h2>4.3 A Program With No Opinion About Who Is Asking</h2>
+<p>Check the next one before running it:</p>
+<pre>DSPOBJAUT OBJ(APPLIB/PAYADJ) OBJTYPE(*PGM)</pre>
+<p>PAYADJ is owned by SECADMIN and <code>*PUBLIC</code> holds <code>*USE</code> on the program itself, meaning any profile may call it. Run it:</p>
+<pre>CALL PGM(APPLIB/PAYADJ)</pre>
+<pre>                          PAYROLL SALARY ADJUST
+
+ Employee number: 10004
+ New salary:      0099999
+
+ Name:            Dunn, Kevin
+ Salary now:      0099999
+
+                       Salary changed</pre>
+<p>Enter an employee number and a new figure, and the screen confirms the change as soon as you press Enter. PAYADJ adopts an owner who holds authority on the payroll file, and the program itself asks nothing about who is calling or whether this particular change makes sense. Every check that matters, who may update a salary, lives entirely in SECADMIN's authority, which STUDENT never held and now effectively has, one field at a time, for exactly as long as this program is running.</p>
+<p>Compare this to EMPDIR. There the problem was a redirect the program never expected. Here the program is doing exactly what it was written to do, for exactly the caller it was written to serve, and that is the whole weakness: it was written to serve any caller.</p>
+<p><strong>What a defender checks:</strong> what a program that adopts authority actually lets its caller do, not just what authority it was given. A program that updates one field with no further check is as strong as its weakest caller, not its owner's good judgment.</p>
+<h2>4.4 The Library List Decides Which Program Runs</h2>
+<p>This one needs Session 1's library list, so look at it again before you start. <code>PAYRUN</code> adopts its owner and, inside itself, calls another program named <code>PAYCALC</code>, by name alone, with no library in front of it. When a called program is named that way, the system finds it the same way it finds anything else named bare: by searching the library list, top to bottom, first match wins.</p>
+<p>Every job has its own <code>QTEMP</code>, a library that exists only for that job and disappears when the job ends. Crucially, <code>QTEMP</code> sits at a fixed point near the top of the list, ahead of anything you add with <code>ADDLIBLE ... *LAST</code>. Add APPLIB to the end of your list, the ordinary way:</p>
+<pre>ADDLIBLE APPLIB *LAST</pre>
+<p>Confirm you cannot read the payroll file yet:</p>
+<pre>DSPOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE)</pre>
+<pre>Not authorized to use object PAYROLL in library APPLIB type *FILE.</pre>
+<p>Now put your own program named <code>PAYCALC</code> in <code>QTEMP</code>. This needs the source tools from Session 1's neighborhood, PDM and a compile command, which Session 1 did not cover in depth, so take it a step at a time. First, a source file to hold the member:</p>
+<pre>CRTSRCPF FILE(QTEMP/QRPGLESRC)</pre>
+<p>Open it in the editor, <code>STRSEU</code>, or <code>WRKMBRPDM FILE(QTEMP/QRPGLESRC)</code> and add a member called <code>PAYCALC</code>, type <code>RPGLE</code>. The body does not need to calculate a real pay period. It only needs to do one thing while it is running with whatever authority called it:</p>
+<pre>     D c1              S             25    INZ('GRTOBJAUT APPLIB/PAYROLL ')
+     D c2              S             18    INZ('*FILE STUDENT *USE')
+     D cl              S             80
+     D len             S             15  0 INZ(43)
+     C                   EVAL      cl = c1 + c2
+     C                   CALL      'QCMDEXC'
+     C                   PARM                    cl
+     C                   PARM                    len
+     C                   EVAL      *inlr = *on
+     C                   RETURN</pre>
+<p>That builds the command <code>GRTOBJAUT APPLIB/PAYROLL *FILE STUDENT *USE</code> as text and hands it to <code>QCMDEXC</code>, the system program that runs a CL command string. Whatever authority is running this code is the authority that command runs with. Compile it into <code>QTEMP</code>:</p>
+<pre>CRTBNDRPG PGM(QTEMP/PAYCALC) SRCFILE(QTEMP/QRPGLESRC)</pre>
+<pre>Program PAYCALC placed in library QTEMP.</pre>
+<p>Now call the real program:</p>
+<pre>CALL PGM(PAYRUN)</pre>
+<p>PAYRUN runs, adopts its own owner as it was written to, reaches the point where it calls <code>PAYCALC</code> by bare name, searches your library list, and finds yours in <code>QTEMP</code> before it ever reaches the real one in <code>APPLIB</code>. Your code runs with PAYRUN's adopted authority, and the one line it was built to run grants you authority on the payroll file. Check it:</p>
+<pre>DSPOBJAUT OBJ(APPLIB/PAYROLL) OBJTYPE(*FILE)</pre>
+<p>STUDENT now appears in the authority list, with <code>*USE</code>, and nobody with the power to grant it did so on purpose. The program you wrote vanishes at sign-off, because <code>QTEMP</code> goes with the job, but the grant it made does not; that authority stays on the object until someone takes it back.</p>
+<p><strong>What a defender checks:</strong> whether a privileged program calls what it needs by full name, <code>LIBRARY/PROGRAM</code>, which a library list cannot redirect, or by a bare name, and whether anything in the job's library list, especially <code>QTEMP</code>, sits ahead of a library a caller cannot write to.</p>
+<h2>4.5 A Helper With No Memory of What It Was For</h2>
+<p>The last one is the simplest to run and the hardest to overstate. Check it first:</p>
+<pre>DSPOBJAUT OBJ(APPLIB/RUNCMD) OBJTYPE(*PGM)</pre>
+<p>RUNCMD is owned by QSECOFR, the security officer, holder of every special authority on the system, and <code>*PUBLIC</code> has <code>*USE</code> on the program. Run it:</p>
+<pre>CALL PGM(APPLIB/RUNCMD)</pre>
+<pre>                             COMMAND HELPER
+
+ Type a command and press Enter.
+
+ Command:
+ ______________________________________________________________________</pre>
+<p>Read that screen for what it actually is: a blank field, in front of a program that adopts the security officer, that will hand whatever you type straight to <code>QCMDEXC</code>. There is no narrower version of this weakness to describe, because the program does not narrow anything. It was written, presumably, to save someone a trip to a command line for one routine task, and it was never taught the difference between that task and any other command the security officer could type.</p>
+<p>What you can do here is exactly as wide as what QSECOFR can do. That includes creating a profile with every special authority this system has, which is the single clearest proof that adopted authority, handed to a program with no checks, is not a smaller version of the owner's power. It is the owner's power, full stop, for as long as the program is willing to run what it is given.</p>
+<p><strong>What a defender checks:</strong> every program on the system that adopts an owner and also, anywhere in its logic, passes a string built from user input to <code>QCMDEXC</code> or runs a command the caller supplies. That combination, adoption plus an unchecked command string, is worth finding before someone else does.</p>
+<h2>4.6 What All Four Have in Common</h2>
+<p>Step back and look at the four programs side by side. None of them is broken in the way a crashing program is broken. Each one runs correctly, does what it was written to do, and produces the wrong result anyway, because "correct" was defined too loosely. EMPDIR correctly opens whatever <code>STAFF</code> currently means. PAYADJ correctly changes the salary it is told to change. PAYRUN correctly calls the program its library list hands it. RUNCMD correctly runs the command it is given. Every one of them is a program doing its job. The authority behind that job is the part nobody narrowed.</p>
+<h2>4.7 Take-Home: Read the Fix Before You See It</h2>
+<p>For each of the four programs, write one sentence predicting what a fix would have to change, without looking ahead to Session 5. Not "make it secure", the specific thing: a bare name that should be qualified, a check that should exist and does not, a call that should name its library, a power that should never have been adopted at all. You will find out in Session 5 whether you were right, and being wrong is as useful here as being right, because it tells you which mechanism you have not quite pinned down yet.</p>
+</body>
+</html>

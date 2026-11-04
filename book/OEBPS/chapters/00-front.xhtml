@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8"/>
+<title>Silverlake 101</title>
+<link rel="stylesheet" type="text/css" href="../styles.css"/>
+</head>
+<body>
+<h1>Silverlake 101</h1>
+<h3>A Hands-On Training Syllabus for the Silverlake IBM i Security Range</h3>
+<p>By Britley Hoff</p>
+<p>2026 Edition</p>
+<hr />
+<p>Nobody hands a new hire a production IBM i and says go ahead, see what breaks. The machine running payroll does not get opened up so someone can learn what a bad password actually costs. That is a sound rule, and it is also why most people who end up defending these systems learn the hard way, one incident at a time, and most people who are asked to review one have never had supervised time on a real one at all.</p>
+<p>Silverlake exists to close that gap without touching anything real. It is a behavioral simulator, written clean room: no IBM code, no IBM media, nothing booted from a licensed image. It speaks 5250 to a real terminal client, answers the way an IBM i answers, and carries the same kinds of weak points a real one carries, a password that matches the profile name, a service account holding authority it never needed, a program that borrows its owner's power and does not check what it is handed. None of it is simulated hard enough to be mistaken for the real operating system, and none of it needs to be. What it needs to teach is the thinking, and the thinking transfers.</p>
+<p>This is a five session course, matched to the lessons documented in the project itself. Sessions 1 through 4 are the attack half, run against the range in the state it starts in. Session 5 is the defense half: flip each weakness to its fixed state, run the same steps again, and write down exactly where they stop working. Every screen quoted in this book came from the range itself, run before this book went to print, not described from memory or copied from a manual.</p>
+<h2>The One Rule That Matters</h2>
+<p>Test only systems you own or have written permission to test. Everything in this book works on a real IBM i, which is exactly why the rule has to come first and come once, before anything else. Silverlake is the place to build the habits and ask the questions. It is not permission to point either one at a system that is not yours.</p>
+<h2>Bringing the Range Up</h2>
+<p>Silverlake needs Python 3.12 or newer and about 200 MB of disk, nothing else, no Docker and no IBM media:</p>
+<pre>git clone https://github.com/wren-creator/silverlake
+cd silverlake
+./setup.sh      # makes a venv and installs
+./start.sh      # listens on 127.0.0.1:5250
+./status.sh     # confirms it's up, and loopback only</pre>
+<p>It binds to <code>127.0.0.1</code> by default and refuses to start any other way. A deliberately vulnerable IBM i has no business being reachable from anywhere but the machine running it. A classroom reaching it over a private network is the one documented exception, and it takes an explicit opt in on the instructor's side, not a setting a student can flip by accident.</p>
+<p>Connect with any 5250 client, for example <code>tn5250 127.0.0.1:5250</code>, and sign on. Every seeded profile you will meet in this book, and what it is for, is listed here so you are not guessing later:</p>
+<table>
+<tr><th>Profile</th><th>Password</th><th>What it is</th></tr>
+<tr><td><code>STUDENT</code></td><td><code>STUDENT</code></td><td>An ordinary user, no special authority. Where most of this book starts.</td></tr>
+<tr><td><code>OPERATOR</code></td><td><code>OPERATOR</code></td><td>System operator, <code>*JOBCTL</code> and more by class.</td></tr>
+<tr><td><code>QSECOFR</code></td><td><code>QSECOFR</code></td><td>The security officer. Every special authority the system has.</td></tr>
+<tr><td><code>SVCACCT</code></td><td><code>SVCACCT</code></td><td>A service account holding <code>*ALLOBJ</code> it was never meant to need.</td></tr>
+<tr><td><code>CLERK</code></td><td><code>CLERK</code></td><td>Limited capabilities, locked to one menu. The menu has a way out.</td></tr>
+<tr><td><code>DEVELOPER</code></td><td><code>DEVELOPER</code></td><td>A programmer profile, owns some of the application's spooled output.</td></tr>
+</table>
+<p>Reset the range to its starting state at any point with <code>./reset.sh</code>. It is quick, and there is no reason to be careful with a range built to be broken.</p>
+<p>When you reach Session 5, two more commands matter: <code>./scenario.sh list</code> shows every lesson and whether it is fixed, and <code>./check-flags.sh submission.txt</code> scores what you found against the one secret made for your own machine. Both are explained in full when you get there.</p>
+<h2>What This Book Will Not Pretend</h2>
+<p>Silverlake has edges, and this book says where they are instead of writing around them. There is no machine interface, no real DB2 for i, no native program binding, no real printers or tape. What exists is what the lessons in this book need, nothing chased for its own sake. If a screen in front of you ever disagrees with a screen in this book, that is worth writing down and sending to the project. The range gets better because people who use it say what they found.</p>
+</body>
+</html>
