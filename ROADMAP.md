@@ -108,7 +108,7 @@
   - [x] 5f TLS: a throwaway certificate (`./setup.sh`, `.tls/`) and TLS ports for 5250 (5992), the console (2010), FTP (explicit AUTH TLS with PROT P on 2121, implicit on 2990) and the sign-on server (9476)
   - [x] 5f TLS follow-ups: lesson `ftp-console-cleartext` (a `require_tls` system setting; FTP answers 534 to USER before AUTH TLS and the console answers 403 on 2001 without a challenge; the flag is a fact, `ftp,httpadmin` or `none`), `./start.sh --real-ports` for 23, 992, 21, 990, 449 and 22, and `SILVERLAKE_TLS_MIN=1.3` for TLS 1.3 only. Nineteen lessons
   - [x] 5f certificate audit: lesson `console-cert-audit` (the twenty third). No CA, as decided: a second self-signed certificate with the same key, `.tls/console-weak.pem` (ten years, `CN=SYSTEM1.LOCAL`, the tag in its OU), and a `console_cert` system setting that the console's TLS context reads at each handshake, so the toggle is live. The key's IFS copy is readable by all in the vulnerable state. `certs.client_context()` trusts both files
-  - [ ] 5f later: check `--real-ports` on macOS and Linux as a normal user
+  - [x] 5f later: check `--real-ports` on macOS and Linux as a normal user (validated by hand)
 - [ ] Silverlake 101 EPUB, same format as the Mainframe 10x series
 
 ## Needs verification on a real system
