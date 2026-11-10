@@ -487,18 +487,20 @@ def test_edtautl_scenario_only_looks_and_backs_out():
     assert all(k in ("F12", "F3") or fill == "SIGNOFF" for k, fill in keys[1:])      # never Enter, never a change
 
 
-def test_if_the_data_area_cannot_be_created_nothing_else_is_pressed(monkeypatch):
+def test_the_data_area_scenario_runs_to_completion_now_crtdtaara_is_modeled(monkeypatch):
     from silverlake.system import profiles
     store = profiles.load()
     sent = []
     real = scenario.Client.send_aid
     monkeypatch.setattr(scenario.Client, "send_aid",
                         lambda self, key, fill=None: (sent.append((key, dict(fill or {}))), real(self, key, fill))[1])
-    cap = _run_shared("auth-objopts", monkeypatch, store)      # local Silverlake has no CRTDTAARA
+    cap = _run_shared("auth-objopts", monkeypatch, store)
     fills = [f.get(0, "") for _, f in sent]
     assert fills[1].startswith("CRTDTAARA")
-    assert not any(f in ("2", "4", "8") or f.startswith("WRKOBJ") for f in fills)
-    assert fills[-1] == "SIGNOFF" and cap["skipped_actions"]
+    assert not cap["skipped_actions"] and cap["stopped"] is None
+    assert fills[-1] == "SIGNOFF"
+    made = fills[1].split("DTAARA(QTEMP/")[1].split(")")[0]
+    assert all(o.name != made for o in store.objects.values() if o.type == "*DTAARA")   # confirmed, then deleted
     assert "Sign On" in " ".join(r["text"] for r in cap["snapshots"][-1]["runs"])
 
 

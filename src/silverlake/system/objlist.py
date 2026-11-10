@@ -23,6 +23,8 @@ Rules read from the IBM i 7.5 command pages:
   DLTMNU     *OBJEXIST and *OBJOPR on the menu, *EXECUTE on the library.
   DLTPGM     *OBJEXIST on the program, *EXECUTE on the library.
   DLTCMD     *OBJEXIST on the command (the page names no library authority).
+  DLTDTAARA  *OBJEXIST on the data area, *EXECUTE on the library (inferred, the general rule).
+  DLTUSRSPC  *OBJEXIST on the space, *EXECUTE on the library (inferred, the general rule).
   EDTOBJAUT  *OBJMGT on the object (and *OBJOPR for a file), or the owner, or *ALLOBJ.
   DSPOBJD    *EXECUTE on the library and some authority other than *EXCLUDE on the object.
 
@@ -245,7 +247,8 @@ def objects_secured_by(store: ProfileStore, actor: Profile, autl: str) -> list[S
 
 DELETE_NEEDS = {"*FILE": Auth.OBJEXIST | Auth.OBJOPR, "*MENU": Auth.OBJEXIST | Auth.OBJOPR,
                 "*PGM": Auth.OBJEXIST, "*CMD": Auth.OBJEXIST,
-                "*MSGQ": Auth.OBJEXIST | Auth.OBJOPR | Auth.READ | Auth.DLT, "*OUTQ": Auth.OBJEXIST}
+                "*MSGQ": Auth.OBJEXIST | Auth.OBJOPR | Auth.READ | Auth.DLT, "*OUTQ": Auth.OBJEXIST,
+                "*DTAARA": Auth.OBJEXIST, "*USRSPC": Auth.OBJEXIST}
 
 
 def delete_object(store: ProfileStore, actor: Profile, qualified: str, typ: str, search: list[str],

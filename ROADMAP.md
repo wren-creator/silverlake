@@ -42,7 +42,8 @@
 - [ ] Message leftovers: the real SNDMSG prompt (needs a longer wait), inquiry messages and replies, F11 remove one, WRKMSGQ, CHGMSGQ break program and *DFT delivery, RMVMSG, break delivery to a live session, work station queues
 - [x] DSPOBJD basic list, full page two, and Add New Users (F6), from the PUB400 captures
 - [ ] Work list options still to build: 3 (copy, CRTDUPOBJ), WRKAUTL 2 (needs a capture from a profile that may edit a list); edit screen F10 and F11 (the real host did not answer F10, retry with a longer wait); DSPOBJD page three and option 8, creation dates for non-library objects; F4 prompting, F11, F16 and F17 positioning, F17 and F18 top and bottom on WRKOBJOWN; capture the real WRKAUTL delete confirm and the F6 Add new users screen
-- [ ] More object types (*DTAARA and *USRSPC next), *AUTL in the object table, generic names on RNMOBJ and CHGOBJD
+- [x] *DTAARA and *USRSPC: CRTDTAARA, CHGDTAARA, DLTDTAARA, CRTUSRSPC, DLTUSRSPC (TYPE(*CHAR) only; CHGDTAARA takes the whole value, not the (start length) substring form; there is no native CHGUSRSPC on a real system either). *DTAARA already existed for the PASE `datarea` utility and now has a CL-level way to create one; CHGDTAARA and `datarea -w` share the same pasei.area_set
+- [ ] More object types: *AUTL in the object table, generic names on RNMOBJ and CHGOBJD
 - [ ] Confirm CPF1107, CPF1118, CPF1394 on a real system (needs a deliberate wrong-password attempt, so a human decides)
 - [x] Sign-on lockout (QMAXSIGN, QMAXSGNACN) and password expiry (PWDEXP, QPWDEXPITV) with a Change Password display, built from IBM's descriptions, not a capture
 - [ ] Layout leftovers: DSPLIBL option 5 and Opt column, DSPOBJAUT F11 (detail authorities, no capture yet) and the Group column, WRKLIB and the other list screens with no capture, Top and Bottom on the remaining paged lists

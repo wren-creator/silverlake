@@ -9,7 +9,7 @@ import fnmatch
 import re
 from dataclasses import dataclass
 
-from ..system import admin, autls, dbfiles, jobctl, messages, msgq, objects, objlist, overrides, rpg, source, spool
+from ..system import admin, autls, dataareas, dbfiles, jobctl, messages, msgq, objects, objlist, overrides, rpg, source, spool
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -99,6 +99,16 @@ CHGMSGQ_PARAMS = [Param("MSGQ", "msgqname", "", required=True), Param("DLVRY", "
                   Param("MSGQFULL", "ignored", SAME)]
 DLTMSGQ_PARAMS = [Param("MSGQ", "qname", "", required=True)]
 CLRMSGQ_PARAMS = [Param("MSGQ", "msgqname", "", required=True), Param("CLEAR", "clearopt", "*ALL")]
+CRTDTAARA_PARAMS = [Param("DTAARA", "qname", "", required=True), Param("TYPE", "dtaaratype", "*CHAR"),
+                    Param("LEN", "dtaaralen", "*NONE"), Param("VALUE", "dtaval", "*NONE"),
+                    Param("TEXT", "text", "*BLANK"), Param("AUT", "libaut", "*LIBCRTAUT")]
+CHGDTAARA_PARAMS = [Param("DTAARA", "qname", "", required=True), Param("VALUE", "plain", "", required=True)]
+DLTDTAARA_PARAMS = [Param("DTAARA", "qname", "", required=True)]
+CRTUSRSPC_PARAMS = [Param("USRSPC", "qname", "", required=True), Param("EXTATR", "ignored", "*NONE"),
+                    Param("SIZE", "number", "", required=True), Param("INZVAL", "dtaval", "*NONE"),
+                    Param("AUT", "libaut", "*LIBCRTAUT"), Param("TEXT", "text", "*BLANK"),
+                    Param("DOMAIN", "ignored", "*USER")]
+DLTUSRSPC_PARAMS = [Param("USRSPC", "qname", "", required=True)]
 WRKSPLF_PARAMS = [Param("SELECT", "splsel", "*CURRENT", 6), Param("JOB", "jobq", "*ALL", 3),
                   Param("PERIOD", "ignored", "*AVAIL"), Param("ASPDEV", "ignored", "*"),
                   Param("OUTPUT", "output", "*"), Param("DSPFMT", "ignored", "*INLENV"), Param("ASTLVL", "ignored", "*PRV")]
@@ -232,7 +242,8 @@ CRTPF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SRCFILE", "qna
 CRTDSPF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*REQUESTER"))
 CRTPRTF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*JOB"), Param("DEVTYPE", "ignored", "*SCS"))
 DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU": ("MENU", "*MENU"),
-                   "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ")}
+                   "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ"),
+                   "DLTDTAARA": ("DTAARA", "*DTAARA"), "DLTUSRSPC": ("USRSPC", "*USRSPC")}
 
 COMMANDS = {
     "CPYF": CPYF_PARAMS, "DSPPFM": DSPPFM_PARAMS, "OVRDBF": OVRDBF_PARAMS, "DLTOVR": DLTOVR_PARAMS,
@@ -250,7 +261,9 @@ COMMANDS = {
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
     "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "CRTMSGQ": CRTMSGQ_PARAMS, "CHGMSGQ": CHGMSGQ_PARAMS,
-    "DLTMSGQ": DLTMSGQ_PARAMS, "WRKSPLF": WRKSPLF_PARAMS, "WRKOUTQ": WRKOUTQ_PARAMS, "CHGSPLFA": CHGSPLFA_PARAMS, "CRTOUTQ": CRTOUTQ_PARAMS, "DLTOUTQ": DLTOUTQ_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
+    "DLTMSGQ": DLTMSGQ_PARAMS, "CRTDTAARA": CRTDTAARA_PARAMS, "CHGDTAARA": CHGDTAARA_PARAMS, "DLTDTAARA": DLTDTAARA_PARAMS,
+    "CRTUSRSPC": CRTUSRSPC_PARAMS, "DLTUSRSPC": DLTUSRSPC_PARAMS,
+    "WRKSPLF": WRKSPLF_PARAMS, "WRKOUTQ": WRKOUTQ_PARAMS, "CHGSPLFA": CHGSPLFA_PARAMS, "CRTOUTQ": CRTOUTQ_PARAMS, "DLTOUTQ": DLTOUTQ_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
     "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "DSPJOB": DSPJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
@@ -495,6 +508,18 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
         return out
     if k == "autspec":
         return _autspec(values)
+    if k == "dtaaratype":
+        if values != ["*CHAR"]:
+            raise BindError(f"TYPE({values[0]}) is not modeled yet. Only *CHAR is.")
+        return "*CHAR"
+    if k == "dtaaralen":
+        if values == ["*NONE"]:
+            return None
+        if len(values) != 1 or not values[0].isdigit():
+            raise BindError(f"Value for parameter {p.key} not valid. Use a number or *NONE.")
+        return int(values[0])
+    if k == "dtaval":
+        return "" if values == ["*NONE"] else values[0]
     raise AssertionError(k)
 
 
@@ -687,6 +712,14 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         if not changes:
             return Outcome(messages.syntax("Give at least one attribute to change."))
         return Outcome(msgq.change(store, actor, session, b["MSGQ"], changes).message)
+    if name == "CRTDTAARA":
+        return Outcome(dataareas.create_data_area(store, actor, session, b["DTAARA"], b["LEN"], b["VALUE"],
+                                                   b["TEXT"], b["AUT"]).message)
+    if name == "CHGDTAARA":
+        return Outcome(dataareas.change_data_area(store, actor, session, b["DTAARA"], b["VALUE"]).message)
+    if name == "CRTUSRSPC":
+        return Outcome(dataareas.create_user_space(store, actor, session, b["USRSPC"], b["SIZE"], b["INZVAL"],
+                                                    b["TEXT"], b["AUT"]).message)
     if name == "DSPJOBLOG":
         job, err = jobctl.display_log(store, actor, b["JOB"], session.job)
         return Outcome(err) if err else Outcome(view=("dspjoblog", job))
