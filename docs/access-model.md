@@ -114,7 +114,7 @@ Inferred, not read on a page: that a `*AUTLMGT` user may only hand out or remove
 | `GRTOBJAUT OBJ(LIB/NAME) OBJTYPE(*FILE) REFOBJ(LIB/REF)` | Copies the reference object's public, owner and private authorities and its authorization list onto the object. Needs manage authority on both, and only the owner or `*ALLOBJ` may copy `*OBJMGT` (so someone who manages both only through a private `*OBJMGT` entry is refused, as `GRTOBJAUT` itself would). Neither owner's own rights travel, and the object's owner keeps theirs. **Ours, not captured:** it adds to what is there (and keeps an authorization list the object already has), `REPLACE(*YES)` makes the object match, and it cannot be combined with `USER` or `AUTL`. |
 | `RVKOBJAUT OBJ(LIB/NAME) OBJTYPE(*FILE) USER(A *ALL *PUBLIC) AUT(...)` | Removes only the named authorities. A user left with nothing loses the entry altogether and falls through to groups and `*PUBLIC`, which is not the same as holding `*EXCLUDE`. |
 
-Object types so far are `*LIB`, `*FILE`, `*CMD`, `*MENU` and `*PGM`, `OBJ` takes one explicit name (no generic names or `*ALL`), `OBJ(NAME)` is found through your library list, and `REFOBJ`, `OUTPUT(*PRINT)` and `OUTFILE` are not modeled. Use `LIB/NAME`, or `OBJ(NAME) OBJTYPE(*LIB)` for a library, which always lives in QSYS.
+Object types so far are `*LIB`, `*FILE`, `*CMD`, `*MENU`, `*PGM`, `*OUTQ`, `*MSGQ`, `*DTAARA`, `*DTAQ` and `*USRSPC`, `OBJ` takes one explicit name (no generic names or `*ALL`), `OBJ(NAME)` is found through your library list, and `REFOBJ`, `OUTPUT(*PRINT)` and `OUTFILE` are not modeled. Use `LIB/NAME`, or `OBJ(NAME) OBJTYPE(*LIB)` for a library, which always lives in QSYS.
 
 Two things to try:
 
