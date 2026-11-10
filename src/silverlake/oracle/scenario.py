@@ -577,6 +577,19 @@ AUTHENTICATED["auth-qp2term-raw"] = [
     {"key": "F3", "always": True}, {"key": "F3", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# Same six commands again, but without the blank Enters auth-qp2term-raw pads each one with: those are not a
+# no-op, they are a real empty line handed to the shell, so they advance its prompt same as any other input
+# and still missed id's and echo $PATH's output in that capture. Run this one with the client's own --settle
+# instead (e.g. --settle 3): after each screen's Read it keeps listening a few seconds for the shell's output,
+# which the host appears to write in its own cycle well after the one that echoes the command and reprompts.
+AUTHENTICATED["auth-qp2term-settle"] = [
+    _SIGNON,
+    {"fill": {"0": "CALL PGM(QP2TERM)"}, "key": "ENTER"},
+    *[{"fill": {"0": c}, "key": "ENTER", "raw": True} for c in (
+        "pwd", "id", "ls -ld / /home /tmp /QOpenSys", "ls /nosuchdir", "cat /nosuchfile", "echo $PATH")],
+    {"key": "F3", "always": True}, {"key": "F3", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 # Edit Object Authority's F11 on the same kind of throwaway job-local data area as auth-objopts2: the first run of that
 # got to F11 once and showed the object rights (Opr, Mgt, Exist, Alter, Ref) with the key line turning into
 # "F11=Display data authorities". This presses F11 four times to see where it goes from there and whether it cycles,
@@ -652,7 +665,7 @@ def expand(value: str) -> str:
 
 
 async def run_scenario(host: str, port: int, name: str, devname: str | None = None,
-                       timeout: float = 15.0, tls: bool = False) -> dict:
+                       timeout: float = 15.0, tls: bool = False, settle: float = 0.0) -> dict:
     if name not in SCENARIOS:
         raise CaptureError(f"unknown scenario {name!r}, have: {', '.join(sorted(SCENARIOS))}")
     if name in AUTHENTICATED and not tls and not is_loopback(host):
@@ -685,7 +698,7 @@ async def run_scenario(host: str, port: int, name: str, devname: str | None = No
                 stopped = {"action": i, "key": key, "reason": str(exc)}
                 break
             try:
-                captures.append(await client.wait_screen(timeout))
+                captures.append(await client.wait_screen(timeout, settle))
             except CaptureError as exc:
                 if not str(exc).startswith(("no screen within", "could not decode")):
                     raise

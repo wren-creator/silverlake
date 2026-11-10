@@ -357,7 +357,7 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13", "auth-edtauth-", "auth-copyobj", "auth-prompt-keys", "auth-f11-", "auth-f9-")):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-qp2term-settle", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13", "auth-edtauth-", "auth-copyobj", "auth-prompt-keys", "auth-f11-", "auth-f9-")):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
@@ -654,7 +654,7 @@ def test_a_notice_after_sign_on_gets_one_enter_and_nothing_else(monkeypatch):
         def __init__(self, *a, **k): pass
         async def connect(self): pass
         async def close(self): pass
-        async def wait_screen(self, timeout=10.0):
+        async def wait_screen(self, timeout=10.0, settle=0.0):
             return Capture(next(screens), [], "")
         def send_aid(self, key, fill=None): sent.append((key, dict(fill or {})))
 
@@ -762,7 +762,7 @@ def test_a_silent_host_leaves_the_bytes_that_did_arrive_in_the_capture(monkeypat
         def __init__(self, *a, **k): pass
         async def connect(self): pass
         async def close(self): pass
-        async def wait_screen(self, timeout=10.0):
+        async def wait_screen(self, timeout=10.0, settle=0.0):
             try:
                 return Capture(next(screens), [], "")
             except StopIteration:

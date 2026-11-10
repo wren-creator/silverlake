@@ -138,9 +138,14 @@ class Client:
             elif ev.kind == "unsupported":
                 raise CaptureError(f"host sent something this client does not decode: {ev.detail}")
 
-    async def wait_screen(self, timeout: float = 10.0) -> Capture:
+    async def wait_screen(self, timeout: float = 10.0, settle: float = 0.0) -> Capture:
         """Read until the host issues a Read command, i.e. the screen is ready
-        for input, and return what is on it."""
+        for input, and return what is on it. `settle`, if given, keeps listening
+        past that first Read for a laggard host (QP2TERM: the shell's actual
+        output arrives in its own write-and-read cycle, separate from and later
+        than the one that echoes the command and reprompts), so a second update
+        that trickles in during the window is folded into this screen instead of
+        silently landing on whichever one is waited on next."""
         assert self._reader is not None
         self._got_read = False
         self._records = []
@@ -165,7 +170,33 @@ class Client:
             await asyncio.wait_for(loop(), timeout)
         except TimeoutError as exc:
             raise CaptureError(f"no screen within {timeout:.0f}s") from exc
+        if settle > 0:
+            await self._drain_settle(settle)
         return Capture(self.term.snapshot(), list(self._records), self.term.error_line)
+
+    async def _drain_settle(self, settle: float) -> None:
+        assert self._reader is not None
+        loop_clock = asyncio.get_event_loop()
+        deadline = loop_clock.time() + settle
+        while True:
+            remaining = deadline - loop_clock.time()
+            if remaining <= 0:
+                return
+            try:
+                chunk = await asyncio.wait_for(self._reader.read(4096), remaining)
+            except TimeoutError:
+                return
+            if not chunk:
+                return
+            self._raw.append(chunk)
+            for ev in self.parser.feed(chunk):
+                if isinstance(ev, tn.Command):
+                    self._on_command(ev)
+                elif isinstance(ev, tn.Subneg):
+                    self._on_subneg(ev)
+                else:
+                    self._on_record(ev.data)
+            await self._writer.drain()
 
     # -- input -----------------------------------------------------------------
 

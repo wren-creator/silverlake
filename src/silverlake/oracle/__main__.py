@@ -25,18 +25,19 @@ def _split(target: str, tls: bool = False) -> tuple[str, int]:
     return host, int(port)
 
 
-async def _capture(target: str, scenario: str, tls: bool = False, timeout: float = 15.0) -> dict:
+async def _capture(target: str, scenario: str, tls: bool = False, timeout: float = 15.0,
+                    settle: float = 0.0) -> dict:
     if target == "local":
         server = await srv.serve("127.0.0.1", 0, SignonController)
         try:
             port = server.sockets[0].getsockname()[1]
-            return await run_scenario("127.0.0.1", port, scenario)
+            return await run_scenario("127.0.0.1", port, scenario, settle=settle)
         finally:
             server.close()
             await server.wait_closed()
     host, port = _split(target, tls)
     check_target(host, CAPTURES)
-    return await run_scenario(host, port, scenario, tls=tls, timeout=timeout)
+    return await run_scenario(host, port, scenario, tls=tls, timeout=timeout, settle=settle)
 
 
 def _report(diffs: list[str]) -> int:
@@ -57,6 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("scenario", choices=sorted(SCENARIOS))
     c.add_argument("--out", type=Path, required=True)
     c.add_argument("--timeout", type=float, default=15.0, help="seconds to wait for each screen (default 15; a PASE start can be slower)")
+    c.add_argument("--settle", type=float, default=0.0,
+                   help="after each screen's Read, keep listening this many more seconds for a laggard "
+                        "write (QP2TERM: the shell's own output arrives well after the prompt's Read)")
     c.add_argument("--tls", action="store_true", help="connect with TLS (default port 992); required for scenarios that send a password")
 
     d = sub.add_parser("diff", help="structural diff of two capture files (A is the reference)")
@@ -82,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{name}  ({len(actions)} action(s))")
             return 0
         if args.cmd == "capture":
-            result = asyncio.run(_capture(args.target, args.scenario, args.tls, args.timeout))
+            result = asyncio.run(_capture(args.target, args.scenario, args.tls, args.timeout, args.settle))
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps(result, indent=2))
             print(f"saved {len(result['snapshots'])} screen(s) to {args.out}")
