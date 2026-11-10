@@ -35,7 +35,8 @@
 - [x] WRKOUTQ OUTQ(lib/name), from the PUB400 captures: the list, options 3, 5, 6, 8, the not found wording, and a profile that may read the queue sees every file in it (user and job name) whatever DSPDTA says
 - [x] CRTOUTQ and DLTOUTQ, from IBM's pages (AUT defaults to *USE, only the owner can delete by default, a queue with entries cannot be deleted)
 - [x] Spool options 1, 2, 4, 7, 9 on WRKSPLF and WRKOUTQ, from the auth-splopts capture (SNDNETSPLF and CHGSPLFA prompts first pages, no messages, printing status), plus CHGSPLFA
-- [ ] WRKOUTQ leftovers: F11 view 2, F20, F22, F24, status HLD for a held queue, and the bare form (Work with All Output Queues, needs a quieter capture)
+- [x] WRKOUTQ key line: F3, F11=View 2, F12, F20=Writers, F22=Printers, F24=More keys, drawn exactly as the auth-outq capture already had it; the four keys stay no-ops, same as F10/F11/F22/F24 already are on WRKSPLF
+- [ ] WRKOUTQ leftovers still open: what F11's view 2, F20's Writers screen and F22's Printers screen actually show, status HLD for a held queue, whether HLDOUTQ/RLSOUTQ exist as real commands, and the bare form (Work with All Output Queues, needs a quieter capture); auth-outq-keys is written and ready to run against PUB400 for the first four
 - [ ] Spool leftovers: option 4 confirm (real one never captured, ours deletes at once), SNDNETSPLF and CHGSPLFA page two plus F4/F10/F13, inner options on Work with Printing Status, Find and F19/F20 on the display, attributes page two and F13, HLDSPLF/RLSSPLF
 - [x] Phase 3c-3c step 3: message queues (DSPMSG, SNDMSG, CLRMSGQ, QSYSOPR, per-user queues in QUSRSYS), from the PUB400 captures
 - [x] CRTMSGQ, CHGMSGQ (DLVRY, SEV, TEXT) and DLTMSGQ from IBM's command pages, rules and inferences in docs/jobs-spool-messages.md

@@ -357,12 +357,12 @@ def test_the_read_only_scenarios_only_read_and_never_leave_a_job():
     for name in scenario.AUTHENTICATED:
         assert scenario.SCENARIOS[name][-1]["fill"] == {"0": "SIGNOFF"}      # never leave a job behind
         assert scenario.SCENARIOS[name][0]["fill"]["1"] == "${SILVERLAKE_ORACLE_PASS}"   # no literal secret
-        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-qp2term-settle", "auth-splopts", "auth-pdm") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13", "auth-edtauth-", "auth-copyobj", "auth-prompt-keys", "auth-f11-", "auth-f9-")):
+        if name in ("auth-crtlib", "auth-objopts", "auth-objopts2", "auth-edtautl", "auth-spool", "auth-msgs", "auth-joblog", "auth-dspjob", "auth-dspjob2", "auth-dspjob3", "auth-dspjob4", "auth-callpgm", "auth-qp2term", "auth-qp2term-raw", "auth-qp2term-settle", "auth-splopts", "auth-pdm", "auth-outq-keys") or name.startswith(("auth-prompts-", "auth-f10-", "auth-f13", "auth-edtauth-", "auth-copyobj", "auth-prompt-keys", "auth-f11-", "auth-f9-")):
             continue
         assert all(c.split()[0] in ("DSPLIBL", "DSPOBJAUT", "WRKOBJ", "WRKOBJOWN", "WRKAUTL", "DSPAUTL", "DSPOBJD", "WRKACTJOB", "WRKSPLF", "DSPMSG", "WRKOUTQ", "SIGNOFF") for c in _fills(name)), name
 
 
-def test_the_one_scenario_that_changes_the_host_touches_only_its_own_library():
+def test_the_crtlib_scenario_touches_only_its_own_library():
     cmds = _fills("auth-crtlib")
     changing = [c for c in cmds if c.split()[0] in ("CRTLIB", "DLTLIB")]
     assert [c.split()[0] for c in changing] == ["CRTLIB", "DLTLIB"]
@@ -372,6 +372,25 @@ def test_the_one_scenario_that_changes_the_host_touches_only_its_own_library():
     create = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("CRTLIB"))
     delete = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("DLTLIB"))
     assert actions[create]["proceed_if"] and create < delete                  # delete is gated on the create
+
+
+def test_the_outq_keys_scenario_touches_only_its_own_library_and_queue():
+    cmds = _fills("auth-outq-keys")
+    changing = [c for c in cmds if c.split()[0] in ("CRTLIB", "CRTOUTQ", "DLTLIB")]
+    assert [c.split()[0] for c in changing] == ["CRTLIB", "CRTOUTQ", "DLTLIB"]
+    assert all("${SILVERLAKE_ORACLE_TESTLIB}" in c for c in cmds if c.split()[0] != "SIGNOFF")
+    assert all(c.split()[0] in ("CRTLIB", "CRTOUTQ", "WRKOUTQ", "HLDOUTQ", "RLSOUTQ", "DLTLIB", "SIGNOFF")
+              for c in cmds)
+    actions = scenario.SCENARIOS["auth-outq-keys"]
+    create_lib = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("CRTLIB"))
+    create_outq = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("CRTOUTQ"))
+    delete = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("DLTLIB"))
+    assert actions[create_lib]["proceed_if"] and actions[create_outq]["proceed_if"]
+    assert create_lib < create_outq < delete                                  # delete is gated on both creates
+    keys = [a["key"] for a in actions[create_outq + 1:-1] if "fill" not in a]
+    assert keys == ["F11", "F12", "F20", "F12", "F22", "F12", "F24", "F12"]
+    assert all(a.get("always") for a in actions[create_outq + 1:-1] if a["key"] == "F12")
+    assert all(a.get("always") for a in actions[delete:])                     # the cleanup always runs
 
 
 def test_the_option_scenario_only_ever_touches_its_own_job_local_data_area():
@@ -531,6 +550,19 @@ def test_auth_crtlib_creates_looks_deletes_and_signs_off_locally(monkeypatch):
     assert f"Library {lib} created" in text(2) and "Display Object Authority" in text(3)
     assert f"Library {lib} deleted" in text(5) and "Sign On" in text(6)
     assert len(cap["snapshots"]) == 7
+
+
+def test_auth_outq_keys_creates_looks_deletes_and_signs_off_locally(monkeypatch):
+    """Locally none of F11/F20/F22/F24 are built, so F12 after the first one closes the whole list
+    rather than undoing a sub-view, and the later probes get skipped; that is expected here (see the
+    scenario comment) and is exactly what a real run against PUB400 would show up as different."""
+    from silverlake.system import profiles
+    store = profiles.load()
+    cap = _run_shared("auth-outq-keys", monkeypatch, store)
+    lib = cap["testlib"]
+    assert lib.startswith("SLT") and len(lib) == 8
+    assert cap["stopped"] is None
+    assert store.find_library(lib) is None                                   # created, then deleted with the queue
 
 
 def test_the_test_library_name_cannot_be_chosen_from_outside(monkeypatch):

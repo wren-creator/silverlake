@@ -195,7 +195,9 @@ def _spool(wl: WorkList, message: str) -> Screen:
 def _outq(wl: WorkList, message: str) -> Screen:
     """Work with Output Queue, laid out like the real display (captured twice): the queue, library
     and status on row 2, the same nine options as Work with All Spooled Files, nine files from row 9,
-    and a parameter line. F11 (view 2), F20, F22 and F24 are not built, so they are not drawn."""
+    and a parameter line. The key line (captured) is drawn in full, but F11's view 2, F20's Writers
+    screen, F22's Printers screen and F24's more-keys swap are not built, same as F10/F11/F22/F24
+    on Work with All Spooled Files above: pressing one is a no-op rather than a drawn screen."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     rows: list = [
         Text(0, 29, "Work with Output Queue", ds.ATTR_WHITE),
@@ -218,7 +220,9 @@ def _outq(wl: WorkList, message: str) -> Screen:
     rows.append(_more(18, wl.page >= wl.pages - 1))
     rows += [g(19, 1, "Parameters for options 1, 2, 3 or command"), g(20, 1, "===>"),
              Input(COMMAND_ROW, COMMAND_COL, COMMAND_LEN, "command"),
-             Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 24, "F12=Cancel", ds.ATTR_BLUE)]
+             Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F11=View 2", ds.ATTR_BLUE),
+             Text(21, 24, "F12=Cancel", ds.ATTR_BLUE), Text(21, 37, "F20=Writers", ds.ATTR_BLUE),
+             Text(21, 51, "F22=Printers", ds.ATTR_BLUE), Text(22, 1, "F24=More keys", ds.ATTR_BLUE)]
     if message:
         rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
     return Screen(rows, cursor="opt0" if wl.shown() else "command")

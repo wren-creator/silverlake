@@ -154,6 +154,31 @@ Taken from PUB400 on 2026-10-27, read only, the test profile's own job and two o
 - **Work with Output Queue** is a list with a status line (queue, library, status), options 1 to 9 on two rows, columns File, User, User Data, Sts, Pages, Copies, Form Type and Pty, a parameter line, and keys F3, F11 (view 2), F12, F20 (writers), F22 (printers), F24. A queue that does not exist answers `Output queue NOQUEUE in library SLNOSUCH not found.` on the menu's message line.
 - **The recon point.** A basic profile listing the job log queue sees every file in it, with the user and the job name of each, not only its own. The queue's display rule hides the contents, not the list. WRKOUTQ in Silverlake has to show the same thing.
 
+## WRKOUTQ leftovers: the key line, and what still needs a real run
+
+The `auth-outq` capture above already had the real key line sitting in it unused: `F3=Exit F11=View 2
+F12=Cancel F20=Writers F22=Printers` on row 21, `F24=More keys` on row 22. `worklists._outq` now draws
+it, matching the real columns exactly, no new capture needed for the labels themselves. Pressing any of
+F11, F20, F22 or F24 is still a no-op, the same as F10/F11/F22/F24 already are on Work with All Spooled
+Files above them: the label is real, the destination screen is not built.
+
+What those keys actually show, and whether a held queue's Status reads `HLD` (there is no HLDOUTQ or
+RLSOUTQ modeled here to produce one, confirmed by grep, so this is genuinely unknown rather than an
+oversight), needs a real PUB400 run. `auth-outq-keys` does that: it makes a throwaway library and queue
+(CRTOUTQ refuses QTEMP, CPF3352, so QTEMP is not an option the way it is for a data area), presses each
+of the four keys once and backs out with F12, tries HLDOUTQ and RLSOUTQ to see if they exist on the real
+host at all, and deletes the library at the end regardless of what happened. Run it with:
+
+```
+python -m silverlake.oracle capture pub400.com 23 auth-outq-keys --settle 3
+```
+
+The bare `WRKOUTQ` form (no OUTQ named, lists every queue on the host) is the other open item on that
+roadmap line. It did not answer in 15 seconds on the 2026-10-27 run; the scenario harness now has a
+longer `--timeout` and the `--settle` drain added for the QP2TERM capture, neither of which existed
+then, so it may be worth one retry with a generous timeout before writing it off as unusable on a
+shared host.
+
 ## What the third and fourth job captures taught us
 
 Taken from PUB400 on 2026-10-27, read only, the test profile's own job. `auth-dspjob3` and `auth-dspjob4` never press option 30 ("all of the above", which may print), never option 4, and never Enter on a prompt.

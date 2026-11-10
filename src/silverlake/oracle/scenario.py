@@ -266,6 +266,28 @@ AUTHENTICATED["auth-outq"] = [
     _SIGNON, *_cmd("WRKOUTQ OUTQ(SLNOSUCH/NOQUEUE)"), *_cmd("WRKOUTQ OUTQ(QGPL/QPRINT)"),
     *_cmd("WRKOUTQ OUTQ(QUSRSYS/QEZJOBLOG)"), _SIGNOFF,
 ]
+# The WRKOUTQ key line (captured in auth-outq above) names F11=View 2, F20=Writers and F22=Printers,
+# none of which are built (see worklists._outq). This presses each once and backs out with F12, on a
+# throwaway queue in a throwaway library since CRTOUTQ refuses QTEMP (confirmed, CPF3352). It also
+# tries HLDOUTQ/RLSOUTQ, which are not modeled commands here at all, to see whether they exist on the
+# real host and what a held queue's Status then reads. DLTLIB cleans up the queue with the library.
+AUTHENTICATED["auth-outq-keys"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTLIB LIB({_TESTLIB}) TEXT('Silverlake oracle test, deleted at once')"}, "key": "ENTER",
+     "proceed_if": _MADE},
+    {"fill": {"0": f"CRTOUTQ OUTQ({_TESTLIB}/TESTQ) TEXT('Silverlake oracle test')"}, "key": "ENTER",
+     "proceed_if": [_TESTLIB, "created"]},
+    {"fill": {"0": f"WRKOUTQ OUTQ({_TESTLIB}/TESTQ)"}, "key": "ENTER", **_LIST},
+    {"key": "F11", **_LIST}, {"key": "F12", "always": True},
+    {"key": "F20", **_LIST}, {"key": "F12", "always": True},
+    {"key": "F22", **_LIST}, {"key": "F12", "always": True},
+    {"key": "F24", **_LIST}, {"key": "F12", "always": True},
+    {"fill": {"0": f"HLDOUTQ OUTQ({_TESTLIB}/TESTQ)"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"WRKOUTQ OUTQ({_TESTLIB}/TESTQ)"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"RLSOUTQ OUTQ({_TESTLIB}/TESTQ)"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"DLTLIB LIB({_TESTLIB})"}, "key": "ENTER", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 # Looks at the keys and option the edit screen and the work list offer beyond what is built, on the
 # same kind of throwaway job-local data area as auth-objopts. It only presses function keys after
 # the option numbers, never Enter on a screen it did not expect, and every back out runs whatever

@@ -52,6 +52,8 @@ def test_the_layout_follows_the_capture(store):
     assert f[(9, 6)] and (9, 42) in f and f[(9, 64)] == "*STD" and f[(9, 77)] == "5"   # rows start at 9
     assert f[(18, 67)] == "      Bottom"
     assert f[(19, 1)] == "Parameters for options 1, 2, 3 or command" and f[(20, 1)] == "===>"
+    assert (f[(21, 1)], f[(21, 11)], f[(21, 24)], f[(21, 37)], f[(21, 51)], f[(22, 1)]) == (
+        "F3=Exit", "F11=View 2", "F12=Cancel", "F20=Writers", "F22=Printers", "F24=More keys")
     inputs = [(i.row, i.col, i.length) for i in s.inputs()]
     assert inputs[0] == (9, 2, 1) and inputs[-1] == (20, 6, 73)
 
