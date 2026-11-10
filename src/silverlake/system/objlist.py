@@ -15,7 +15,16 @@ Rules read from the IBM i 7.5 command pages:
   RNMOBJ     *OBJMGT on the object (and *OBJOPR for a file), and *UPD and *EXECUTE on the library
              it sits in. IBM's system libraries cannot be renamed, nor can a library take a
              system library's name. The new name must be unique in the library for the type.
-  CHGOBJD    *OBJMGT on the object (and *OBJOPR for a file) and *EXECUTE on the library.
+             OBJ takes one name, never a generic one or *ALL: NEWOBJ is a single new name, and a
+             generic match renaming several objects to that one name would collide, so there is
+             nothing to build here, unlike CHGOBJD below.
+  CHGOBJD    *OBJMGT on the object (and *OBJOPR for a file) and *EXECUTE on the library. OBJ now
+             also takes a generic name or *ALL, with the library taking WRKOBJ's own values
+             (*LIBL, *CURLIB, *USRLIBL, *ALLUSR, *ALL) (ours, not read on a page or captured: CHGOBJD
+             is reasoned to share WRKOBJ's own OBJ shape, since it is also a describe-many-at-once
+             command, not a one-object action like RNMOBJ, whose NEWOBJ makes a generic name there
+             structurally impossible). The completion wording for several objects at once is made
+             up too; nothing stops a match that is authorized because one later in the list is not.
 
   DLTF       *OBJEXIST and *OBJOPR on the file, *EXECUTE on the library.
   DLTMSGQ    *USE, *OBJEXIST and *DLT on the queue, *EXECUTE on the library.
@@ -30,7 +39,7 @@ Rules read from the IBM i 7.5 command pages:
 
 Not on the pages, so ours: the options on the list displays (the pages do not list them, so
 none are offered), and what the library gate means for a *USE check on a library you only
-reach through *PUBLIC. *AUTL objects are not in the object table yet, so they never appear."""
+reach through *PUBLIC."""
 
 import copy
 import fnmatch
@@ -227,18 +236,38 @@ def duplicate_object(store: ProfileStore, actor: Profile, name: str, fromlib: st
     return _ok(f"Object {obj.name} duplicated as {newobj} in {tolib}.")
 
 
-def change_description(store: ProfileStore, actor: Profile, qualified: str, typ: str, text: str,
-                       search: list[str]) -> Done:
-    obj, err = locate(store, actor, qualified, typ, search)
+def _set_text(store: ProfileStore, obj: SecuredObject, text: str) -> None:
+    obj.text = text[:50]
+    if obj.type == "*AUTL" and obj.name in store.autls:   # CHGOBJD and WRKAUTL option 13 share the one text
+        store.autls[obj.name].text = obj.text
+
+
+def change_description(store: ProfileStore, actor: Profile, name: str, lib_spec: str, typ: str, text: str,
+                       session) -> Done:
+    if name != "*ALL" and "*" not in name:
+        obj, err = locate(store, actor, f"{lib_spec}/{name}", typ, session.search_order())
+        if err:
+            return _no(err)
+        if not _allobj(store, actor) and _need_for(typ) & ~store.authority_to_object(actor, obj):
+            return _no(messages.not_authorized_to_object_2189(obj.name, obj.library, typ))
+        _set_text(store, obj, text)
+        store.on_change()
+        return _ok(f"Object {obj.name} in {obj.library} type {obj.type} description changed.")
+    libs, err = _libraries(store, actor, lib_spec, session)
     if err:
         return _no(err)
-    if not _allobj(store, actor) and _need_for(typ) & ~store.authority_to_object(actor, obj):
-        return _no(messages.not_authorized_to_object_2189(obj.name, obj.library, typ))
-    obj.text = text[:50]
-    if typ == "*AUTL" and obj.name in store.autls:     # CHGOBJD and WRKAUTL option 13 share the one text
-        store.autls[obj.name].text = obj.text
+    matches = sorted((o for o in store.objects.values() if o.library in libs and o.type == typ
+                      and (name == "*ALL" or fnmatch.fnmatchcase(o.name, name))),
+                     key=lambda o: (o.library, o.name))
+    if not matches:
+        return _no(messages.syntax("No objects found, or you are not authorized to any."))
+    changed = [o for o in matches if _allobj(store, actor) or not (_need_for(typ) & ~store.authority_to_object(actor, o))]
+    for obj in changed:
+        _set_text(store, obj, text)
     store.on_change()
-    return _ok(f"Object {obj.name} in {obj.library} type {obj.type} description changed.")
+    if len(changed) < len(matches):
+        return _ok(f"{len(changed)} objects changed, {len(matches) - len(changed)} not changed.")
+    return _ok(f"{len(changed)} objects changed.")
 
 
 def objects_secured_by(store: ProfileStore, actor: Profile, autl: str) -> list[SecuredObject]:

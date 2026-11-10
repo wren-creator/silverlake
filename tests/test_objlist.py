@@ -144,6 +144,39 @@ def test_chgobjd_changes_text(store):
     assert "CPF2189" in run(store, "STUDENT", "CHGOBJD APPLIB/PAYROLL *FILE TEXT('x')")
 
 
+def test_chgobjd_takes_a_generic_name(store):
+    """PAYADJ, PAYCALC, PAYLOOK, PAYRUN and PAYRUNX are the *PGM matches for PAY* in APPLIB."""
+    assert "5 objects changed" in run(store, "QSECOFR", "CHGOBJD OBJ(APPLIB/PAY*) OBJTYPE(*PGM) TEXT('batch')")
+    assert all(store.objects[("APPLIB", n, "*PGM")].text == "batch"
+              for n in ("PAYADJ", "PAYCALC", "PAYLOOK", "PAYRUN", "PAYRUNX"))
+
+
+def test_chgobjd_generic_skips_what_it_may_not_change(store):
+    """SECADMIN owns PAYADJ, PAYRUN and PAYRUNX outright but only has public authority (no *OBJMGT)
+    to PAYCALC (QSECOFR's) and PAYLOOK (OPERATOR's)."""
+    msg = run(store, "SECADMIN", "CHGOBJD OBJ(APPLIB/PAY*) OBJTYPE(*PGM) TEXT('mine')")
+    assert "3 objects changed, 2 not changed" in msg
+    assert store.objects[("APPLIB", "PAYADJ", "*PGM")].text == "mine"
+    assert store.objects[("APPLIB", "PAYCALC", "*PGM")].text != "mine"
+
+
+def test_chgobjd_all_matches_every_object_of_the_type_in_the_library(store):
+    out = run(store, "QSECOFR", "CHGOBJD OBJ(APPLIB/*ALL) OBJTYPE(*MENU) TEXT('menus')")
+    assert "2 objects changed" in out
+    assert store.objects[("APPLIB", "APPMENU", "*MENU")].text == "menus"
+    assert store.objects[("APPLIB", "RESTRICT", "*MENU")].text == "menus"
+
+
+def test_chgobjd_generic_with_no_matches_says_so(store):
+    assert "No objects found" in run(store, "QSECOFR", "CHGOBJD OBJ(APPLIB/ZZZ*) OBJTYPE(*FILE) TEXT('x')")
+
+
+def test_chgobjd_generic_follows_the_library_list_when_none_is_named(store):
+    """CLERK's current library is APPLIB and no library is named, so the match still has to come
+    from *LIBL; CLERK owns none of the five PAY* programs, which is what proves it found them."""
+    assert "0 objects changed, 5 not changed" in run(store, "CLERK", "CHGOBJD OBJ(PAY*) OBJTYPE(*PGM) TEXT('x')")
+
+
 # -- the work lists on the screen ---------------------------------------------------------------------------
 
 def _signed(store, user="QSECOFR"):

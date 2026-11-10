@@ -180,7 +180,7 @@ CHGOBJOWN_PARAMS = [
 RNMOBJ_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
                  Param("NEWOBJ", "name", "", required=True), Param("ASPDEV", "ignored", "*"),
                  Param("SYSTEM", "ignored", "*LCL")]
-CHGOBJD_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
+CHGOBJD_PARAMS = [Param("OBJ", "wrkobj", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
                   Param("TEXT", "text", SAME), Param("USECOUNT", "ignored", "*NORESET")]
 
 DLTF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SYSTEM", "ignored", "*LCL"),
@@ -944,8 +944,8 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "CHGOBJD":
         if b["TEXT"] == SAME:
             return Outcome(messages.info("Object not changed."))
-        return Outcome(objlist.change_description(store, actor, b["OBJ"], b["OBJTYPE"], b["TEXT"],
-                                                  session.search_order()).message)
+        return Outcome(objlist.change_description(store, actor, *b["OBJ"], b["OBJTYPE"], b["TEXT"],
+                                                  session).message)
     if name == "CHGOBJOWN":
         return Outcome(objlist.change_owner(store, actor, b["OBJ"], b["OBJTYPE"], b["NEWOWN"],
                                             b["CUROWNAUT"], session.search_order()).message)
