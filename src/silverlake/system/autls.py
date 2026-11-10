@@ -15,12 +15,19 @@ Rules read from the IBM i 7.5 command reference pages:
 
 Inferred, not read on a page: that a *AUTLMGT user may only hand out authorities they hold
 themselves (the page says "only to the *AUTLMGT level"), that DSPAUTL needs some authority to the list (seen: public *USE is enough), that an entry already on the list counts as an error when added,
-and that QIBM_DB_SECADM (which the pages also name) does not exist here."""
+and that QIBM_DB_SECADM (which the pages also name) does not exist here.
+
+An authorization list is also an object (*AUTL, in QSYS, since the list itself has no library of
+its own), the same two layer shape a library has over the objects inside it: WRKOBJ, DSPOBJD,
+DSPOBJAUT, GRTOBJAUT and RVKOBJAUT see it as any other object, owned by its creator with public
+*USE (ours, not read on a page, matching CRTOUTQ's own default rather than a library's CRTAUT,
+since a list is not created in one). That authority is about the list object itself, not what
+being on the list grants; ADDAUTLE, CHGAUTLE, RMVAUTLE and *AUTLMGT, all above, are unchanged."""
 
 import fnmatch
 
 from . import messages
-from .authority import EXCLUDE, SPECIAL_VALUES, Auth, AuthList, SpecialAuthority
+from .authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, AuthList, SecuredObject, SpecialAuthority
 from .objects import NAME, Done, _no, _ok
 from .profiles import Profile, ProfileStore
 
@@ -80,6 +87,8 @@ def create(store: ProfileStore, actor: Profile, name: str, aut: Auth, text: str)
     if name in store.autls:
         return _no(messages.autl_exists(name))
     store.autls[name] = AuthList(name, {}, aut, actor.name, text)
+    store.objects[("QSYS", name, "*AUTL")] = SecuredObject(name, actor.name, public=USE, library="QSYS",
+                                                           type="*AUTL", text=text)
     store.on_change()
     return _ok(f"Authorization list {name} created.")
 
@@ -93,8 +102,18 @@ def delete(store: ProfileStore, actor: Profile, name: str) -> Done:
     if any(o.autl == autl.name for o in store.objects.values()):
         return _no(messages.autl_in_use(autl.name))
     del store.autls[autl.name]
+    store.objects.pop(("QSYS", autl.name, "*AUTL"), None)
     store.on_change()
     return _ok(f"Authorization list {autl.name} deleted.")
+
+
+def ensure_autl_objects(store: ProfileStore) -> None:
+    """A state saved before *AUTL was an object type gets one for each list it already has."""
+    for autl in store.autls.values():
+        key = ("QSYS", autl.name, "*AUTL")
+        if key not in store.objects:
+            store.objects[key] = SecuredObject(autl.name, autl.owner, public=USE, library="QSYS",
+                                               type="*AUTL", text=autl.text)
 
 
 def change_text(store: ProfileStore, actor: Profile, name: str, text: str) -> Done:
@@ -105,6 +124,8 @@ def change_text(store: ProfileStore, actor: Profile, name: str, text: str) -> Do
     if not _full(store, actor, autl):
         return _no(messages.not_authorized_to_autl_object(autl.name))
     autl.text = text
+    if (obj := store.objects.get(("QSYS", autl.name, "*AUTL"))) is not None:
+        obj.text = text
     store.on_change()
     return _ok(f"Text of authorization list {autl.name} changed.")
 

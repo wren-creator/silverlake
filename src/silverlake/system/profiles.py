@@ -515,6 +515,8 @@ def load(path: Path | str | None = None) -> ProfileStore:
             raise SeedError(f"spool file {f.name}: output queue {f.outq_lib}/{f.outq} does not exist")
     store = ProfileStore(system, profiles, objects, autls, spool)
     ensure_commands(store)
+    from .autls import ensure_autl_objects    # imported late: autls imports this module
+    ensure_autl_objects(store)
     from . import ifs                     # imported late: ifs imports this module
     store.ifs = ifs.load_seed()
     return store

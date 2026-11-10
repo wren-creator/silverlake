@@ -187,3 +187,77 @@ def test_messages_after_sign_on_show_text_without_the_id(store):
     c.handle("ENTER", {"user": "STUDENT", "password": "STUDENT"})
     s = c.handle("ENTER", {"command": "dspautl nosuch"})
     assert "Authorization list NOSUCH does not exist." in texts(s) and "CPF" not in texts(s)
+
+
+def test_an_authorization_list_is_also_an_object_in_qsys(store):
+    run(store, "DEVELOPER", "CRTAUTL AUTL(MYLIST) TEXT('mine')")
+    obj = store.objects[("QSYS", "MYLIST", "*AUTL")]
+    assert (obj.owner, obj.public, obj.library, obj.text) == ("DEVELOPER", USE, "QSYS", "mine")
+    assert "MYLIST" in [n for lib, n, t in store.objects if t == "*AUTL"]
+    run(store, "DEVELOPER", "DLTAUTL MYLIST")
+    assert ("QSYS", "MYLIST", "*AUTL") not in store.objects
+
+
+def test_the_seeded_list_is_already_an_object(store):
+    assert ("QSYS", "PAYAUTL", "*AUTL") in store.objects
+    assert store.objects[("QSYS", "PAYAUTL", "*AUTL")].owner == "QSECOFR"
+
+
+def test_wrkobj_and_dspobjaut_see_an_authorization_list(store):
+    run(store, "DEVELOPER", "CRTAUTL AUTL(MYLIST)")
+    c = SignonController("QPADEV0001", store)
+    c.handle("ENTER", {"user": "DEVELOPER", "password": "DEVELOPER"})
+    s = c.handle("ENTER", {"command": "wrkobj obj(mylist) objtype(*autl)"})
+    assert "MYLIST" in texts(s)
+    out = execute(store, store.get("DEVELOPER"), "DSPOBJAUT OBJ(MYLIST) OBJTYPE(*AUTL)")
+    assert out.view is not None
+
+
+def test_grtobjaut_and_rvkobjaut_work_on_an_authorization_list_as_an_object(store):
+    run(store, "DEVELOPER", "CRTAUTL AUTL(MYLIST)")
+    assert "granted" in run(store, "DEVELOPER", "GRTOBJAUT OBJ(MYLIST) OBJTYPE(*AUTL) USER(STUDENT) AUT(*USE)")
+    obj = store.objects[("QSYS", "MYLIST", "*AUTL")]
+    assert obj.private["STUDENT"] == USE
+    assert "revoked" in run(store, "DEVELOPER", "RVKOBJAUT OBJ(MYLIST) OBJTYPE(*AUTL) USER(STUDENT) AUT(*USE)")
+    assert "STUDENT" not in obj.private
+
+
+def test_rnmobj_and_crtdupobj_refuse_an_authorization_list(store):
+    run(store, "DEVELOPER", "CRTAUTL AUTL(MYLIST)")
+    assert "not" in run(store, "DEVELOPER", "RNMOBJ OBJ(MYLIST) OBJTYPE(*AUTL) NEWOBJ(OTHERLIST)").lower()
+    assert ("QSYS", "MYLIST", "*AUTL") in store.objects
+    assert "not" in run(store, "DEVELOPER", "CRTDUPOBJ OBJ(MYLIST) OBJTYPE(*AUTL) NEWOBJ(COPY)").lower()
+
+
+def test_chgobjd_and_wrkautl_option_13_write_the_same_text(store):
+    run(store, "DEVELOPER", "CRTAUTL AUTL(MYLIST)")
+    assert "changed" in run(store, "DEVELOPER", "CHGOBJD OBJ(MYLIST) OBJTYPE(*AUTL) TEXT('from chgobjd')")
+    assert store.autls["MYLIST"].text == "from chgobjd"
+    c = SignonController("QPADEV0001", store)
+    c.handle("ENTER", {"user": "DEVELOPER", "password": "DEVELOPER"})
+    c.handle("ENTER", {"command": "wrkautl"})
+    s = c.handle("ENTER", {"opt0": "13", "command": "from option 13"})
+    assert store.objects[("QSYS", "MYLIST", "*AUTL")].text == "from option 13"
+
+
+def test_wrkobj_option_4_deletes_an_authorization_list_through_dltautl(store):
+    run(store, "DEVELOPER", "CRTAUTL AUTL(MYLIST)")
+    c = SignonController("QPADEV0002", store)
+    c.handle("ENTER", {"user": "DEVELOPER", "password": "DEVELOPER"})
+    s = c.handle("ENTER", {"command": "wrkobj obj(mylist) objtype(*autl)"})
+    assert "MYLIST" in texts(s)
+    s = c.handle("ENTER", {"opt0": "4"})
+    assert "Confirm Delete" in texts(s)
+    c.handle("ENTER", {})
+    assert "MYLIST" not in store.autls
+    assert ("QSYS", "MYLIST", "*AUTL") not in store.objects
+
+
+def test_a_state_saved_before_autl_was_an_object_gets_one_backfilled(store):
+    run(store, "DEVELOPER", "CRTAUTL AUTL(MYLIST)")
+    saved = state.to_dict(store)
+    saved["objects"] = [o for o in saved["objects"] if o["type"] != "*AUTL"]     # simulate an older save
+    again = state.from_dict(saved)
+    assert ("QSYS", "MYLIST", "*AUTL") in again.objects
+    assert ("QSYS", "PAYAUTL", "*AUTL") in again.objects
+    assert again.objects[("QSYS", "MYLIST", "*AUTL")].owner == "DEVELOPER"

@@ -235,6 +235,8 @@ def change_description(store: ProfileStore, actor: Profile, qualified: str, typ:
     if not _allobj(store, actor) and _need_for(typ) & ~store.authority_to_object(actor, obj):
         return _no(messages.not_authorized_to_object_2189(obj.name, obj.library, typ))
     obj.text = text[:50]
+    if typ == "*AUTL" and obj.name in store.autls:     # CHGOBJD and WRKAUTL option 13 share the one text
+        store.autls[obj.name].text = obj.text
     store.on_change()
     return _ok(f"Object {obj.name} in {obj.library} type {obj.type} description changed.")
 

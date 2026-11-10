@@ -11,6 +11,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from .autls import ensure_autl_objects
 from .commandobjs import ensure_commands
 from .authority import AuthList, SecuredObject, SpecialAuthority, UserClass, name_auth, parse_auth
 from . import ifs
@@ -84,6 +85,7 @@ def from_dict(data: dict) -> ProfileStore:
     store.ifs = ifs.from_rows(data["ifs"]) if "ifs" in data else ifs.load_seed()      # an older state gets the seed IFS
     ensure_queues(store)
     ensure_commands(store)      # a state saved before a command existed gets its object now
+    ensure_autl_objects(store)  # a state saved before *AUTL was an object type gets one for each list
     return store
 
 
