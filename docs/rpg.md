@@ -124,10 +124,26 @@ Every layout is drawn from `screens/promptspecs.py`, which is generated from rea
 ## What it is not (yet)
 
 - **Adopted authority and `QCMDEXC` are built** (next section). Not covered: system request, the attention key, break handling programs and debug (nothing here starts one), and `TFRGRPJOB` (not built). The IFS does not support adoption either, and the simulated PASE will have to keep that true.
-- **No files.** DISK files, printer files and the spool are not connected to Silverlake's object store, so a program can show screens and calculate and cannot read or write a `*FILE`.
 - **One input per row.** The runtime keys input by screen row, so a second input field on the same row shows as text. Real DDS often has several per row.
 - **One display file per program.** The DDS in the object is the program's display file, whatever name the program gives it.
-- **Errors are not function checks.** An error in a running program ends it with a plain message in the job log. A real system raises a function check (CPF or MCH message) and offers a dump.
+
+## Function checks and a program dump
+
+An error in a running program (a runaway loop, a divide by zero, a file or program it cannot reach) now ends with the ID a web search turned up for a real function check, `CPF9999` (`messages.function_check`, not a page read in full). The message's own wording is unchanged from before: the screen's one line was already close to 77 columns for some of these causes (the runaway loop's own text alone is 69), so there was no room left to add "Function check" in front of it and keep the real cause visible. The ID is the part that is new.
+
+The other half of a real function check is `QPPGMDMP`, the spooled file IBM's own RPG manual names for a formatted dump (`rpg.dump_program`, also a web search, not a page read in full). Silverlake writes a stand-in there, in the job that was running, with the program, its library and owner, and the runtime's own error text. What a real dump also shows, the statement in error, the call stack and every variable's value, is not there: by the time the exception reaches this far the interpreter has already unwound past all three (`StoreLoader`'s `active` list is restored in a `finally` as the error passes through each `CALL`), so there is nothing honest to show for them, and the dump says so rather than guessing.
+
+## DSPPGMREF and DSPPGM's source fields
+
+`DSPPGMREF PGM(lib/name)` (`rpg.program_references`) needs `*OBJOPR` to the program (from IBM's page, read in full) and lists the `*FILE` objects its F-specs name, each with how it is used (Input, Output, Update or Combined, straight off the F-spec's own usage code). IBM's page says RPGLE programs can also report `*PGM`, `*DTAARA` and `*SRVPGM` references; none of those are built, since nothing here statically scans RPG source for the programs, data areas or service programs it calls, and guessing would be worse than leaving them out. The panel itself is ours: the page describes the content, a list by library with how each file is used, but gives no layout to copy.
+
+`DSPPGM`'s source file, library and member fields, laid out from the start but always blank, now show what `CRTBNDRPG` recorded on the object (`srcfile`, `srcmbr`) when the program came from one. A seeded program with no source file of its own still shows them blank, honestly, since there is nothing to report.
+
+## CHGPGM
+
+`CHGPGM PGM(lib/name) USRPRF(*SAME|*USER|*OWNER) USEADPAUT(*SAME|*YES|*NO) TEXT(*SAME|*BLANK|'text')` (`rpg.change_program`), from IBM's page, read in full, not a capture. `*OBJMGT` and `*USE` to the program are needed for any change at all. Changing `USRPRF` or `USEADPAUT` specifically needs more: the page says "either be the owner of the program or have all object (`*ALLOBJ`) and security administrator (`*SECADM`) special authorities", so owning a program is not, by itself, enough to hand yourself its adopted authority through someone else's. A program in `QSYS` or `QGDDM` is refused outright (`CPF0544`, the one escape message the page actually ties to a named condition; the rest of its list has no wording to quote, so Silverlake's own refusals carry none).
+
+Not modeled: the page's own rule that changing `USRPRF` or `USEADPAUT` requires the program to be re-created, and the warning that other jobs already running the program may fail when it does. Here the change is immediate and nothing re-creates anything, simpler than the real thing and on the verification list. `OPTIMIZE`, `RMVOBS`, `PRFDTA`, `FRCCRT`, `LICOPT`, `NBRTHD`, `TERASPACE` and `STGMDL` are real parameters this does not take at all: none of them map to anything Silverlake tracks.
 
 ## Checked on PUB400
 
