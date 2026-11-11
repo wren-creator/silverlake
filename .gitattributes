@@ -1,0 +1,4 @@
+# Shell scripts must check out with LF endings everywhere, regardless of a cloning
+# machine's own core.autocrlf: a stray \r before `esac`/`;;` breaks bash's case
+# parsing (seen as "syntax error near unexpected token `;;'" on a Windows checkout).
+*.sh text eol=lf
