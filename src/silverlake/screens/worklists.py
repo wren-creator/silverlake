@@ -1097,11 +1097,14 @@ def _dspobjd_page_two(obj, title: str) -> Screen:
 def dsppgm_screen(obj, page: int, message: str = "") -> Screen:
     """Display Program Information, two pages. The user profile and adopted authority lines are the
     reason to look: *OWNER means the program runs with its owner's authority. Source file, library and
-    member are blank because there is no source file object yet, and observable information, fix decimal
-    data and teraspace are the captured values (the first is inferred for programs with source)."""
+    member are filled in for a program CRTBNDRPG compiled (it records srcfile and srcmbr on the object)
+    and blank for one that came straight from the seed. Observable information, fix decimal data and
+    teraspace are the captured values (the first is inferred for programs with source)."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     d = obj.data
     when = d.get("created") or "2026-10-27T00:00:00"
+    srcfile = d.get("srcfile", "")
+    srclib, _, srcname = srcfile.partition("/")
     rows: list = [
         Text(0, 26, "Display Program Information", ds.ATTR_WHITE),
         g(2, 1, "Program  . . . . . . . :"), g(2, 28, obj.name), g(2, 42, "Library  . . . . . . . :"), g(2, 69, obj.library),
@@ -1118,6 +1121,7 @@ def dsppgm_screen(obj, page: int, message: str = "") -> Screen:
         rows += [g(r, c, t) for r, c, t in info]
         rows += [g(7, 56, f"{when[2:4]}-{when[5:7]}-{when[8:10]}"), g(7, 66, when[11:19] or "00:00:00"),
                  g(8, 56, "ILE" if d.get("attr") in ("RPGLE", "CLLE") else d.get("type", "OPM")),
+                 g(9, 56, srcname), g(10, 56, srclib), g(11, 56, d.get("srcmbr", "")),
                  g(13, 56, "*ALL" if d.get("source") else "*NONE"), g(14, 56, d.get("usrprf", "*USER")),
                  g(15, 56, d.get("useadpaut", "*YES")), g(16, 56, "*NO"), g(17, 56, "*YES"),
                  Text(19, 67, "More...".rjust(12), ds.ATTR_WHITE)]
@@ -1125,6 +1129,29 @@ def dsppgm_screen(obj, page: int, message: str = "") -> Screen:
         rows += [g(6, 3, "Text description . . . . . . . . . . . . . . . . :"), g(6, 56, obj.text[:24]),
                  Text(19, 67, "Bottom".rjust(12), ds.ATTR_WHITE)]
     rows += [Text(20, 1, "Press Enter to continue.", ds.ATTR_BLUE), Text(22, 1, "F3=Exit", ds.ATTR_BLUE),
+             Text(22, 11, "F12=Cancel", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows)
+
+
+def dsppgmref_screen(obj, refs: list[tuple[str, str, str]], message: str = "") -> Screen:
+    """Display Program References. Ours, not captured: IBM's page (read in full) describes the content,
+    a list by library of the objects a program references and, for a file, how it is used, but gives no
+    panel layout to copy. Only the *FILE references Silverlake's parser can see are listed; see
+    rpg.program_references for what is left out."""
+    g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
+    rows: list = [
+        Text(0, 25, "Display Program References", ds.ATTR_WHITE),
+        g(2, 1, "Program  . . . . . . . :"), g(2, 28, obj.name), g(2, 42, "Library  . . . . . . . :"), g(2, 69, obj.library),
+        Text(4, 2, "Object", ds.ATTR_WHITE), Text(4, 24, "Type", ds.ATTR_WHITE), Text(4, 32, "Use", ds.ATTR_WHITE),
+    ]
+    for i, (name, typ, use) in enumerate(refs):
+        r = 6 + i
+        rows += [g(r, 2, name), g(r, 24, typ), g(r, 32, use)]
+    if not refs:
+        rows.append(Text(6, 2, "No file references found.", ds.ATTR_GREEN))
+    rows += [Text(21, 67, "Bottom".rjust(12), ds.ATTR_WHITE), Text(22, 1, "F3=Exit", ds.ATTR_BLUE),
              Text(22, 11, "F12=Cancel", ds.ATTR_BLUE)]
     if message:
         rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))

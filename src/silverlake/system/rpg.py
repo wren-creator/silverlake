@@ -21,7 +21,7 @@ from typing import Any
 from ..proto import datastream as ds
 from ..screens.model import COLS, ROWS, Input, Screen, Text
 from . import messages, overrides, spool as spoolmod
-from .authority import USE, Auth
+from .authority import USE, Auth, SpecialAuthority
 
 try:
     from rpgle import (CallError, Database, LoadedProgram, ProgramLoader, Resume, RpgleError, parse_dds,
@@ -42,6 +42,85 @@ def not_installed() -> messages.Message:
 
 def is_rpg(obj) -> bool:
     return obj.type == "*PGM" and obj.data.get("attr") in ("RPGLE", "RPG") and bool(obj.data.get("source"))
+
+
+_USE_CODE = {"I": "Input", "O": "Output", "U": "Update", "C": "Combined"}
+
+
+def program_references(store, actor, name: str, search: list[str]):
+    """DSPPGMREF: the objects an RPG program's F-specs record, from IBM's page (read in full, not a
+    capture, 2026-11): *OBJOPR to the program, and for RPGLE "*FILE, *PGM, *DTAARA, *SRVPGM" are what
+    the page says the command can report. Only *FILE is built: nothing here scans RPG source for the
+    programs, data areas or service programs it calls, so those three are left out rather than guessed
+    at. Returns (program, rows, None) or (None, None, a refusal)."""
+    from . import objects
+    obj, err = objects.locate(store, actor, name, "*PGM", search)
+    if err:
+        return None, None, err
+    if Auth.OBJOPR not in store.authority_to_object(actor, obj):
+        return None, None, messages.not_authorized_to_object(obj.name, obj.library, "*PGM")
+    if not AVAILABLE or not is_rpg(obj):
+        return obj, [], None
+    try:
+        prog = parse_rpgle(obj.data["source"])
+    except RpgleError:
+        return obj, [], None
+    rows = []
+    for fs in prog.files:
+        device = (fs.device or "").upper()
+        if device in ("DISK", "PRINTER", "WORKSTN") and fs.name:
+            rows.append((fs.name.upper(), "*FILE", _USE_CODE.get((fs.type or "").upper(), "Unspecified")))
+    return obj, rows, None
+
+
+def change_program(store, actor, name: str, search: list[str], usrprf: str, useadpaut: str, text: str):
+    """CHGPGM, from IBM's page (read in full, not a capture, 2026-11): *OBJMGT and *USE to the program
+    always; USRPRF and USEADPAUT also need the program's owner, or *ALLOBJ together with *SECADM (the
+    page: "either be the owner of the program or have all object ... and security administrator ...
+    special authorities"), so granting yourself someone else's adopted authority takes more than owning
+    the program you call them through. A program in QSYS or QGDDM is refused (CPF0544, the one escape ID
+    the page actually ties to a condition). Not modeled: the page's own "the program must be re-created"
+    rule for USRPRF and USEADPAUT; here the change takes effect at once, which this project's verification
+    list flags as simpler than the real thing. Returns a Done."""
+    from . import objects
+    from .objects import Done, _no, _ok
+    obj, err = objects.locate(store, actor, name, "*PGM", search)
+    if err:
+        return _no(err)
+    if obj.library in ("QSYS", "QGDDM"):
+        return _no(messages.program_in_restricted_library(obj.name, obj.library))
+    need = Auth.OBJMGT | USE
+    if need & ~store.authority_to_object(actor, obj):
+        return _no(messages.not_authorized_to_object(obj.name, obj.library, "*PGM"))
+    if (usrprf != "*SAME" or useadpaut != "*SAME") and actor.name != obj.owner:
+        sa = store.special_authorities(actor)
+        if not (SpecialAuthority.ALLOBJ in sa and SpecialAuthority.SECADM in sa):
+            return _no(messages.not_authorized_to_object(obj.name, obj.library, "*PGM"))
+    if usrprf != "*SAME":
+        obj.data["usrprf"] = usrprf
+    if useadpaut != "*SAME":
+        obj.data["useadpaut"] = useadpaut
+    if text != "*SAME":          # convert() has already turned *BLANK into "" by the time this runs
+        obj.text = text
+    store.on_change()
+    return _ok(f"Program {obj.name} in library {obj.library} changed.")
+
+
+def dump_program(store, actor, session, obj, detail: str) -> None:
+    """A stand-in for QPPGMDMP, the spooled file a real formatted dump goes to when an RPG program ends
+    in error (confirmed by a web search of an IBM manual excerpt, not a page read in full). A real dump
+    also shows the statement in error, the call stack and every variable's value; by the time an
+    exception here reaches this far the interpreter's own call stack has already unwound past them
+    (each CALL restores `active` in a `finally` as the error passes through it), so none of that is
+    shown, and this says so rather than guessing at it."""
+    now = datetime.now()
+    out = [f" {'Program dump':<60}{now:%y-%m-%d}  {now:%H:%M:%S}",
+           f" Program . . . . . : {obj.name}      Library . . . . . : {obj.library}      "
+           f"Owner . . . . . . : {obj.owner}", "", " Error:", f"   {detail}", "",
+           " Not shown: the statement in error, the call stack and variable values. A real QPPGMDMP has",
+           " all three; this is a simplified stand-in, not a capture.",
+           "      * * * * *   E N D   O F   D U M P   * * * * *"]
+    spoolmod.new_file(store, session, actor, "QPPGMDMP", out)
 
 
 class Run:
@@ -70,6 +149,8 @@ class Run:
             self.data, self.done, self.error = None, True, "calls nested too deeply"
         if self.files:
             self.files.save()          # what the program has written so far is kept, even if it stops here
+        if self.done and self.error and self.files:
+            dump_program(self.files.store, self.files.actor, self.files.session, self.obj, self.error)
 
     def start(self) -> "Run":
         self._advance(None)

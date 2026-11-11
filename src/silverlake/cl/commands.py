@@ -196,6 +196,9 @@ CRTDUPOBJ_PARAMS = [Param("OBJ", "qname", "", required=True), Param("FROMLIB", "
 EDTOBJAUT_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
                     Param("ASPDEV", "ignored", "*")]
 DSPPGM_PARAMS = [Param("PGM", "qname", "", required=True), Param("OUTPUT", "output", "*")]
+DSPPGMREF_PARAMS = [Param("PGM", "qname", "", required=True), Param("OUTPUT", "output", "*")]
+CHGPGM_PARAMS = [Param("PGM", "qname", "", required=True), Param("USRPRF", "usrprfopt", SAME),
+                 Param("USEADPAUT", "yesnosame", SAME), Param("TEXT", "text", SAME)]
 DSPOBJD_PARAMS = [Param("OBJ", "qname", "", required=True), Param("OBJTYPE", "objtype", "", required=True),
                   Param("DETAIL", "detail", "*BASIC"), Param("ASPDEV", "ignored", "*"),
                   Param("OUTPUT", "output", "*")]
@@ -272,6 +275,7 @@ COMMANDS = {
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
     "CRTDUPOBJ": CRTDUPOBJ_PARAMS, "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS, "DSPPGM": DSPPGM_PARAMS,
+    "DSPPGMREF": DSPPGMREF_PARAMS, "CHGPGM": CHGPGM_PARAMS,
     "DSPPTF": DSPPTF_PARAMS, "CHGFTPA": CHGFTPA_PARAMS,
 }
 
@@ -305,6 +309,8 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
             raise BindError(f"Only one value is allowed for {p.key}.")
         return values[0] if values[0] == "*CURRENT" else _word_ok(p.key, values[0])
     if k == "ftpautostart":
+        return _one(p.key, values, ("*SAME", "*YES", "*NO"))
+    if k == "yesnosame":
         return _one(p.key, values, ("*SAME", "*YES", "*NO"))
     if k == "password":
         if len(values) != 1:
@@ -869,7 +875,7 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         if why:
             return Outcome(why)
         if run.done:
-            return Outcome(messages.info(f"Program {prog.name} ended abnormally: {run.error}") if run.error else None)
+            return Outcome(messages.function_check(prog.name, run.error) if run.error else None)
         return Outcome(view=("rpgrun", run))
     if name == "SLSCENARIO":
         done = _set_scenario(store, actor, b["ID"], b["STATE"])
@@ -948,6 +954,12 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "DSPPGM":
         prog, err = objects.use_object(store, actor, b["PGM"], "*PGM", session.search_order())
         return Outcome(err) if err else Outcome(view=("dsppgm", prog))
+    if name == "DSPPGMREF":
+        prog, refs, err = rpg.program_references(store, actor, b["PGM"], session.search_order())
+        return Outcome(err) if err else Outcome(view=("dsppgmref", prog, refs))
+    if name == "CHGPGM":
+        return Outcome(rpg.change_program(store, actor, b["PGM"], session.search_order(), b["USRPRF"],
+                                          b["USEADPAUT"], b["TEXT"]).message)
     if name == "DSPPTF":
         return Outcome(ptf.status_message(store, b["LICPGM"]))
     if name == "CHGFTPA":

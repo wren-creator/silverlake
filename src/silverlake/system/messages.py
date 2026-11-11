@@ -8,6 +8,7 @@ RECALLED = "from the earlier web3270 mock, not yet confirmed on a real system"
 DOCUMENTED = "listed in IBM's command reference; which condition raises it is inferred"
 NO_ID = "no message ID checked; the wording is ours"
 VERIFIED_TEXT = "wording seen on a real IBM i; the ID is not shown on the message line, so none is recorded"
+WEB_SEARCH = "an ID or fact turned up in a web search of forums or a manual excerpt, not an IBM message reference page read in full or a capture"
 
 
 @dataclass(frozen=True)
@@ -321,6 +322,22 @@ def program_not_found(name: str) -> Message:
 def iosyscfg_required() -> Message:
     """CHGFTPA's page (read) says the command needs *IOSYSCFG. No ID was listed with it."""
     return Message("", "*IOSYSCFG special authority is required to change FTP attributes.", NO_ID)
+
+
+def program_in_restricted_library(pgm: str, lib: str) -> Message:
+    """CHGPGM's page (read in full) says a program in QSYS or QGDDM cannot be changed, and lists CPF0544
+    as the escape message for it; the ID's exact wording is not quoted on the page, so the text is ours."""
+    return _doc("CPF0544", f"Program {pgm} in library {lib} cannot be changed.")
+
+
+def function_check(pgm: str, detail: str) -> Message:
+    """CPF9999 turned up in a web search as the ID IBM's own CL error-monitoring examples list for a
+    function check, not read on a message reference page. The text stays the plain wording this project
+    already showed for a program that ends abnormally: the one-line message has no room left to add
+    "Function check" in front of an already program-specific cause and still fit in 77 columns, so the ID
+    is the only thing this adds. A real formatted dump (QPPGMDMP, see rpg.dump_program) is the other half
+    of what a real function check gives you, and that one does have the room."""
+    return Message("CPF9999", f"Program {pgm} ended abnormally: {detail}", WEB_SEARCH)
 
 
 # Command line problems. No ID checked for these yet.

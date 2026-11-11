@@ -200,3 +200,16 @@ def test_dsppgm_shows_the_two_captured_pages(store):
 def test_dsppgm_needs_the_program_to_exist(store):
     c = signed(store)
     assert "not found" in text(c.handle("ENTER", {"command": "DSPPGM PGM(NOPE)"}))
+
+
+def test_dsppgm_shows_source_file_and_member_when_the_program_was_compiled(store):
+    add_program(store, "FROMSRC", "     C                   RETURN\n", srcfile="SRCLIB/QRPGLESRC", srcmbr="FROMSRC")
+    c = signed(store)
+    f = at(c.handle("ENTER", {"command": "DSPPGM PGM(APPLIB/FROMSRC)"}))
+    assert f[(9, 56)] == "QRPGLESRC" and f[(10, 56)] == "SRCLIB" and f[(11, 56)] == "FROMSRC"
+
+
+def test_dsppgm_leaves_source_fields_blank_for_a_seeded_program(store):
+    c = signed(store)
+    f = at(c.handle("ENTER", {"command": "DSPPGM PGM(APPLIB/ADVENTURE)"}))
+    assert f[(9, 56)] == "" and f[(10, 56)] == "" and f[(11, 56)] == ""
