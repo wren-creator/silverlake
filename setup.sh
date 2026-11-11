@@ -38,6 +38,9 @@ fi
 .venv/bin/python -m silverlake.flags init >/dev/null && ok "instance secret in place (.instance-secret)"
 # The throwaway certificate behind the TLS ports (5250, the console, FTP, the sign-on server). Needs openssl;
 # without it the TLS ports just do not start. ./setup.sh --force-tls makes a new one.
-.venv/bin/python -m silverlake.net.certs $(case " $* " in *" --force-tls "*) echo --force ;; esac) \
+# (a case inside $(...) crashes bash 3.2, macOS's stock /bin/bash, so the flag is built outside of one)
+FORCE_TLS=""
+case " $* " in *" --force-tls "*) FORCE_TLS="--force" ;; esac
+.venv/bin/python -m silverlake.net.certs $FORCE_TLS \
   && ok "TLS certificate in place (.tls/)" || warn "no TLS certificate (openssl missing?), TLS ports will not start"
 ok "ready. next: ./start.sh"
