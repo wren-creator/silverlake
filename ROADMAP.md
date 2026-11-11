@@ -137,6 +137,7 @@ Things Silverlake does from IBM's pages, memory or inference and has not seen on
 - [ ] The ID of "Not authorized to command" and what a limited user sees at a command line; the LMTCPB message wording
 - [ ] The library gate rule for *ALLOBJ, what authority a new library gets, and whether QSYS authority matters to CRTLIB once the command is allowed (needs a profile that may run CRTLIB)
 - [ ] Captures still missing for screens: the bare WRKOUTQ (Work with All Output Queues, did not answer on a shared host, needs a quieter way), WRKOUTQ options and F11 view 2, the third page of the Work with Job menu, the real SNDMSG prompt (no host answer last time, retry with a longer wait), ENDJOB confirm, CHGJOB prompt, option 3 copy (CRTDUPOBJ), WRKAUTL 2, F10 and F11 on the edit screen
+- [ ] *CURRENT for USRPRF on DSPUSRPRF and CHGUSRPRF: Silverlake currently rejects it ("Value *CURRENT for parameter USRPRF not valid.") because USRPRF on the profile commands runs through the generic name validator with no special-value handling (`_name`/`_word_ok` in `src/silverlake/cl/commands.py`), unlike WRKOBJOWN and WRKSPLF, which do resolve *CURRENT. A real IBM i is believed to accept `DSPUSRPRF USRPRF(*CURRENT)`, so confirm on a real system and fix if so
 
 ## v2 and beyond
 
@@ -144,3 +145,5 @@ Things Silverlake does from IBM's pages, memory or inference and has not seen on
 - Host servers (sign-on, database, file) as attack surface
 - Exit points and adopted authority scenarios
 - Blue-team dataset export (audit journal, QAUDJRN-style)
+- DSPPTF as a real command: currently unmodeled, so it fails command lookup like any other command never seeded into the object table. The only PTF awareness today is `src/silverlake/net/httpadmin.py`, which tracks one specific fix (`QHTTPSVR/QZHBADMIN`) for the HTTP Admin scenario, not a general PTF list or command
+- CHGFTPA as a real command: currently unmodeled, same command-not-found failure. There is an FTP server (5f-2, lesson `ftp-limited-bypass`, cleartext and TLS on 2121/2990) but no attribute command sits in front of it yet
