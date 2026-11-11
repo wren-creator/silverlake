@@ -147,3 +147,4 @@ Things Silverlake does from IBM's pages, memory or inference and has not seen on
 - Host servers (sign-on, database, file) as attack surface
 - Exit points and adopted authority scenarios
 - Blue-team dataset export (audit journal, QAUDJRN-style)
+- STRSQL (or ACS Run SQL Scripts) as a real interactive SQL session, reading system catalogs like QSYS2.USER_INFO and QSYS2.OBJECT_STATISTICS against the existing profile and object tables; a different kind of session than the CL dispatcher, not a small add
