@@ -158,6 +158,24 @@ def test_display_only_knows_basic_and_screen_output(store):
     assert "OUTPUT" in run(store, "QSECOFR", "DSPUSRPRF STUDENT OUTPUT(*PRINT)")
 
 
+def test_dspusrprf_current_is_your_own_profile(store):
+    assert execute(store, store.get("STUDENT"), "DSPUSRPRF *CURRENT").view == (
+        "dspusrprf", store.get("STUDENT"))
+    assert execute(store, store.get("QSECOFR"), "DSPUSRPRF *CURRENT").view[1] is store.get("QSECOFR")
+
+
+def test_chgusrprf_current_is_your_own_profile(store):
+    # *SECADM is still required: *CURRENT only resolves the name, it grants nothing.
+    assert "CPF2292" in run(store, "STUDENT", "CHGUSRPRF *CURRENT TEXT('x')")
+    assert "changed" in run(store, "SECADMIN", "CHGUSRPRF *CURRENT TEXT('self')")
+    assert store.get("SECADMIN").text == "self"
+
+
+def test_any_other_special_value_for_usrprf_is_still_refused(store):
+    assert "*BOGUS for parameter USRPRF not valid" in run(store, "STUDENT", "DSPUSRPRF *BOGUS")
+    assert "*SAME for parameter USRPRF not valid" in run(store, "QSECOFR", "CHGUSRPRF *SAME TEXT(x)")
+
+
 # -- work with -------------------------------------------------------------------------------------------
 
 def test_wrkusrprf_lists_only_what_you_have_authority_to(store):

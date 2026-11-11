@@ -318,6 +318,11 @@ def program_not_found(name: str) -> Message:
     return Message("", f"Program {name} not found.", NO_ID)
 
 
+def iosyscfg_required() -> Message:
+    """CHGFTPA's page (read) says the command needs *IOSYSCFG. No ID was listed with it."""
+    return Message("", "*IOSYSCFG special authority is required to change FTP attributes.", NO_ID)
+
+
 # Command line problems. No ID checked for these yet.
 
 def syntax(text: str) -> Message:

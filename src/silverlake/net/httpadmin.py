@@ -22,6 +22,7 @@ import re
 from dataclasses import dataclass, field
 from urllib.parse import parse_qsl
 
+from ..system import ptf as ptfmod
 from ..system.profiles import ProfileStore
 from . import textview
 
@@ -29,9 +30,9 @@ SERVER_HEADER = "IBM HTTP Server for i"
 REALM = "IBM i HTTP Server Administration"
 MAX_BODY = 8 * 1024
 RUN_AS = "QTMHHTTP"
-PTF_KEY = ("QHTTPSVR", "QZHBADMIN", "*PGM")
-OS_LEVEL = "V7R4M0"
-PTFS = {"V7R3M0": "SJ11641", "V7R4M0": "SJ11643", "V7R5M0": "SJ11644", "V7R6M0": "SJ11645"}
+PTF_KEY = ptfmod.PTF_KEY
+OS_LEVEL = ptfmod.OS_LEVEL
+PTFS = ptfmod.PTFS
 DIRECTIVE = re.compile(r'<!--#exec\s+cmd="([^"]*)"\s*-->', re.IGNORECASE)
 
 
@@ -62,9 +63,7 @@ class State:
 
 def fix_installed(store: ProfileStore) -> str | None:
     """The PTF on the console, or None when the fix is not installed."""
-    obj = store.objects.get(PTF_KEY)
-    ptf = obj.data.get("ptf", "*NONE") if obj else "*NONE"
-    return None if ptf == "*NONE" else ptf
+    return ptfmod.fix_installed(store)
 
 
 def _esc(s: object) -> str:

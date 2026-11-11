@@ -77,6 +77,8 @@ The `ftp-limited-bypass` lesson: FTP does not know what limited capability is, s
 
 Read only on purpose for files: there is no `STOR`, `DELE`, `MKD`, `RMD` or `RNFR`. Not built: members other than the first, IFS directories, `SITE`, active mode (`PORT`), TLS.
 
+`CHGFTPA AUTOSTART(*SAME|*YES|*NO) CCSID(*SAME|number)` from the 5250 command line, from IBM's page (read, not captured): the command needs `*IOSYSCFG`, and only `IOADMIN` in the seed holds it. `AUTOSTART` is recorded on the system's `ftp_autostart` value and not enforced, the same way `LMTCPB` was before the command line checked it: Silverlake has no `STRTCP`/`STRTCPSVR` for it to govern. `CCSID` is accepted and ignored. IBM's page says a changed attribute applies to new connections only, which has no meaning yet since nothing reads `ftp_autostart` back.
+
 ## ssh
 
 Described in [pase.md](pase.md#ssh): the PASE shell on port 2222, password and public key logins, and the `sshd_config` files in the virtual IFS. It starts only when asyncssh is installed (`./setup.sh --ssh`); without it the log says so and the other services run as usual.
@@ -98,6 +100,8 @@ Lesson `httpadmin-ssi-injection`: the server description is put on the Manage pa
 What is not faked: IBM has not published the vulnerable parameter of CVE-2026-96119, so this models the weakness class (CWE-94), not the real bug. Servers created in the console live in memory and a restart puts the three seeded ones back. No TLS port yet.
 
 Real systems differ here. A real console on PUB400 answers `Server: Apache` and realm `HTTP Admin`, and Silverlake's headers are the mock's, not that capture.
+
+`DSPPTF LICPGM(5770DG1) SELECT(*ALL) OUTPUT(*)` from the 5250 command line reads the same record: a real `DSPPTF` opens a screen listing every PTF for a licensed program with its apply status (temporarily applied, permanently applied, superseded, damaged...), and Silverlake has no capture to build that screen from, so it answers with one message line instead, naming the one PTF it tracks and whether it is applied. `SELECT` and `OUTPUT` are accepted so a copied command line still runs, and are not acted on. Any other `LICPGM` says plainly that nothing is modeled for it, rather than guessing at a real product's PTF list.
 
 ## Serving on a LAN
 

@@ -113,6 +113,7 @@
   - [x] 5f certificate audit: lesson `console-cert-audit` (the twenty third). No CA, as decided: a second self-signed certificate with the same key, `.tls/console-weak.pem` (ten years, `CN=SYSTEM1.LOCAL`, the tag in its OU), and a `console_cert` system setting that the console's TLS context reads at each handshake, so the toggle is live. The key's IFS copy is readable by all in the vulnerable state. `certs.client_context()` trusts both files
   - [x] 5f later: check `--real-ports` on macOS and Linux as a normal user (validated by hand)
 - [x] Silverlake 101 EPUB: free, in this repo, not a Gumroad title. Seven chapters (front matter, Sessions 1 to 5 covering Group A, B and C lessons, closing and author page), about 10,300 words, written in narrative prose, built from `book/` with `python3 book/build.py` to `silverlake-101.epub`. Cover is a generated image, Silver Lake in Rochester MN at dusk with AS/400-style cabinets on the dock. Read through by Britley 2026-11-09, looks good
+- [x] *CURRENT for USRPRF on DSPUSRPRF and CHGUSRPRF (a `name_or_current` kind resolves it to the actor's own name; the usual authority checks still apply in full). DSPPTF and CHGFTPA added as real commands: DSPPTF reports the one PTF Silverlake tracks (on QHTTPSVR/QZHBADMIN) as a message line, with no screen built since there is no capture to build one from; CHGFTPA needs *IOSYSCFG and records AUTOSTART without enforcing it, the way LMTCPB once was. All three on the verification list below
 
 ## Needs verification on a real system
 
@@ -137,7 +138,8 @@ Things Silverlake does from IBM's pages, memory or inference and has not seen on
 - [ ] The ID of "Not authorized to command" and what a limited user sees at a command line; the LMTCPB message wording
 - [ ] The library gate rule for *ALLOBJ, what authority a new library gets, and whether QSYS authority matters to CRTLIB once the command is allowed (needs a profile that may run CRTLIB)
 - [ ] Captures still missing for screens: the bare WRKOUTQ (Work with All Output Queues, did not answer on a shared host, needs a quieter way), WRKOUTQ options and F11 view 2, the third page of the Work with Job menu, the real SNDMSG prompt (no host answer last time, retry with a longer wait), ENDJOB confirm, CHGJOB prompt, option 3 copy (CRTDUPOBJ), WRKAUTL 2, F10 and F11 on the edit screen
-- [ ] *CURRENT for USRPRF on DSPUSRPRF and CHGUSRPRF: Silverlake currently rejects it ("Value *CURRENT for parameter USRPRF not valid.") because USRPRF on the profile commands runs through the generic name validator with no special-value handling (`_name`/`_word_ok` in `src/silverlake/cl/commands.py`), unlike WRKOBJOWN and WRKSPLF, which do resolve *CURRENT. A real IBM i is believed to accept `DSPUSRPRF USRPRF(*CURRENT)`, so confirm on a real system and fix if so
+- [ ] *CURRENT for USRPRF on DSPUSRPRF and CHGUSRPRF: built (a `name_or_current` kind in `src/silverlake/cl/commands.py` resolves it to the actor's own name before the usual authority checks, which still apply in full; *SECADM is still required to CHGUSRPRF your own profile). Not yet checked against a real system
+- [ ] DSPPTF and CHGFTPA: built from a web search of IBM's pages, not a page read in full or a capture (see docs/services.md, FTP and HTTP console sections). CHGFTPA's AUTOSTART and CCSID parameters and the *IOSYSCFG requirement are reasonably confident; the full parameter list, real message IDs, and DSPPTF's real screen layout and apply-status wording are not. Confirm both against a real system
 
 ## v2 and beyond
 
@@ -145,5 +147,3 @@ Things Silverlake does from IBM's pages, memory or inference and has not seen on
 - Host servers (sign-on, database, file) as attack surface
 - Exit points and adopted authority scenarios
 - Blue-team dataset export (audit journal, QAUDJRN-style)
-- DSPPTF as a real command: currently unmodeled, so it fails command lookup like any other command never seeded into the object table. The only PTF awareness today is `src/silverlake/net/httpadmin.py`, which tracks one specific fix (`QHTTPSVR/QZHBADMIN`) for the HTTP Admin scenario, not a general PTF list or command
-- CHGFTPA as a real command: currently unmodeled, same command-not-found failure. There is an FTP server (5f-2, lesson `ftp-limited-bypass`, cleartext and TLS on 2121/2990) but no attribute command sits in front of it yet

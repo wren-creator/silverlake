@@ -9,7 +9,8 @@ import fnmatch
 import re
 from dataclasses import dataclass
 
-from ..system import admin, autls, dataareas, dbfiles, jobctl, messages, msgq, objects, objlist, overrides, rpg, source, spool
+from ..system import (admin, autls, dataareas, dbfiles, ftpadmin, jobctl, messages, msgq, objects, objlist,
+                      overrides, ptf, rpg, source, spool)
 from ..system.authority import EXCLUDE, SPECIAL_VALUES, USE, Auth, SpecialAuthority, UserClass, parse_auth
 from ..system.profiles import Profile, ProfileStore
 from . import parser
@@ -55,8 +56,8 @@ CRT_PARAMS = [
     Param("AUT", "aut", "*EXCLUDE"), Param("PWDEXPITV", "pwdintv", "*SYSVAL"),
 ]
 CHG_PARAMS = [Param(p.key, p.kind, SAME, p.maxn) for p in CRT_PARAMS]
-CHG_PARAMS[0] = CRT_PARAMS[0]
-DSP_PARAMS = [Param("USRPRF", "name", "", required=True), Param("TYPE", "dsptype", "*BASIC"), Param("OUTPUT", "output", "*")]
+CHG_PARAMS[0] = Param("USRPRF", "name_or_current", "", required=True)
+DSP_PARAMS = [Param("USRPRF", "name_or_current", "", required=True), Param("TYPE", "dsptype", "*BASIC"), Param("OUTPUT", "output", "*")]
 DLT_PARAMS = [Param("USRPRF", "name", "", required=True), Param("OWNOBJOPT", "ownobj", "*NODLT", 2)]
 WRK_PARAMS = [Param("USRPRF", "wrkname", "*ALL"), Param("ASTLVL", "ignored", "*SYSVAL")]
 
@@ -228,6 +229,9 @@ CPYF_PARAMS = [Param("FROMFILE", "qname", "", required=True), Param("TOFILE", "q
                Param("INCREL", "ignored", "*NONE"), Param("FMTOPT", "fmtopt", "*NONE", 3)]
 DSPPFM_PARAMS = [Param("FILE", "qname", "", required=True), Param("MBR", "name*", "*FIRST"),
                  Param("FROMRCD", "ignored", "*NONE")]
+DSPPTF_PARAMS = [Param("LICPGM", "name", "", required=True), Param("SELECT", "ignored", "*ALL", 25),
+                 Param("OUTPUT", "output", "*")]
+CHGFTPA_PARAMS = [Param("AUTOSTART", "ftpautostart", SAME), Param("CCSID", "ignored", SAME)]
 
 STRPDM_PARAMS: list[Param] = []
 WRKMBRPDM_PARAMS = [Param("FILE", "qname", "QRPGLESRC"), Param("MBR", "wrkname", "*ALL")]
@@ -268,6 +272,7 @@ COMMANDS = {
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
     "CRTDUPOBJ": CRTDUPOBJ_PARAMS, "EDTOBJAUT": EDTOBJAUT_PARAMS, "DSPOBJD": DSPOBJD_PARAMS, "DSPPGM": DSPPGM_PARAMS,
+    "DSPPTF": DSPPTF_PARAMS, "CHGFTPA": CHGFTPA_PARAMS,
 }
 
 
@@ -291,10 +296,16 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
         raise BindError(f"Too many values for parameter {p.key}.")
     if not values:
         raise BindError(f"No value given for parameter {p.key}.")
-    if values == [SAME] and k != "name":
+    if values == [SAME] and k not in ("name", "name_or_current"):
         return SAME
     if k == "name":
         return _name(p.key, values)
+    if k == "name_or_current":
+        if len(values) != 1:
+            raise BindError(f"Only one value is allowed for {p.key}.")
+        return values[0] if values[0] == "*CURRENT" else _word_ok(p.key, values[0])
+    if k == "ftpautostart":
+        return _one(p.key, values, ("*SAME", "*YES", "*NO"))
     if k == "password":
         if len(values) != 1:
             raise BindError("Only one value is allowed for PASSWORD.")
@@ -666,11 +677,13 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
     if name == "CRTUSRPRF":
         return Outcome(admin.create(store, actor, b["USRPRF"], _crt_attrs(b)).message)
     if name == "CHGUSRPRF":
-        return Outcome(admin.change(store, actor, b["USRPRF"], _chg_attrs(b)).message)
+        target = actor.name if b["USRPRF"] == "*CURRENT" else b["USRPRF"]
+        return Outcome(admin.change(store, actor, target, _chg_attrs(b)).message)
     if name == "DLTUSRPRF":
         return Outcome(admin.delete(store, actor, b["USRPRF"], b["OWNOBJOPT"]).message)
     if name == "DSPUSRPRF":
-        target, err = admin.display(store, actor, b["USRPRF"])
+        name_wanted = actor.name if b["USRPRF"] == "*CURRENT" else b["USRPRF"]
+        target, err = admin.display(store, actor, name_wanted)
         return Outcome(err) if err else Outcome(view=("dspusrprf", target))
     if name == "WRKUSRPRF":
         pattern = b["USRPRF"]
@@ -935,6 +948,10 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "DSPPGM":
         prog, err = objects.use_object(store, actor, b["PGM"], "*PGM", session.search_order())
         return Outcome(err) if err else Outcome(view=("dsppgm", prog))
+    if name == "DSPPTF":
+        return Outcome(ptf.status_message(store, b["LICPGM"]))
+    if name == "CHGFTPA":
+        return Outcome(ftpadmin.change(store, actor, b["AUTOSTART"]).message)
     if name == "DSPOBJD":
         obj, err = objlist.describe_object(store, actor, b["OBJ"], b["OBJTYPE"], session.search_order())
         return Outcome(err) if err else Outcome(view=("dspobjd", obj, b["DETAIL"]))
