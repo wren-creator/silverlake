@@ -149,6 +149,80 @@ def copy_file(store: ProfileStore, actor: Profile, session, frm: str, to: str, m
     return _ok(f"{made}{len(mapped)} records copied from file {src.name} to file {to_obj.name}.")
 
 
+# -- CHGPF, RGZPFM, CLRPFM ----------------------------------------------------------------------------------
+
+def change_physical_file(store: ProfileStore, actor: Profile, session, spec: str) -> Done:
+    """CHGPF FILE(lib/name). Needs *OBJMGT or *OBJALTER on the file and *EXECUTE on its library (IBM's
+    CHGPF page, from a web search, not read in full -- it also wants an exclusive lock with no one
+    using the file, not modeled here). FILE is CHGPF's only required parameter; everything else it
+    takes (SIZE, MAXMBRS, REUSEDLT, LVLCHK, ALLOCATE, CONTIG and the rest) changes an attribute this
+    minimal PF model doesn't track, so the command exists for its authority check and completion
+    message, not because anything it could change here has anywhere to go."""
+    obj, err = locate(store, actor, spec, "*FILE", session.search_order())
+    if err:
+        return _no(err)
+    if not _allobj(store, actor):
+        if not store.authority_to_object(actor, obj) & (Auth.OBJMGT | Auth.OBJALTER):
+            return _no(messages.not_authorized_to_object(obj.name, obj.library, "*FILE"))
+        lib = store.find_library(obj.library)
+        if lib is None or Auth.EXECUTE not in authority_to_library(store, actor, lib):
+            return _no(messages.not_authorized_to_library(obj.library))
+    if not is_data_file(obj):
+        return _no(messages.info(f"File {obj.name} in library {obj.library} is not a physical file with a "
+                                 "record layout."))
+    store.on_change()
+    return _ok(f"File {obj.name} in library {obj.library} changed.")
+
+
+def reorganize_member(store: ProfileStore, actor: Profile, session, spec: str) -> Done:
+    """RGZPFM FILE(lib/name). Needs *OBJOPR, *OBJMGT or *OBJALTER, and all the data authorities (*READ
+    *ADD *UPD *DLT) on the file, and *EXECUTE on its library (a forum's quote of RGZPFM's own help
+    text, not an IBM reference page read in full). A real RGZPFM compacts the gap a deleted record
+    leaves; this PF model deletes a record outright (a SQLite DELETE, by way of rpgle_library's
+    Database), so there is no gap here to compact. The command exists for its authority check and
+    completion message."""
+    obj, err = locate(store, actor, spec, "*FILE", session.search_order())
+    if err:
+        return _no(err)
+    if not _allobj(store, actor):
+        have = store.authority_to_object(actor, obj)
+        needed = Auth.OBJOPR | Auth.READ | Auth.ADD | Auth.UPD | Auth.DLT
+        if (needed & ~have) or not (have & (Auth.OBJMGT | Auth.OBJALTER)):
+            return _no(messages.not_authorized_to_object(obj.name, obj.library, "*FILE"))
+        lib = store.find_library(obj.library)
+        if lib is None or Auth.EXECUTE not in authority_to_library(store, actor, lib):
+            return _no(messages.not_authorized_to_library(obj.library))
+    if not is_data_file(obj):
+        return _no(messages.info(f"File {obj.name} in library {obj.library} is not a physical file with a "
+                                 "record layout."))
+    store.on_change()
+    return _ok(f"Member {obj.name} in file {obj.name} in library {obj.library} reorganized.")
+
+
+def clear_member(store: ProfileStore, actor: Profile, session, spec: str) -> Done:
+    """CLRPFM FILE(lib/name). Needs *OBJOPR, *OBJMGT or *OBJALTER, and *DLT on the file, and *EXECUTE on
+    its library (IBM's CL reference, which a web search quoted rather than the page itself; CPF3137 on
+    refusal). Deletes every record in the member; the file object itself, and its authority, stay."""
+    obj, err = locate(store, actor, spec, "*FILE", session.search_order())
+    if err:
+        return _no(err)
+    if not _allobj(store, actor):
+        have = store.authority_to_object(actor, obj)
+        needed = Auth.OBJOPR | Auth.DLT
+        if (needed & ~have) or not (have & (Auth.OBJMGT | Auth.OBJALTER)):
+            return _no(messages.not_authorized_to_clear(obj.name, obj.library))
+        lib = store.find_library(obj.library)
+        if lib is None or Auth.EXECUTE not in authority_to_library(store, actor, lib):
+            return _no(messages.not_authorized_to_library(obj.library))
+    if not is_data_file(obj):
+        return _no(messages.info(f"File {obj.name} in library {obj.library} is not a physical file with a "
+                                 "record layout."))
+    n = len(obj.data.get("records", []))
+    obj.data["records"] = []
+    store.on_change()
+    return _ok(f"{n} records cleared from file {obj.name} in library {obj.library}.")
+
+
 # -- DSPPFM -------------------------------------------------------------------------------------------------
 
 def record_text(pf, rec: dict) -> str:

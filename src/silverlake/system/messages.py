@@ -162,6 +162,12 @@ def not_authorized_to_object(obj: str, lib: str, typ: str) -> Message:
     return _doc("CPF2207", f"Not authorized to use object {obj} in library {lib} type {typ}.")
 
 
+def not_authorized_to_clear(obj: str, lib: str) -> Message:
+    """CLRPFM's refusal: CPF3137, from a web search quoting IBM's CL reference, not the page itself."""
+    return Message("CPF3137", f"Not authorized to clear, initialize, or copy member {obj} in file {obj} "
+                              f"in library {lib}.", WEB_SEARCH)
+
+
 def not_authorized_to_give(obj: str, lib: str, typ: str) -> Message:
     return _doc("CPF2223", f"Not authorized to give authority to object {obj} in {lib} type {typ}.")
 

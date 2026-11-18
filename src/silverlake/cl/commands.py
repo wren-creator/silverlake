@@ -232,6 +232,12 @@ CPYF_PARAMS = [Param("FROMFILE", "qname", "", required=True), Param("TOFILE", "q
                Param("INCREL", "ignored", "*NONE"), Param("FMTOPT", "fmtopt", "*NONE", 3)]
 DSPPFM_PARAMS = [Param("FILE", "qname", "", required=True), Param("MBR", "name*", "*FIRST"),
                  Param("FROMRCD", "ignored", "*NONE")]
+CHGPF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SIZE", "ignored", SAME),
+                Param("MAXMBRS", "ignored", SAME), Param("REUSEDLT", "ignored", SAME),
+                Param("LVLCHK", "ignored", SAME), Param("ALLOCATE", "ignored", SAME),
+                Param("CONTIG", "ignored", SAME)]
+RGZPFM_PARAMS = [Param("FILE", "qname", "", required=True), Param("MBR", "name*", "*FIRST")]
+CLRPFM_PARAMS = [Param("FILE", "qname", "", required=True), Param("MBR", "name*", "*FIRST")]
 DSPPTF_PARAMS = [Param("LICPGM", "name", "", required=True), Param("SELECT", "ignored", "*ALL", 25),
                  Param("OUTPUT", "output", "*")]
 CHGFTPA_PARAMS = [Param("AUTOSTART", "ftpautostart", SAME), Param("CCSID", "ignored", SAME)]
@@ -255,6 +261,7 @@ DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU
 
 COMMANDS = {
     "CPYF": CPYF_PARAMS, "DSPPFM": DSPPFM_PARAMS, "OVRDBF": OVRDBF_PARAMS, "DLTOVR": DLTOVR_PARAMS,
+    "CHGPF": CHGPF_PARAMS, "RGZPFM": RGZPFM_PARAMS, "CLRPFM": CLRPFM_PARAMS,
     "STRPDM": STRPDM_PARAMS, "WRKMBRPDM": WRKMBRPDM_PARAMS, "WRKOBJPDM": WRKOBJPDM_PARAMS, "STRSEU": STRSEU_PARAMS,
     "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTPF": CRTPF_PARAMS,
     "CRTDSPF": CRTDSPF_PARAMS, "CRTPRTF": CRTPRTF_PARAMS, "CRTLF": CRTLF_PARAMS,
@@ -919,6 +926,12 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "DSPPFM":
         f, err = dbfiles.find_data_file(store, actor, session, b["FILE"])
         return Outcome(err) if err else Outcome(view=("dsppfm", f))
+    if name == "CHGPF":
+        return Outcome(dbfiles.change_physical_file(store, actor, session, b["FILE"]).message)
+    if name == "RGZPFM":
+        return Outcome(dbfiles.reorganize_member(store, actor, session, b["FILE"]).message)
+    if name == "CLRPFM":
+        return Outcome(dbfiles.clear_member(store, actor, session, b["FILE"]).message)
     if name == "OVRDBF":
         if b["OVRSCOPE"] not in ("*ACTGRPDFN", "*CALLLVL", "*JOB"):
             return Outcome(messages.syntax("Value for parameter OVRSCOPE not valid. Use *ACTGRPDFN, *CALLLVL or *JOB."))
