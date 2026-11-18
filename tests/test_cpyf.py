@@ -142,3 +142,34 @@ def test_dsppfm_control_jumps_and_f20_shifts(store):
 def test_dsppfm_on_a_missing_file_says_so(store):
     c = signed(store)
     assert "not found" in text(run(c, "DSPPFM FILE(APPLIB/NOSUCH)"))
+
+
+def test_dsppfm_f10_shows_a_hex_line_above_the_character_line(store):
+    c = signed(store, "OPERATOR")
+    run(c, "DSPPFM FILE(APPLIB/PAYROLL)")
+    t = text(c.handle("F10", {}))
+    assert "F11=Display character" in t
+    assert "41 6C 76 61 72 65 7A" in t                  # "Alvarez" in hex
+    assert "Alvarez, Marta" in t                         # the character line underneath still shows it
+    t = text(c.handle("F11", {}))
+    assert "F10=Display hex" in t and "41 6C 76" not in t
+
+
+def test_dsppfm_f20_shifts_by_the_hex_width_in_hex_mode(store):
+    c = signed(store, "OPERATOR")
+    run(c, "DSPPFM FILE(APPLIB/PAYROLL)")
+    c.handle("F10", {})
+    assert "Column  . . . . . :   25" in text(c.handle("F20", {}))
+
+
+def test_dsppfm_find_jumps_to_the_next_matching_record(store):
+    c = signed(store, "OPERATOR")
+    run(c, "DSPPFM FILE(APPLIB/PAYROLL)")
+    s = c.handle("ENTER", {"find": "marta"})
+    assert "Alvarez, Marta" in text(s)
+
+
+def test_dsppfm_find_with_no_match_says_so(store):
+    c = signed(store, "OPERATOR")
+    run(c, "DSPPFM FILE(APPLIB/PAYROLL)")
+    assert "not found" in text(c.handle("ENTER", {"find": "zzzznosuch"}))
