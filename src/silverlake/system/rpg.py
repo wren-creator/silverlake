@@ -208,7 +208,11 @@ class Files:
             if device not in ("DISK", "PRINTER"):
                 continue
             name = fs.name.upper()
-            opened = name if device == "PRINTER" else overrides.target(self.session, name)
+            # USROPN: the field layout binds to the name as declared, not whatever is overridden right
+            # now (a real compiler binds the layout once, before any override can exist); the override
+            # that matters for a USROPN file is read again, live, by open_user_file() when OPEN runs.
+            user_open = device == "DISK" and getattr(fs, "user_open", False)
+            opened = name if device == "PRINTER" or user_open else overrides.target(self.session, name)
             obj, err = objects.locate(self.store, who, opened, "*FILE", self.session.search_order())
             if err:
                 raise RpgleError(err.text)
@@ -236,6 +240,31 @@ class Files:
             self._load_pf(obj, pf)
             pfs[name] = pf
         return pfs
+
+    def open_user_file(self, name: str, mode: str):
+        """The host side of OPEN on a USROPN file, called by the interpreter when the statement runs,
+        not at program start. Unlike attach(), this re-applies whatever override is active right now
+        (an OVRDBF the program itself issued after it started, through QCMDEXC, and before OPEN, is
+        the whole reason USROPN exists) and re-checks authority against the stack running at that
+        moment, through the same _authorize the rest of the file does."""
+        from . import objects
+        stack = list(self.loader.active) if self.loader is not None else []
+        who = effective(self.store, self.actor, stack)
+        up = name.upper()
+        target = overrides.target(self.session, up)
+        obj, err = objects.locate(self.store, who, target, "*FILE", self.session.search_order())
+        if err:
+            raise RpgleError(err.text)
+        if target != up:
+            self.session.joblog.append((datetime.now(), "message", f"File {up} overridden to {obj.library}/{obj.name}."))
+        attr = obj.data.get("attr", "PF")
+        if attr == "LF":
+            raise RpgleError(f"File {obj.name} in library {obj.library}: OPEN on a logical file is not supported yet.")
+        if attr != "PF" or not obj.data.get("dds"):
+            raise RpgleError(f"File {obj.name} in library {obj.library} is not a physical file with a record layout.")
+        pf = parse_pf(obj.name, obj.data["dds"])
+        self._load_pf(obj, pf)
+        return pf
 
     def _load_pf(self, obj, pf) -> None:
         """Loads a physical file's records into the run's database the first time anything (its own
@@ -473,7 +502,8 @@ def start(store, actor, obj, session) -> tuple[Run | None, messages.Message | No
     except RpgleError as exc:
         return None, messages.info(str(exc))
     gen = run_program(prog, dds, files.db, pfs, loader, files.spool, max_steps=MAX_STEPS,
-                      system_programs={"QCMDEXC": make_qcmdexc(store, actor, session, loader)})
+                      system_programs={"QCMDEXC": make_qcmdexc(store, actor, session, loader)},
+                      open_hook=files.open_user_file)
     return Run(obj, gen, files).start(), None
 
 
