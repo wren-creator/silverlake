@@ -415,6 +415,8 @@ class SignonController:
         if kind == "autlobjs":
             name = spec[1]
             return _plist(spec[2], lambda rows, page: objects_in_list_screen(name, rows, page), 10)
+        if kind == "dspovr":
+            return ("dspovrview", spec[1], spec[2])
         raise AssertionError(kind)
 
     def _draw_view(self, message: str = "") -> Screen:
@@ -433,6 +435,8 @@ class SignonController:
             if detail == "*BASIC":
                 return dspobjd_basic_screen(obj, message)
             return dspobjd_screen(obj, detail, SYSTEM_NAME, page)
+        if self.view[0] == "dspovrview":
+            return overrides_screen(self.view[1], SYSTEM_NAME, message, self.view[2])
         if self.view[0] == "rpgview":
             return rpg.to_screen(self.view[1].data, message)
         if self.view[0] == "widget":

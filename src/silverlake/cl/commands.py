@@ -221,7 +221,10 @@ def _crt_dds_params(first_default: str, *middle: Param) -> list[Param]:
 
 OVRDBF_PARAMS = [Param("FILE", "name", "", required=True), Param("TOFILE", "qname*", "*FILE"),
                  Param("MBR", "name*", "*FILE"), Param("OVRSCOPE", "name*", "*ACTGRPDFN"), Param("SECURE", "yesno", "*NO")]
+OVRPRTF_PARAMS = [Param("FILE", "name", "", required=True), Param("TOFILE", "qname*", "*FILE"),
+                  Param("SECURE", "yesno", "*NO")]
 DLTOVR_PARAMS = [Param("FILE", "name*", "", required=True), Param("LVL", "ignored", "*")]
+DSPOVR_PARAMS = [Param("FILE", "name*", "*ALL")]
 
 CPYF_PARAMS = [Param("FROMFILE", "qname", "", required=True), Param("TOFILE", "qname", "", required=True),
                Param("FROMMBR", "name*", "*FIRST"), Param("TOMBR", "name*", "*FIRST"),
@@ -265,7 +268,8 @@ DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU
                    "DLTDTAARA": ("DTAARA", "*DTAARA"), "DLTUSRSPC": ("USRSPC", "*USRSPC")}
 
 COMMANDS = {
-    "CPYF": CPYF_PARAMS, "DSPPFM": DSPPFM_PARAMS, "OVRDBF": OVRDBF_PARAMS, "DLTOVR": DLTOVR_PARAMS,
+    "CPYF": CPYF_PARAMS, "DSPPFM": DSPPFM_PARAMS, "OVRDBF": OVRDBF_PARAMS, "OVRPRTF": OVRPRTF_PARAMS,
+    "DLTOVR": DLTOVR_PARAMS, "DSPOVR": DSPOVR_PARAMS,
     "CHGPF": CHGPF_PARAMS, "RGZPFM": RGZPFM_PARAMS, "CLRPFM": CLRPFM_PARAMS,
     "CPYSRCF": CPYSRCF_PARAMS, "CPYTOIMPF": CPYTOIMPF_PARAMS,
     "STRPDM": STRPDM_PARAMS, "WRKMBRPDM": WRKMBRPDM_PARAMS, "WRKOBJPDM": WRKOBJPDM_PARAMS, "STRSEU": STRSEU_PARAMS,
@@ -955,9 +959,14 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
             return Outcome(messages.syntax("Value for parameter OVRSCOPE not valid. Use *ACTGRPDFN, *CALLLVL or *JOB."))
         overrides.apply(session, b["FILE"], b["TOFILE"].upper(), b["SECURE"])
         return Outcome()
+    if name == "OVRPRTF":
+        overrides.apply(session, b["FILE"], b["TOFILE"].upper(), b["SECURE"])
+        return Outcome()
     if name == "DLTOVR":
         overrides.delete(session, b["FILE"])
         return Outcome()
+    if name == "DSPOVR":
+        return Outcome(view=("dspovr", session.job, b["FILE"]))
     if name == "STRPDM":
         return Outcome(view=("strpdm",))
     if name == "WRKMBRPDM":

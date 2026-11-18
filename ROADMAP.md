@@ -66,7 +66,8 @@
 - [x] File commands CHGPF, RGZPFM, CLRPFM, authority-gated the way CPYF and DSPPFM already were, see docs/rpg.md
 - [x] CPYSRCF (copy source members between source files) and CPYTOIMPF (a data file to a delimited IFS stream file), see docs/rpg.md
 - [x] Record level locking: a CHAIN for update locks the record, a second job's CHAIN on it is refused, see docs/rpg.md
-- [ ] Phase 4c later: join logical files and select/omit, DSPOVR and printer file overrides, and DSPPFM hex and Find
+- [x] DSPOVR (captured on PUB400) and OVRPRTF/printer file overrides, see docs/rpg.md
+- [ ] Phase 4c later: join logical files and select/omit, and DSPPFM hex and Find
 - [x] Phase 4d-1: source files with members (CRTSRCPF), CRTBNDRPG, CRTPF, CRTDSPF, CRTPRTF, compile listing to the spool as QSYSPRT. Seeded SRCLIB/QRPGLESRC and QDDSSRC with HELLO, HELLOD, CUSTPF. Oracle capture `auth-pdm`
 - [x] Phase 4d-2: STRPDM, WRKMBRPDM, WRKOBJPDM (alias to WRKOBJ) and STRSEU, with a SEU-like editor (line commands, blocks, FIND and CHANGE, F3 exit display, browse, member locks). The menu and refusals are captured, the Work with Members and editor layouts are ours
 - [x] Phase 4d-3: F4 prompts for CRTBNDRPG, CRTPF, CRTDSPF, CRTPRTF and CRTSRCPF on the captured layouts, from any command line and from PDM (option 14 with F4 fills in the member)

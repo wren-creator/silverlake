@@ -702,19 +702,37 @@ def openfiles_screen(job, system_name: str, message: str = "", alt: bool = False
     return Screen(rows)
 
 
-def overrides_screen(job, system_name: str, message: str = "") -> Screen:
-    """Display All File Overrides. No job here has an override (OVRDBF is not a command), and the
-    real display says so in one line."""
+def overrides_screen(job, system_name: str, message: str = "", file_filter: str = "*ALL") -> Screen:
+    """Display All Merged File Overrides. Captured on PUB400 (`captures/pub400/auth-ovr.json`, a job
+    with no overrides): no Job/User/Number header, a "Call level" line instead, the "Type options,
+    press Enter." / "5=Display override details   8=Display contributing file overrides" option
+    line, the exact column header, and a key line with no F16 -- all of that replaces an earlier,
+    uncaptured guess. The populated rows are ours: nothing here runs more than one override on a
+    file at once, so Type and the two options have nothing to show, and only File and Keyword
+    Specifications are filled in."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
-    rows = [Text(0, 9, "Display All File Overrides".rjust(40), ds.ATTR_WHITE),
-            g(2, 1, "Job  . . :"), g(2, 14, job.name), g(2, 26, "   User . . :"), g(2, 42, job.user),
-            g(2, 54, "   Number . . :"), g(2, 72, job.number),
-            g(3, 1, "Call level . . . . . . . . . . . . . :"), g(3, 42, "*"),
-            Text(8, 1, "Opt  File          Level   Type  Keyword Specifications", ds.ATTR_WHITE),
-            g(11, 3, "(No file overrides)"),
-            Text(22, 1, "F3=Exit   F5=Refresh   F12=Cancel     F16=Job menu", ds.ATTR_BLUE)]
+    w = lambda r, c, t: Text(r, c, t, ds.ATTR_WHITE)
+    bl = lambda r, c, t: Text(r, c, t, ds.ATTR_BLUE)
+    overrides = getattr(getattr(job, "info", None), "overrides", None) or {}
+    rows = [w(0, 9, "           Display All Merged File Overrides"),
+            g(2, 1, "Call level  . . . . . . . . . . . :"), g(2, 39, "*"),
+            bl(4, 1, "Type options, press Enter."),
+            bl(5, 3, "5=Display override details   8=Display contributing file overrides"),
+            w(8, 1, "Opt  File        Type  Keyword Specifications")]
+    file_filter = (file_filter or "*ALL").upper()
+    names = sorted(overrides) if file_filter == "*ALL" else [n for n in overrides if n == file_filter]
+    if names:
+        for i, name in enumerate(names[:10]):
+            r = 11 + i
+            ov = overrides[name]
+            kw = f"TOFILE({ov['to']})" + (" SECURE(*YES)" if ov["secure"] else "")
+            rows += [g(r, 6, name[:10]), g(r, 24, kw[:53])]
+    else:
+        text = "(No file overrides)" if file_filter == "*ALL" else f"(No file override found for file {file_filter})"
+        rows.append(g(11, 3, text))
+    rows.append(bl(22, 1, "F3=Exit   F5=Refresh   F12=Cancel"))
     if message:
-        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+        rows.append(w(23, 1, message[:77]))
     return Screen(rows)
 
 

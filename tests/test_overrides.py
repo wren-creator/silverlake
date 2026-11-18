@@ -120,6 +120,57 @@ def test_an_override_belongs_to_one_job(store):
     assert not d.session.overrides
 
 
+# -- OVRPRTF ----------------------------------------------------------------------------------------
+
+def test_ovrprtf_redirects_a_printer_files_output(store):
+    c = signed(store, "OPERATOR")
+    run(c, "ADDLIBLE APPLIB")
+    run(c, "OVRPRTF FILE(REGRPT) TOFILE(APPLIB/REGRPTX)")
+    run(c, "CALL PGM(REGRPT)")
+    [f] = [f for f in store.spool if f.name == "REGRPTX"]
+    assert (f.outq_lib, f.outq) == ("APPLIB", "PAYOUTQ")
+    assert "File REGRPT overridden to APPLIB/REGRPTX." in joblog(c)
+
+
+def test_dltovr_removes_a_printer_override_too(store):
+    c = signed(store, "OPERATOR")
+    run(c, "ADDLIBLE APPLIB")
+    run(c, "OVRPRTF FILE(REGRPT) TOFILE(APPLIB/REGRPTX)")
+    run(c, "DLTOVR FILE(REGRPT)")
+    run(c, "CALL PGM(REGRPT)")
+    [f] = [f for f in store.spool if f.name == "REGRPT"]
+    assert (f.outq_lib, f.outq) == ("QGPL", "QPRINT")
+
+
+# -- DSPOVR -------------------------------------------------------------------------------------------
+
+def test_dspovr_with_no_overrides_matches_the_captured_empty_screen(store):
+    c = signed(store)
+    body = text(run(c, "DSPOVR"))
+    assert "Display All Merged File Overrides" in body
+    assert "Call level" in body and "5=Display override details" in body
+    assert "(No file overrides)" in body
+    assert "F16" not in body and "Job" not in body
+
+
+def test_dspovr_lists_an_active_override(store):
+    c = signed(store)
+    run(c, "OVRDBF FILE(STAFF) TOFILE(APPLIB/PAYROLL)")
+    body = text(run(c, "DSPOVR"))
+    assert "STAFF" in body and "TOFILE(APPLIB/PAYROLL)" in body
+
+
+def test_dspovr_file_filters_to_one_override(store):
+    c = signed(store)
+    run(c, "OVRDBF FILE(A) TOFILE(APPLIB/STAFF)")
+    run(c, "OVRDBF FILE(B) TOFILE(APPLIB/PAYROLL)")
+    body = text(run(c, "DSPOVR FILE(A)"))
+    assert "STAFF" in body and "PAYROLL" not in body
+    c.handle("F3", {})                                              # back to the command line
+    body = text(run(c, "DSPOVR FILE(NOSUCH)"))
+    assert "No file override found for file NOSUCH" in body
+
+
 # -- QTEMP -----------------------------------------------------------------------------------------
 
 def test_what_a_job_makes_in_qtemp_only_that_job_sees_and_it_goes_at_sign_off(store):

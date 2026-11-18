@@ -68,6 +68,8 @@ AUTHENTICATED: dict[str, list[dict]] = {
                      *_cmd("WRKOBJ OBJ(SLNOSUCH/*ALL)"),
                      *_cmd("WRKAUTL AUTL(*ALL)"), *_cmd("DSPAUTL AUTL(QPWFSERVER)"),
                      *_cmd("WRKOBJOWN USRPRF(QSYS)"), _SIGNOFF],
+    # Read-only: what Display All File Overrides looks like on a job that has never run OVRDBF.
+    "auth-ovr": [_SIGNON, *_cmd("DSPOVR FILE(*ALL)"), _SIGNOFF],
 }
 # The only scenario that changes the host. Creates a throwaway library, looks at the
 # authority a new library gets, deletes it, and signs off. Delete and display only

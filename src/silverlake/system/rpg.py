@@ -216,14 +216,14 @@ class Files:
             # now (a real compiler binds the layout once, before any override can exist); the override
             # that matters for a USROPN file is read again, live, by open_user_file() when OPEN runs.
             user_open = device == "DISK" and getattr(fs, "user_open", False)
-            opened = name if device == "PRINTER" or user_open else overrides.target(self.session, name)
+            opened = name if user_open else overrides.target(self.session, name)
             obj, err = objects.locate(self.store, who, opened, "*FILE", self.session.search_order())
             if err:
                 raise RpgleError(err.text)
             if opened != name:
                 self.session.joblog.append((datetime.now(), "message", f"File {name} overridden to {obj.library}/{obj.name}."))
             if device == "PRINTER":
-                self._attach_printer(who, obj)
+                self._attach_printer(who, obj, name)
                 continue
             attr = obj.data.get("attr", "PF")
             if attr == "LF":
@@ -318,10 +318,12 @@ class Files:
             texts.append(obj.data["dds"])
         return parse_dds("\n".join(texts) if texts else inline)
 
-    def _attach_printer(self, who, obj) -> None:
+    def _attach_printer(self, who, obj, name: str) -> None:
         """A printer file needs *USE, and so does the queue its output goes to. The queue and the file are
         checked now, as whoever the stack holds when the program is loaded. The spool file is the job's
-        own, so it belongs to the user and not to an owner the program adopts."""
+        own, so it belongs to the user and not to an owner the program adopts. Kept under the F-spec's own
+        declared `name`, not `obj.name`: an OVRPRTF resolves to a different object, but the program still
+        WRITEs to the name it declared, and that is what rpgle_library's spool looks up by."""
         if obj.data.get("attr") != "PRTF" or not obj.data.get("dds"):
             raise RpgleError(f"File {obj.name} in library {obj.library} is not a printer file.")
         if USE not in self.store.authority_to_object(who, obj):
@@ -331,8 +333,8 @@ class Files:
             raise RpgleError(f"Output queue {obj.data.get('outq', DEFAULT_OUTQ)} for {obj.name} not found.")
         if Auth.READ not in self.store.authority_to_object(who, q):
             raise RpgleError(messages.not_authorized_to_object(q.name, q.library, "*OUTQ").text)
-        self.printers[obj.name] = obj
-        self.spool.defs[obj.name] = parse_prtf(obj.name, obj.data["dds"])
+        self.printers[name] = obj
+        self.spool.defs[name] = parse_prtf(obj.name, obj.data["dds"])
 
     def queue_of(self, obj):
         lib, _, name = obj.data.get("outq", DEFAULT_OUTQ).partition("/")
