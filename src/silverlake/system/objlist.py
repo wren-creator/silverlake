@@ -47,7 +47,7 @@ from dataclasses import replace
 
 from . import messages
 from .authority import ALL, USE, Auth, SecuredObject, SpecialAuthority
-from .objects import NAME, SYSTEM_LIBRARIES, TYPES, Done, _no, _ok, authority_to_library, locate
+from .objects import NAME, SYSTEM_LIBRARIES, TYPES, Done, _no, _ok, authority_to_library, locate, visible
 from .profiles import Profile, ProfileStore
 
 SA = SpecialAuthority
@@ -94,22 +94,24 @@ def work_with_objects(store: ProfileStore, actor: Profile, name: str, lib_spec: 
     if err:
         return [], err
     wanted = _types(typ)
+    search = session.search_order()
     rows = [o for o in store.objects.values()
-            if o.library in libs and o.type in wanted
+            if o.library in libs and o.type in wanted and visible(o, search)
             and (name == "*ALL" or fnmatch.fnmatchcase(o.name, name))
             and (_allobj(store, actor) or store.authority_to_object(actor, o) != Auth.NONE)]
     return sorted(rows, key=lambda o: (o.library, o.name, o.type)), None
 
 
-def work_with_objects_by_owner(store: ProfileStore, actor: Profile, user: str, typ: str | list[str]):
+def work_with_objects_by_owner(store: ProfileStore, actor: Profile, user: str, typ: str | list[str], session):
     owner = actor if user == "*CURRENT" else store.profiles.get(user.upper())
     if owner is None:
         return [], messages.profile_not_found(user.upper())
     if Auth.READ not in store.authority_to_profile(actor, owner):
         return [], messages.not_authorized_to_profile(owner.name)
     wanted = _types(typ)
+    search = session.search_order()
     rows = [o for o in store.objects.values()
-            if o.owner == owner.name and o.type in wanted
+            if o.owner == owner.name and o.type in wanted and visible(o, search)
             and (_allobj(store, actor) or store.authority_to_object(actor, o) != Auth.NONE)]
     return sorted(rows, key=lambda o: (o.library, o.name, o.type)), None
 
@@ -256,7 +258,8 @@ def change_description(store: ProfileStore, actor: Profile, name: str, lib_spec:
     libs, err = _libraries(store, actor, lib_spec, session)
     if err:
         return _no(err)
-    matches = sorted((o for o in store.objects.values() if o.library in libs and o.type == typ
+    search = session.search_order()
+    matches = sorted((o for o in store.objects.values() if o.library in libs and o.type == typ and visible(o, search)
                       and (name == "*ALL" or fnmatch.fnmatchcase(o.name, name))),
                      key=lambda o: (o.library, o.name))
     if not matches:

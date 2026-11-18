@@ -141,6 +141,24 @@ def test_qtemp_comes_before_a_library_added_last(store):
     assert order.index("QTEMP") < order.index("APPLIB")
 
 
+def test_wrkobj_on_qtemp_shows_only_this_jobs_own_objects(store):
+    c = signed(store)
+    run(c, "CRTSRCPF FILE(QTEMP/QRPGLESRC)")
+    d = signed(store, "OPERATOR", "QPADEV0142")
+    run(d, "CRTSRCPF FILE(QTEMP/OTHERSRC)")
+    names = text(run(c, "WRKOBJ OBJ(QTEMP/*ALL)"))
+    assert "QRPGLESRC" in names and "OTHERSRC" not in names
+
+
+def test_wrkobjown_on_qtemp_shows_only_this_jobs_own_objects(store):
+    c = signed(store)
+    run(c, "CRTSRCPF FILE(QTEMP/MINESRC)")
+    d = signed(store, "STUDENT", "QPADEV0142")
+    run(d, "CRTSRCPF FILE(QTEMP/ALSOMINE)")
+    names = text(run(c, "WRKOBJOWN USRPRF(*CURRENT) OBJTYPE(*FILE)"))
+    assert "MINESRC" in names and "ALSOMINE" not in names
+
+
 GRAB = [
     "     D c1              S             25    INZ('GRTOBJAUT APPLIB/PAYROLL ')",
     "     D c2              S             18    INZ('*FILE STUDENT *USE')",

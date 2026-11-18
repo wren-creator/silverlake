@@ -899,8 +899,8 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         owner = actor.name if b["USRPRF"] == "*CURRENT" else b["USRPRF"]
 
         def again():
-            return objlist.work_with_objects_by_owner(store, actor, b["USRPRF"], b["OBJTYPE"])[0]
-        rows, err = objlist.work_with_objects_by_owner(store, actor, b["USRPRF"], b["OBJTYPE"])
+            return objlist.work_with_objects_by_owner(store, actor, b["USRPRF"], b["OBJTYPE"], session)[0]
+        rows, err = objlist.work_with_objects_by_owner(store, actor, b["USRPRF"], b["OBJTYPE"], session)
         return _object_view(rows, err, ("owner", owner, again))
     if name in DELETE_COMMANDS:
         key, typ = DELETE_COMMANDS[name]
