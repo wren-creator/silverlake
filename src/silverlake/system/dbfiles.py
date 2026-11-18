@@ -223,6 +223,41 @@ def clear_member(store: ProfileStore, actor: Profile, session, spec: str) -> Don
     return _ok(f"{n} records cleared from file {obj.name} in library {obj.library}.")
 
 
+# -- CPYTOIMPF ------------------------------------------------------------------------------------------
+
+RCDDLM = {"*CRLF": "\r\n", "*LF": "\n", "*CR": "\r", "*LFCR": "\n\r", "*EOR": "\n"}
+
+
+def copy_to_import_file(store: ProfileStore, actor: Profile, session, frm: str, to: str, rcddlm: str,
+                        strdlm: str) -> Done:
+    """CPYTOIMPF FROMFILE(lib/file) TOFILE('/ifs/path') RCDDLM(*CRLF|*LF|*CR|*LFCR|*EOR) STRDLM(*DBLQUOTE|*NONE).
+    RCDDLM's and STRDLM's choices are IBM's own (from a web search of the command page, not read in full);
+    the delimited line itself -- character fields quoted unless STRDLM(*NONE), numbers written plain,
+    fields comma-separated -- is ours, since the page's own grammar for that was not found. Needs *USE on
+    the from-file; what writing the IFS path needs is `ifs.write`'s own rules, not a separate authority
+    of CPYTOIMPF's."""
+    from . import ifs
+    src, err = find_data_file(store, actor, session, frm, USE)
+    if err:
+        return _no(err)
+    delim = RCDDLM.get(rcddlm, "\r\n")
+    quote = strdlm != "*NONE"
+    pf = layout(src)
+    lines = []
+    for rec in src.data.get("records", []):
+        fields = []
+        for f in pf.fields:
+            v = rec.get(f.name, _blank(f))
+            fields.append(f'"{v}"' if quote and f.dtype == "A" else str(v))
+        lines.append(",".join(fields))
+    text = "".join(line + delim for line in lines)
+    try:
+        ifs.write(store, actor, to, text)
+    except ifs.IfsError as exc:
+        return _no(messages.info(str(exc)))
+    return _ok(f"{len(lines)} records copied from file {src.name} to member {to}.")
+
+
 # -- DSPPFM -------------------------------------------------------------------------------------------------
 
 def record_text(pf, rec: dict) -> str:

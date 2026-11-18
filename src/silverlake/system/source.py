@@ -116,6 +116,51 @@ def delete_member(store: ProfileStore, obj: SecuredObject, name: str) -> bool:
     return gone
 
 
+def copy_members(store: ProfileStore, actor: Profile, session, frm: str, to: str, frommbr: str, tombr: str,
+                 mbropt: str) -> Done:
+    """CPYSRCF FROMFILE(lib/file) TOFILE(lib/file) FROMMBR(name|*ALL) TOMBR(*FROMMBR|name) MBROPT(*REPLACE|*ADD).
+    Not read on an IBM command reference page: a web search turned up only that CPYSRCF is CPYF's own page
+    naming it as the way to copy source members, and a third party's description of what FROMMBR and TOMBR
+    take. The authority check reuses `can_write`'s `WRITE`, the same gate STRSEU and PDM's own edits already
+    go through for this file, since the real page's authority section was not found. TOMBR naming one member
+    only makes sense when FROMMBR names one member too; FROMMBR(*ALL) always keeps each member's own name."""
+    src, err = find_file(store, actor, session, frm, USE)
+    if err:
+        return _no(err)
+    dst, err = find_file(store, actor, session, to, Auth.NONE)
+    if err:
+        return _no(err)
+    if not can_write(store, actor, dst):
+        return _no(messages.info(f"You do not have authority to file {dst.name} in {dst.library}."))
+    members = src.data.get("members", {})
+    if frommbr == "*ALL":
+        names = sorted(members)
+        if not names:
+            return _no(messages.info(f"File {src.name} in library {src.library} has no members."))
+        if tombr not in ("*FROMMBR", ""):
+            return _no(messages.syntax("TOMBR must be *FROMMBR when FROMMBR(*ALL) copies more than one member."))
+    else:
+        name = frommbr.upper()
+        if name not in members:
+            return _no(messages.info(f"Member {name} file {src.name} in library {src.library} not found."))
+        names = [name]
+    dst_members = dst.data.get("members", {})
+    skipped = 0
+    for name in names:
+        mem = members[name]
+        to_name = (tombr.upper() if tombr not in ("*FROMMBR", "") else name)
+        if to_name in dst_members and mbropt == "*ADD":
+            skipped += 1
+            continue
+        put_member(store, dst, to_name, list(mem.get("lines", [])), mem.get("type") or None, mem.get("text", ""))
+    copied = len(names) - skipped
+    if copied == 0:
+        return _no(messages.info("No members copied: the target member already exists and MBROPT(*ADD) was "
+                                 "specified."))
+    note = f" {skipped} skipped (already there, MBROPT(*ADD))." if skipped else ""
+    return _ok(f"{copied} member(s) copied from file {src.name} to file {dst.name}.{note}")
+
+
 # -- CRTSRCPF ------------------------------------------------------------------------------------------
 
 def _target(store: ProfileStore, actor: Profile, session, spec: str):
