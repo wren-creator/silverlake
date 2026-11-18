@@ -209,3 +209,58 @@ def test_lines_are_cut_to_the_width_of_the_record(store):
     f, _ = src_file(store)
     source.put_member(store, f, "LONG", ["x" * 200])
     assert len(f.data["members"]["LONG"]["lines"][0]) == 80
+
+
+def _people_lf(key):
+    return ["     A                                      PFILE(PEOPLE)", "     A          R PEOPLE", f"     A          K {key}"]
+
+
+def test_crtlf_builds_a_logical_file_over_a_physical_file(store):
+    f, s = src_file(store, spec="SCRATCH/QDDSSRC")
+    source.put_member(store, f, "PEOPLE", PF, "PF", "People")
+    run(store, "STUDENT", "CRTPF FILE(SCRATCH/PEOPLE) SRCFILE(SCRATCH/QDDSSRC)", s)
+    source.put_member(store, f, "PEOPLEBN", _people_lf("NAME"), "LF", "People by name")
+    out = run(store, "STUDENT", "CRTLF FILE(SCRATCH/PEOPLEBN) SRCFILE(SCRATCH/QDDSSRC)", s)
+    assert said(out) == "File PEOPLEBN created in library SCRATCH."
+    o = store.objects[("SCRATCH", "PEOPLEBN", "*FILE")]
+    assert o.data["attr"] == "LF" and o.data["based_on"] == "SCRATCH/PEOPLE" and "records" not in o.data
+    assert o.text == "People by name"
+
+
+def test_crtlf_needs_a_pfile_keyword(store):
+    f, s = src_file(store, spec="SCRATCH/QDDSSRC")
+    source.put_member(store, f, "BADLF", ["     A          R R1", "     A          K ID"], "LF")
+    out = run(store, "STUDENT", "CRTLF FILE(SCRATCH/BADLF) SRCFILE(SCRATCH/QDDSSRC)", s)
+    assert said(out) == "File BADLF not created in library SCRATCH."
+    assert ("SCRATCH", "BADLF", "*FILE") not in store.objects
+    assert "PFILE" in "\n".join(next(x for x in store.spool if x.name == "QSYSPRT").lines)
+
+
+def test_crtlf_needs_the_physical_file_to_exist(store):
+    f, s = src_file(store, spec="SCRATCH/QDDSSRC")
+    source.put_member(store, f, "BADLF", ["     A                                      PFILE(NOSUCH)",
+                                          "     A          R R1", "     A          K ID"], "LF")
+    out = run(store, "STUDENT", "CRTLF FILE(SCRATCH/BADLF) SRCFILE(SCRATCH/QDDSSRC)", s)
+    assert "not created" in said(out)
+    assert "NOSUCH" in "\n".join(next(x for x in store.spool if x.name == "QSYSPRT").lines)
+
+
+def test_crtlf_needs_authority_to_the_physical_file(store):
+    f, s = src_file(store, spec="SCRATCH/QDDSSRC")
+    source.put_member(store, f, "PEOPLE", PF, "PF", "People")
+    run(store, "STUDENT", "CRTPF FILE(SCRATCH/PEOPLE) SRCFILE(SCRATCH/QDDSSRC)", s)
+    store.objects[("SCRATCH", "PEOPLE", "*FILE")].public = EXCLUDE
+    source.put_member(store, f, "PEOPLEBN", _people_lf("NAME"), "LF")
+    out = run(store, "OPERATOR", "CRTLF FILE(SCRATCH/PEOPLEBN) SRCFILE(SCRATCH/QDDSSRC)", sess(store, "OPERATOR", "SCRATCH"))
+    assert "not created" in said(out)
+    assert ("SCRATCH", "PEOPLEBN", "*FILE") not in store.objects
+
+
+def test_a_logical_file_with_a_key_not_on_the_physical_file_is_not_built(store):
+    f, s = src_file(store, spec="SCRATCH/QDDSSRC")
+    source.put_member(store, f, "PEOPLE", PF, "PF", "People")
+    run(store, "STUDENT", "CRTPF FILE(SCRATCH/PEOPLE) SRCFILE(SCRATCH/QDDSSRC)", s)
+    source.put_member(store, f, "BADLF", _people_lf("NOSUCHFLD"), "LF")
+    out = run(store, "STUDENT", "CRTLF FILE(SCRATCH/BADLF) SRCFILE(SCRATCH/QDDSSRC)", s)
+    assert "not created" in said(out)
+    assert "NOSUCHFLD" in "\n".join([x for x in store.spool if x.name == "QSYSPRT"][-1].lines)

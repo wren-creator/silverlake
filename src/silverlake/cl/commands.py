@@ -248,6 +248,7 @@ CRTPF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SRCFILE", "qna
                 Param("TEXT", "text", "*SRCMBRTXT")]
 CRTDSPF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*REQUESTER"))
 CRTPRTF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*JOB"), Param("DEVTYPE", "ignored", "*SCS"))
+CRTLF_PARAMS = _crt_dds_params("QDDSSRC")
 DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU": ("MENU", "*MENU"),
                    "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ"),
                    "DLTDTAARA": ("DTAARA", "*DTAARA"), "DLTUSRSPC": ("USRSPC", "*USRSPC")}
@@ -256,7 +257,7 @@ COMMANDS = {
     "CPYF": CPYF_PARAMS, "DSPPFM": DSPPFM_PARAMS, "OVRDBF": OVRDBF_PARAMS, "DLTOVR": DLTOVR_PARAMS,
     "STRPDM": STRPDM_PARAMS, "WRKMBRPDM": WRKMBRPDM_PARAMS, "WRKOBJPDM": WRKOBJPDM_PARAMS, "STRSEU": STRSEU_PARAMS,
     "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTPF": CRTPF_PARAMS,
-    "CRTDSPF": CRTDSPF_PARAMS, "CRTPRTF": CRTPRTF_PARAMS,
+    "CRTDSPF": CRTDSPF_PARAMS, "CRTPRTF": CRTPRTF_PARAMS, "CRTLF": CRTLF_PARAMS,
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
     "DLTUSRPRF": DLT_PARAMS, "WRKUSRPRF": WRK_PARAMS, "SIGNOFF": [],
     "CRTLIB": CRTLIB_PARAMS, "DLTLIB": DLTLIB_PARAMS, "DSPLIBL": DSPLIBL_PARAMS,
@@ -948,7 +949,7 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "CRTBNDRPG":
         return Outcome(source.compile_rpg(store, actor, session, b["PGM"], b["SRCFILE"], b["SRCMBR"], b["TEXT"],
                                           b["USRPRF"], b["USEADPAUT"]).message)
-    if name in ("CRTPF", "CRTDSPF", "CRTPRTF"):
+    if name in ("CRTPF", "CRTDSPF", "CRTPRTF", "CRTLF"):
         return Outcome(source.compile_dds(store, actor, session, name[3:], b["FILE"], b["SRCFILE"], b["SRCMBR"],
                                           b["TEXT"]).message)
     if name == "DSPPGM":

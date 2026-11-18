@@ -25,7 +25,7 @@ from .authority import USE, Auth, SpecialAuthority
 
 try:
     from rpgle import (CallError, Database, LoadedProgram, ProgramLoader, Resume, RpgleError, parse_dds,
-                       parse_pf, parse_prtf, parse_rpgle, run_program, Spool)
+                       parse_lf, parse_pf, parse_prtf, parse_rpgle, run_program, Spool)
     AVAILABLE = True
 except ImportError:                       # the RPG runtime is optional: Silverlake runs without it
     AVAILABLE = False
@@ -189,12 +189,17 @@ class Files:
         self.loader = None                              # set by start(): its stack says who is running
         self.db = Database(authorize=self._authorize)
         self.objs: dict[str, Any] = {}
+        self._lf_objs: dict[str, Any] = {}              # logical files opened: own name -> own object, for
+                                                         # authority only (their records live on self.objs)
         self.spool = Spool()
         self.printers: dict[str, Any] = {}               # PRTF name -> its *FILE object
         self._spooled: dict[int, Any] = {}               # id of an open printer file -> the SpoolFile it fills
 
     def attach(self, prog, stack: list[str]) -> dict:
-        """The record layouts for the DISK files a program declares, loading each file's records."""
+        """The record layouts for the DISK files a program declares, loading each file's records. A
+        logical file has no records of its own: its physical file loads (once, under the physical
+        file's own name, same as if a program opened it directly), and the logical file's own object
+        is tracked only for authority checks against it."""
         from . import objects
         who = effective(self.store, self.actor, stack)
         pfs = {}
@@ -212,18 +217,44 @@ class Files:
             if device == "PRINTER":
                 self._attach_printer(who, obj)
                 continue
-            if obj.data.get("attr", "PF") != "PF" or not obj.data.get("dds"):
+            attr = obj.data.get("attr", "PF")
+            if attr == "LF":
+                based_on = self._lf_base(obj)
+                if based_on is None:
+                    raise RpgleError(f"Physical file for logical file {obj.name} in library {obj.library} was "
+                                     "not found.")
+                pf = parse_pf(based_on.name, based_on.data["dds"])
+                lf = parse_lf(obj.name, obj.data["dds"], pf)
+                self._load_pf(based_on, pf)
+                self._lf_objs[obj.name] = obj
+                pfs[name] = lf
+                pfs.setdefault(based_on.name, pf)
+                continue
+            if attr != "PF" or not obj.data.get("dds"):
                 raise RpgleError(f"File {obj.name} in library {obj.library} is not a physical file with a record layout.")
-            prev = self.objs.get(obj.name)
-            if prev is not None and prev is not obj:
-                raise RpgleError(f"File {obj.name} is in two libraries ({prev.library} and {obj.library}) and only one "
-                                 "can be open in a job here.")
             pf = parse_pf(obj.name, obj.data["dds"])
-            if prev is None:
-                self.objs[obj.name] = obj
-                self.db.load_rows(pf, obj.data.get("records", []))
+            self._load_pf(obj, pf)
             pfs[name] = pf
         return pfs
+
+    def _load_pf(self, obj, pf) -> None:
+        """Loads a physical file's records into the run's database the first time anything (its own
+        F-spec, or a logical file over it) opens it. A second F-spec on the same file, direct or
+        through a different logical file, reuses what is already loaded."""
+        prev = self.objs.get(obj.name)
+        if prev is not None and prev is not obj:
+            raise RpgleError(f"File {obj.name} is in two libraries ({prev.library} and {obj.library}) and only one "
+                             "can be open in a job here.")
+        if prev is None:
+            self.objs[obj.name] = obj
+            self.db.load_rows(pf, obj.data.get("records", []))
+
+    def _lf_base(self, obj):
+        """The physical file a logical file *FILE object was created over, by the fully qualified name
+        CRTLF recorded in data["based_on"] (LIB/NAME). Fixed when the logical file is created, not
+        re-resolved against the library list on every open, the same as a real system."""
+        lib, _, name = obj.data.get("based_on", "").partition("/")
+        return self.store.objects.get((lib.upper(), name.upper(), "*FILE"))
 
     def display(self, prog, stack: list[str], inline: str = ""):
         """The record formats of the display files a program declares. Each WORKSTN F-spec names a `*FILE`
@@ -296,7 +327,8 @@ class Files:
         return changed
 
     def _authorize(self, name: str, op: str) -> None:
-        obj = self.objs.get(name.upper())
+        up = name.upper()
+        obj = self.objs.get(up) or self._lf_objs.get(up)
         if obj is None:
             return
         stack = list(self.loader.active) if self.loader is not None else []

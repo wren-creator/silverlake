@@ -271,7 +271,7 @@ def _check_rpg(store: ProfileStore, actor: Profile, session, source: str) -> lis
     except RpgleError as exc:
         return [("40", str(exc))]
     problems: list[tuple[str, str]] = []
-    wanted = {"DISK": {"PF"}, "PRINTER": {"PRTF"}, "WORKSTN": {"DSPF"}}
+    wanted = {"DISK": {"PF", "LF"}, "PRINTER": {"PRTF"}, "WORKSTN": {"DSPF"}}
     for fs in prog.files:
         device = (fs.device or "").upper()
         if device not in wanted:
@@ -286,16 +286,19 @@ def _check_rpg(store: ProfileStore, actor: Profile, session, source: str) -> lis
     return problems or [("00", "No errors.")]
 
 
-# -- CRTPF, CRTDSPF, CRTPRTF ------------------------------------------------------------------------------
+# -- CRTPF, CRTDSPF, CRTPRTF, CRTLF ------------------------------------------------------------------------
 
-KINDS = {"PF": "Physical file", "DSPF": "Display file", "PRTF": "Printer file"}
+KINDS = {"PF": "Physical file", "DSPF": "Display file", "PRTF": "Printer file", "LF": "Logical file"}
 
 
 def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: str, srcfile: str, srcmbr: str,
                 text: str) -> Done:
-    """CRTPF, CRTDSPF and CRTPRTF, all from a DDS member. A file with no source (SRCFILE(*NONE) and a record
-    length) is not built."""
-    from rpgle import RpgleError, parse_dds, parse_pf, parse_prtf
+    """CRTPF, CRTDSPF, CRTPRTF and CRTLF, all from a DDS member. A file with no source (SRCFILE(*NONE) and a
+    record length) is not built; CRTLF never takes that path, since a logical file is DDS described or not
+    built at all. A logical file's DDS carries no records of its own (data["based_on"] names the physical
+    file it reads through); its PFILE must name a physical file already on the library list, found and
+    checked for *USE the same way a program's own F-specs are."""
+    from rpgle import RpgleError, find_pfile, parse_dds, parse_lf, parse_pf, parse_prtf
     name = file.split("/")[-1].upper()
     if srcfile == "*NONE":
         return _no(messages.info("A file without DDS source is not built. Name a SRCFILE."))
@@ -310,6 +313,7 @@ def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: s
     lines = list(mem["lines"])
     dds = "\n".join(lines) + "\n"
     problems: list[tuple[str, str]] = []
+    based_on = None
     try:
         if kind == "PF":
             pf = parse_pf(name, dds)
@@ -317,6 +321,21 @@ def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: s
                 problems.append(("30", "The source describes no fields."))
         elif kind == "PRTF":
             parse_prtf(name, dds)
+        elif kind == "LF":
+            pfile = find_pfile(dds)
+            if not pfile:
+                problems.append(("40", "No PFILE keyword found in the DDS."))
+            else:
+                based_on, err = locate(store, actor, pfile, "*FILE", session.search_order())
+                if err:
+                    problems.append(("40", f"Physical file {pfile} for PFILE was not found."))
+                elif based_on.data.get("attr") != "PF" or not based_on.data.get("dds"):
+                    problems.append(("40", f"{based_on.name} is not a physical file with a record layout."))
+                elif USE & ~store.authority_to_object(actor, based_on):
+                    problems.append(("40", f"You do not have authority to file {based_on.name} in "
+                                           f"{based_on.library}."))
+                else:
+                    parse_lf(name, dds, parse_pf(based_on.name, based_on.data["dds"]))
         else:
             parse_dds(dds)
     except RpgleError as exc:
@@ -332,6 +351,8 @@ def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: s
         data["records"] = []
     if kind == "PRTF":
         data["outq"] = "QGPL/QPRINT"
+    if kind == "LF":
+        data["based_on"] = f"{based_on.library}/{based_on.name}"
     obj, err = _place(store, actor, session, lib_name, name, "*FILE", _text_for(text, mem), data, replace_ok=False)
     if err:
         return _no(err)

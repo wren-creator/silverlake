@@ -145,3 +145,55 @@ def test_records_survive_a_save_and_load(store):
     assert next(r["SALARY"] for r in again.objects[("APPLIB", "PAYROLL", "*FILE")].data["records"]
                 if r["EMPNO"] == 10004) == 70000
 
+
+# -- logical files: a second *FILE object over PAYROLL, same field layout, its own authority ----------------
+
+PAYKEYF_DDS = "\n".join([
+    "     A                                      PFILE(PAYROLL)",
+    "     A          R PAYREC",
+    "     A          K EMPNO",
+]) + "\n"
+
+
+def paykeyf(store, public=USE, owner="OPERATOR"):
+    """PAYKEYF: a logical file over PAYROLL, keyed the same way, owned separately from it. 'PAYKEYF' is
+    exactly as long as 'PAYROLL', so swapping one for the other in PROBE's fixed columns below moves
+    nothing else on the line."""
+    obj = SecuredObject("PAYKEYF", owner, public=public, library="APPLIB", type="*FILE",
+                        data={"attr": "LF", "dds": PAYKEYF_DDS, "based_on": "APPLIB/PAYROLL"})
+    store.objects[obj.key] = obj
+    return obj
+
+
+def lf_probe(store, name, owner="STUDENT", usrprf="*USER", usage="I", body=""):
+    src = PROBE.replace("PAYROLL", "PAYKEYF").format(u=usage, body=body)
+    obj = SecuredObject(name, owner, public=USE, library="APPLIB", type="*PGM",
+                        data={"attr": "RPGLE", "usrprf": usrprf, "useadpaut": "*YES", "source": src, "dspf": ""})
+    store.objects[obj.key] = obj
+    return obj
+
+
+def test_a_user_without_payroll_authority_can_read_it_through_an_authorized_logical_file(store):
+    paykeyf(store)                                    # public USE, owned by OPERATOR, not STUDENT
+    lf_probe(store, "VIALF")                           # owner STUDENT, no adoption
+    c = signed(store)
+    s = c.handle("ENTER", {"command": "CALL PGM(VIALF)"})
+    assert "ended abnormally" not in text(s) and "Not authorized" not in text(s)
+
+
+def test_the_logical_files_own_authority_gates_it_not_the_physical_files(store):
+    paykeyf(store, public=EXCLUDE)
+    lf_probe(store, "VIALF2")
+    c = signed(store)
+    c.handle("ENTER", {"command": "CALL PGM(VIALF2)"})
+    assert "Not authorized to use object PAYKEYF in library APPLIB type *FILE." in joblog(c)
+
+
+def test_writing_through_the_logical_file_changes_the_physical_files_own_records(store):
+    paykeyf(store)
+    body = "\n".join(["     C                   EVAL      salary = 1", "     C                   UPDATE    PAYREC"])
+    lf_probe(store, "VIALF3", owner="OPERATOR", usrprf="*OWNER", usage="U", body=body)
+    c = signed(store)
+    assert "ended abnormally" not in text(c.handle("ENTER", {"command": "CALL PGM(VIALF3)"}))
+    assert salary(store, 10003) == 1
+
