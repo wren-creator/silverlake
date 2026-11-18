@@ -90,6 +90,7 @@ class ProfileStore:
         self.jobs = JobTable()                    # live jobs, in memory only
         self.on_change = lambda: None             # persistence hook, set by the state layer
         self.member_locks: dict[tuple, str] = {}  # (library, file, member) -> job, while an editor has it open; memory only
+        self.record_locks: dict[tuple, object] = {}  # (library, file, rrn) -> job, while a program holds it; memory only
         self.bad_signons: dict[str, int] = {}     # consecutive bad passwords per profile, memory only
         self.scenarios: dict[str, str] = {}       # scenario id -> "vulnerable" or "secure", saved with the state
         self.ifs: dict = {}                       # path -> system.ifs.Node, the virtual IFS, saved with the state

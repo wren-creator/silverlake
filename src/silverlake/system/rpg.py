@@ -149,6 +149,8 @@ class Run:
             self.data, self.done, self.error = None, True, "calls nested too deeply"
         if self.files:
             self.files.save()          # what the program has written so far is kept, even if it stops here
+            if self.done:
+                self.files.release_locks()     # the program ended (or abended): its record locks go with it
         if self.done and self.error and self.files:
             dump_program(self.files.store, self.files.actor, self.files.session, self.obj, self.error)
 
@@ -164,6 +166,7 @@ class Run:
         self.done = True
         if self.files:
             self.files.save()
+            self.files.release_locks()
 
 
 # What opening a file for each usage needs, and each operation after that (IBM: object operational
@@ -187,7 +190,8 @@ class Files:
     def __init__(self, store, actor, session) -> None:
         self.store, self.actor, self.session = store, actor, session
         self.loader = None                              # set by start(): its stack says who is running
-        self.db = Database(authorize=self._authorize)
+        self.db = Database(authorize=self._authorize, lock=self._lock_record, unlock=self._unlock_record)
+        self._held_locks: set[tuple] = set()            # (library, name, rrn) this run's db has locked
         self.objs: dict[str, Any] = {}
         self._lf_objs: dict[str, Any] = {}              # logical files opened: own name -> own object, for
                                                          # authority only (their records live on self.objs)
@@ -367,6 +371,38 @@ class Files:
             self.session.joblog.append((datetime.now(), "message",
                                         f"{op.replace('open:', 'open ')} refused on {obj.library}/{obj.name}"))
             raise RpgleError(messages.not_authorized_to_object(obj.name, obj.library, "*FILE").text)
+
+    def _job_id(self):
+        """Who this run's record locks belong to: the real job when there is one, else this run's own
+        session, so two runs in two unconnected test sessions still contend like two real jobs would."""
+        return self.session.job.qualified if self.session.job is not None else id(self.session)
+
+    def _lock_key(self, name: str, rrn: int) -> tuple:
+        obj = self.objs.get(name.upper())
+        lib = obj.library if obj is not None else "*"
+        return (lib, name.upper(), rrn)
+
+    def _lock_record(self, name: str, rrn: int) -> bool:
+        key = self._lock_key(name, rrn)
+        who = self._job_id()
+        held = self.store.record_locks.get(key)
+        if held is not None and held != who:
+            return False
+        self.store.record_locks[key] = who
+        self._held_locks.add(key)
+        return True
+
+    def _unlock_record(self, name: str, rrn: int) -> None:
+        key = self._lock_key(name, rrn)
+        self.store.record_locks.pop(key, None)
+        self._held_locks.discard(key)
+
+    def release_locks(self) -> None:
+        """Every record lock this run still holds, let go: what a job ending releases on a real
+        system. Not scoped to one file, since any DISK file this run opened for update may hold one."""
+        for key in list(self._held_locks):
+            self.store.record_locks.pop(key, None)
+        self._held_locks.clear()
 
     def save(self) -> None:
         changed = False
