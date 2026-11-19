@@ -343,3 +343,78 @@ def test_the_whole_loop_write_compile_run(store, stu):
     cmd(stu, "CRTBNDRPG PGM(SCRATCH/SHOW) SRCFILE(SCRATCH/QRPGLESRC)")
     s = cmd(stu, "CALL PGM(SCRATCH/SHOW)")
     assert "FROM THE EDITOR" in texts(s)
+
+
+# -- PDM menu options 1 and 2, and WRKOBJPDM ----------------------------------------------------------------
+
+def test_pdm_menu_options_1_and_2_open_the_captured_prompts(store):
+    c = signed(store)
+    cmd(c, "STRPDM")
+    assert "WRKLIB" in line_of(seu(c, command="1"), "WRKLIB")
+    c = signed(store)
+    cmd(c, "STRPDM")
+    assert "WRKOBJPDM" in line_of(seu(c, command="2"), "WRKOBJPDM")
+
+
+def test_wrkobjpdm_lists_objects_with_type_and_attribute(store):
+    c = signed(store, "DEVELOPER")
+    s = cmd(c, "WRKOBJPDM LIB(SRCLIB) OBJ(*ALL)")
+    assert "Work with Objects Using PDM" in texts(s)
+    assert "QRPGLESRC" in texts(s) and "*FILE" in texts(s)
+    assert {"opt0", "opt1", "opt2", "command", "pos"} <= names(s)
+
+
+def test_wrkobjpdm_option_8_shows_the_full_object_description(store):
+    c = signed(store, "DEVELOPER")
+    cmd(c, "WRKOBJPDM LIB(SRCLIB) OBJ(*ALL)")
+    s = seu(c, opt0="8")
+    assert "Display Object Description" in " ".join(texts(s))
+
+
+def test_wrkobjpdm_option_5_shows_object_authority(store):
+    c = signed(store, "DEVELOPER")
+    cmd(c, "WRKOBJPDM LIB(SRCLIB) OBJ(*ALL)")
+    s = seu(c, opt0="5")
+    assert "Display Object Authority" in texts(s)
+
+
+def test_wrkobjpdm_option_2_opens_edit_object_authority(store):
+    c = signed(store, "DEVELOPER")
+    cmd(c, "WRKOBJPDM LIB(SRCLIB) OBJ(*ALL)")
+    s = seu(c, opt0="2")
+    assert "Edit Object Authority" in texts(s)
+
+
+def test_wrkobjpdm_option_13_changes_text_from_the_command_line(store, stu):
+    cmd(stu, "WRKOBJPDM LIB(SCRATCH) OBJ(QRPGLESRC)")
+    s = seu(stu, opt0="13", command="Renamed by the test")
+    assert "description changed" in " ".join(texts(s))
+    s = cmd(stu, "WRKOBJPDM LIB(SCRATCH) OBJ(QRPGLESRC)")
+    assert "Renamed by the test" in " ".join(texts(s))
+
+
+def test_wrkobjpdm_option_7_renames_reading_the_new_name_from_the_command_line(store, stu):
+    cmd(stu, "WRKOBJPDM LIB(SCRATCH) OBJ(QRPGLESRC)")
+    s = seu(stu, opt0="7", command="QRPGNEW")
+    assert "renamed" in " ".join(texts(s))
+    assert ("SCRATCH", "QRPGNEW", "*FILE") in store.objects
+
+
+def test_wrkobjpdm_option_3_copies_reading_the_new_name_from_the_command_line(store, stu):
+    cmd(stu, "WRKOBJPDM LIB(SCRATCH) OBJ(QRPGLESRC)")
+    s = seu(stu, opt0="3", command="QRPGCOPY")
+    assert "duplicated" in " ".join(texts(s))
+    assert ("SCRATCH", "QRPGCOPY", "*FILE") in store.objects
+
+
+def test_wrkobjpdm_delete_asks_first_and_f12_keeps_the_object(store, stu):
+    cmd(stu, "CRTSRCPF FILE(SCRATCH/QTEMPSRC)")
+    cmd(stu, "WRKOBJPDM LIB(SCRATCH) OBJ(QTEMPSRC)")
+    s = seu(stu, opt0="4")
+    assert "Confirm Delete of Objects" in texts(s)
+    seu(stu, "F12")
+    assert ("SCRATCH", "QTEMPSRC", "*FILE") in store.objects
+    cmd(stu, "WRKOBJPDM LIB(SCRATCH) OBJ(QTEMPSRC)")
+    seu(stu, opt0="4")
+    seu(stu, "ENTER")
+    assert ("SCRATCH", "QTEMPSRC", "*FILE") not in store.objects

@@ -1,15 +1,21 @@
-"""PDM and the source editor: STRPDM, WRKMBRPDM and STRSEU.
+"""PDM and the source editor: STRPDM, WRKMBRPDM, WRKOBJPDM and STRSEU.
 
 Each is a widget the controller keeps as a view: `screen(message)` draws it and `handle(aid, values)`
 answers a key with a Step (stay, go back, leave to the menu, or open another widget). They work on the
-members of a source file (system/source.py) and reach the rest of the system through a Context.
+members of a source file (system/source.py) or the objects of a library (system/objlist.py) and reach
+the rest of the system through a Context.
 
-What is from a real PUB400 capture (`auth-pdm`, read only): the PDM start menu, and the refusals. The
-Work with Members and SEU displays are laid out from the way they are known to look, not captured, so
-their wording and positions are ours. SEU is a small one: line commands I, D, C, M, R (with counts, and
-doubled for a block, A and B to place a copy or move), a command line (TOP, BOTTOM, FIND, CHANGE, SAVE,
-FILE, CANCEL), Roll, and an exit display. Not built: prefix areas for formatting, syntax prompts, and
-column shifting."""
+What is from a real PUB400 capture (`auth-pdm`, read only): the PDM start menu, and the refusals.
+Options 1 and 2 on that menu now open the captured F4 prompts for WRKLIB and WRKOBJPDM (option 3
+already did, for WRKMBRPDM); option 9 (user-defined options) stays unbuilt. The Work with Members,
+Work with Objects and SEU displays are laid out from the way they are known to look, not captured, so
+their wording and positions are ours. Work with Objects Using PDM reuses the exact numbers Work with
+Objects (also ours) already gives each option, just drawn in PDM's own layout, so a number means the
+same thing everywhere in Silverlake: 2=Edit Object Authority, 3=Copy (CRTDUPOBJ), 4=Delete, 5=Display
+Object Authority, 7=Rename, 8=Display Object Description, 13=Change text; 6, 9 and 14-17 are not built.
+SEU is a small one: line commands I, D, C, M, R (with counts, and doubled for a block, A and B to place
+a copy or move), a command line (TOP, BOTTOM, FIND, CHANGE, SAVE, FILE, CANCEL), Roll, and an exit
+display. Not built: prefix areas for formatting, syntax prompts, and column shifting."""
 
 from __future__ import annotations
 
@@ -100,12 +106,11 @@ class PdmMenu:
         line = values.get("command", "").strip()
         if aid == "F4":
             return _prompt_step(ctx, line)
-        hint = {"1": "Use WRKLIB to work with libraries.",
-                "2": "Use WRKOBJPDM LIB(library) to work with the objects of a library.",
-                "3": "Use WRKMBRPDM FILE(library/file) to work with the members of a source file.",
-                "9": "User-defined options are not built."}
-        if line in hint:
-            return Step(hint[line])
+        option_command = {"1": "WRKLIB", "2": "WRKOBJPDM", "3": "WRKMBRPDM"}
+        if line in option_command:
+            return _prompt_step(ctx, option_command[line])
+        if line == "9":
+            return Step("User-defined options are not built.")
         if line:
             out = ctx.run(line)
             if out.view:
@@ -325,6 +330,152 @@ class MemberList:
                                   text=self.draft["text"])
         self.mode = "list"
         return Step(err) if err else Step(go="open", widget=editor)
+
+
+# -- WRKOBJPDM -----------------------------------------------------------------------------------------------
+
+class ObjectList:
+    """Work with Objects Using PDM: the objects of one library with the options PDM offers. Not
+    captured; the numbers reuse what Work with Objects (WRKOBJ, also ours) already gives each one,
+    just drawn in PDM's own layout, so the same option means the same thing everywhere in Silverlake.
+    Options that take a value (3 copy, 7 rename, 13 change text) read it from the command line, same
+    as Work with Members does."""
+
+    PER_PAGE = 9
+
+    def __init__(self, ctx: Context, lib: str, pattern: str = "*ALL") -> None:
+        self.ctx, self.lib, self.pattern = ctx, lib.upper(), pattern.upper()
+        self.page = 0
+        self.mode = "list"
+        self.pending: list[SecuredObject] = []
+
+    def rows(self) -> list[SecuredObject]:
+        from ..system import objlist
+        rows, err = objlist.work_with_objects(self.ctx.store, self.ctx.profile, self.pattern, self.lib, "*ALL",
+                                              self.ctx.session)
+        return [] if err else rows
+
+    def screen(self, message: str = "") -> Screen:
+        if self.mode == "confirm":
+            return self._confirm(message)
+        rows = self.rows()
+        pages = max(1, -(-len(rows) // self.PER_PAGE))
+        self.page = max(0, min(self.page, pages - 1))
+        shown = rows[self.page * self.PER_PAGE:(self.page + 1) * self.PER_PAGE]
+        out: list = [
+            _title("Work with Objects Using PDM", 26), Text(0, 72, SYSTEM_NAME, ds.ATTR_GREEN),
+            Text(1, 1, "Library  . . . . . .   " + self.lib, ds.ATTR_GREEN),
+            Text(2, 40, "Position to  . . . . .", ds.ATTR_GREEN), Input(2, 63, 10, "pos", monocase=True),
+            Text(4, 1, "Type options, press Enter.", ds.ATTR_BLUE),
+            Text(5, 3, "2=Edit  3=Copy  4=Delete  5=Display  7=Rename  8=Descrip  13=Chg text", ds.ATTR_BLUE),
+            Text(7, 1, "Opt  Object      Type   Attribute   Text", ds.ATTR_WHITE),
+        ]
+        for i, obj in enumerate(shown):
+            r = 8 + i
+            out += [Input(r, 1, 2, f"opt{i}", monocase=True), Text(r, 6, obj.name, ds.ATTR_GREEN),
+                    Text(r, 17, obj.type, ds.ATTR_GREEN), Text(r, 24, obj.data.get("attr", "")[:10], ds.ATTR_GREEN),
+                    Text(r, 36, obj.text[:42], ds.ATTR_GREEN)]
+        out.append(Text(18, 67, "More..." if self.page < pages - 1 else "Bottom", ds.ATTR_WHITE))
+        out += [Text(19, 1, "Parameters or command", ds.ATTR_GREEN), Text(20, 1, "===>", ds.ATTR_GREEN),
+                Input(CMD_ROW, CMD_COL, CMD_LEN, "command"),
+                Text(21, 1, "F3=Exit   F5=Refresh   F12=Cancel", ds.ATTR_BLUE)]
+        _msg(out, message)
+        return Screen(out, cursor="opt0" if shown else "command")
+
+    def _confirm(self, message: str) -> Screen:
+        rows: list = [_title("Confirm Delete of Objects", 26),
+                      Text(2, 1, "Press Enter to confirm your choices for 4=Delete.", ds.ATTR_BLUE),
+                      Text(3, 1, "Press F12 to return to change your choices.", ds.ATTR_BLUE),
+                      Text(5, 1, "Opt  Object      Type", ds.ATTR_WHITE)]
+        for i, obj in enumerate(self.pending[:14]):
+            rows += [Text(6 + i, 3, "4", ds.ATTR_GREEN), Text(6 + i, 6, obj.name, ds.ATTR_GREEN),
+                     Text(6 + i, 17, obj.type, ds.ATTR_GREEN)]
+        rows.append(Text(21, 1, "F12=Cancel", ds.ATTR_BLUE))
+        _msg(rows, message)
+        return Screen(rows)
+
+    def handle(self, aid: str, values: dict[str, str]) -> Step:
+        if self.mode == "confirm":
+            return self._in_confirm(aid)
+        if aid == "F3":
+            return Step(go="menu")
+        if aid == "F12":
+            return Step(go="back")
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            self.page += 1 if aid == "ROLLUP" else -1
+            return Step()
+        if aid == "F5":
+            return Step()
+        pos = values.get("pos", "").strip().upper()
+        if pos:
+            rows = self.rows()
+            self.page = next((i // self.PER_PAGE for i, o in enumerate(rows) if o.name >= pos), self.page)
+        rows = self.rows()
+        param = values.get("command", "").strip()
+        picks = []
+        for i in range(self.PER_PAGE):
+            opt = values.get(f"opt{i}", "").strip()
+            idx = self.page * self.PER_PAGE + i
+            if opt and idx < len(rows):
+                picks.append((rows[idx], opt))
+        deletes = [o for o, opt in picks if opt == "4"]
+        if deletes:
+            self.mode, self.pending = "confirm", deletes
+            return Step()
+        for obj, opt in picks:
+            step = self._option(obj, opt, param)
+            if step.message or step.go != "stay":
+                return step
+        if not picks and param:
+            return self._run(param)
+        return Step()
+
+    def _run(self, line: str) -> Step:
+        out = self.ctx.run(line)
+        if out.view:
+            return Step(go="view", widget=out.view)
+        return Step(out.message.text if out.message else "")
+
+    def _option(self, obj: SecuredObject, opt: str, param: str) -> Step:
+        ref = f"OBJ({obj.library}/{obj.name}) OBJTYPE({obj.type})"
+        if opt == "2":
+            return self._run(f"EDTOBJAUT {ref}")
+        if opt == "5":
+            return self._run(f"DSPOBJAUT {ref}")
+        if opt == "8":
+            return self._run(f"DSPOBJD {ref} DETAIL(*FULL)")
+        if opt == "3":
+            new = param.split()[0].upper() if param else ""
+            if not new:
+                return Step("Type the new object name on the command line for option 3.")
+            return self._run(f"CRTDUPOBJ OBJ({obj.name}) FROMLIB({obj.library}) OBJTYPE({obj.type}) "
+                             f"TOLIB({obj.library}) NEWOBJ({new})")
+        if opt == "7":
+            new = param.split()[0].upper() if param else ""
+            if not new:
+                return Step("Type the new name on the command line for option 7.")
+            return self._run(f"RNMOBJ {ref} NEWOBJ({new})")
+        if opt == "13":
+            text = param.replace("'", "''")
+            return self._run(f"CHGOBJD {ref} TEXT('{text}')")
+        return Step(f"Option {opt} is not valid." if opt not in ("6", "9", "14", "15", "16", "17") else
+                    f"Option {opt} is not built yet.")
+
+    def _in_confirm(self, aid: str) -> Step:
+        if aid == "F12":
+            self.mode = "list"
+            return Step()
+        if aid == "ENTER":
+            from ..system import objlist
+            n = 0
+            for obj in self.pending:
+                out = objlist.delete_object(self.ctx.store, self.ctx.profile, f"{obj.library}/{obj.name}", obj.type,
+                                            self.ctx.session.search_order())
+                if out.ok:
+                    n += 1
+            self.mode, self.pending = "list", []
+            return Step(f"{n} object{'s' if n != 1 else ''} deleted.")
+        return Step()
 
 
 # -- STRSEU ------------------------------------------------------------------------------------------------

@@ -988,7 +988,7 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         return Outcome(err) if err else Outcome(view=("wrkmbrpdm", f, b["MBR"]))
     if name == "WRKOBJPDM":
         lib = b["LIB"] if b["LIB"] != "*CURLIB" else (session.current_library or "QGPL")
-        return execute(store, actor, f"WRKOBJ OBJ({lib}/{b['OBJ']})", session)
+        return Outcome(view=("wrkobjpdm", lib, b["OBJ"]))
     if name == "STRSEU":
         f, err = source.find_file(store, actor, session, b["SRCFILE"], seu=True)
         if err:

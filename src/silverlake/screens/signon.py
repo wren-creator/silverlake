@@ -394,6 +394,8 @@ class SignonController:
             return ("widget", pdm.PdmMenu(self._ctx()))
         if kind == "wrkmbrpdm":
             return ("widget", pdm.MemberList(self._ctx(), spec[1], spec[2]))
+        if kind == "wrkobjpdm":
+            return ("widget", pdm.ObjectList(self._ctx(), spec[1], spec[2]))
         if kind == "strseu":
             return ("widget", spec[1])
         if kind == "dsppfm":
