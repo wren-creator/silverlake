@@ -307,6 +307,45 @@ def change_attributes(store: ProfileStore, actor: Profile, session, f: SpoolFile
     return _ok(f"Attributes of file {f.name} number {f.file_no} changed.")
 
 
+def change_printer_file(store: ProfileStore, actor: Profile, session, spec: str, changes: dict) -> Done:
+    """CHGPRTF FILE(lib/name): OUTQ, PAGESIZE and COPIES, the only printer-file attributes this model
+    tracks (the real command has far more -- LPI, CPI, FORMFEED, DRAWER and the rest -- that change
+    nothing here, so they are not offered). Needs *OBJMGT or *OBJALTER on the file and *EXECUTE on
+    its library, the same rule CHGPF uses on a data file (not a capture, by analogy). Moving the file
+    to another queue needs *READ to that queue, the rule `Files._attach_printer` already checks at
+    open time, and PAGESIZE(*DFT) clears the override back to the job's own default page length."""
+    obj, err = locate(store, actor, spec, "*FILE", session.search_order())
+    if err:
+        return _no(err)
+    if obj.data.get("attr") != "PRTF":
+        return _no(messages.info(f"File {obj.name} in library {obj.library} is not a printer file."))
+    allobj = SpecialAuthority.ALLOBJ in store.special_authorities(actor)
+    if not allobj:
+        if not store.authority_to_object(actor, obj) & (Auth.OBJMGT | Auth.OBJALTER):
+            return _no(messages.not_authorized_to_object(obj.name, obj.library, "*FILE"))
+        lib = store.find_library(obj.library)
+        if lib is None or Auth.EXECUTE not in authority_to_library(store, actor, lib):
+            return _no(messages.not_authorized_to_library(obj.library))
+    target = None
+    if "OUTQ" in changes:
+        target, err = locate(store, actor, changes["OUTQ"], "*OUTQ", session.search_order())
+        if err:
+            return _no(err)
+        if Auth.READ not in store.authority_to_object(actor, target) and not allobj:
+            return _no(messages.not_authorized_to_object_2189(target.name, target.library, "*OUTQ"))
+    if "PAGESIZE" in changes:
+        if changes["PAGESIZE"] is None:
+            obj.data.pop("page_length", None)
+        else:
+            obj.data["page_length"] = changes["PAGESIZE"]
+    if "COPIES" in changes:
+        obj.data["copies"] = changes["COPIES"]
+    if target is not None:
+        obj.data["outq"] = f"{target.library}/{target.name}"
+    store.on_change()
+    return _ok(f"File {obj.name} in library {obj.library} changed.")
+
+
 def no_messages(f: SpoolFile) -> str:
     """Option 7. A spooled file has messages only when a writer asked a question about it, and no
     writer is modeled, so the answer is always the captured one."""
@@ -352,14 +391,17 @@ def write_joblog(store: ProfileStore, job, entries: list[tuple[datetime, str, st
 
 
 def new_file(store: ProfileStore, session, actor: Profile, name: str, lines: list[str], user_data: str = "",
-             outq: tuple[str, str] = ("QGPL", "QPRINT")) -> SpoolFile:
-    """A spooled file of the session's job, owned by the user, with the next number in that job."""
+             outq: tuple[str, str] = ("QGPL", "QPRINT"), status: str = "RDY", copies: int = 1) -> SpoolFile:
+    """A spooled file of the session's job, owned by the user, with the next number in that job. status
+    defaults to RDY (a one-shot write, like a compile listing or a program dump); a program still
+    writing to a printer file passes OPN, same as a real spooled file stays open while the job that
+    owns it keeps writing to it."""
     job = session.job if session is not None else None
     job_name = job.name if job else actor.name
     number = job.number if job else "000000"
     nos = [f.file_no for f in store.spool if f.job_number == number and f.job_name == job_name]
     f = SpoolFile(name, actor.name, job_name, number, (max(nos) + 1) if nos else 1, outq[1], outq[0], user_data,
-                  "RDY", list(lines), datetime.now().isoformat(timespec="seconds"))
+                  status, list(lines), datetime.now().isoformat(timespec="seconds"), copies=copies)
     store.spool.append(f)
     store.on_change()
     return f

@@ -151,6 +151,7 @@ class Run:
             self.files.save()          # what the program has written so far is kept, even if it stops here
             if self.done:
                 self.files.release_locks()     # the program ended (or abended): its record locks go with it
+                self.files.close_spool_files() # and its open printer files close: OPN -> RDY
         if self.done and self.error and self.files:
             dump_program(self.files.store, self.files.actor, self.files.session, self.obj, self.error)
 
@@ -167,6 +168,7 @@ class Run:
         if self.files:
             self.files.save()
             self.files.release_locks()
+            self.files.close_spool_files()
 
 
 # What opening a file for each usage needs, and each operation after that (IBM: object operational
@@ -354,7 +356,9 @@ class Files:
         if Auth.READ not in self.store.authority_to_object(who, q):
             raise RpgleError(messages.not_authorized_to_object(q.name, q.library, "*OUTQ").text)
         self.printers[name] = obj
-        self.spool.defs[name] = parse_prtf(obj.name, obj.data["dds"])
+        defs = parse_prtf(obj.name, obj.data["dds"])
+        defs.page_length = obj.data.get("page_length")
+        self.spool.defs[name] = defs
 
     def queue_of(self, obj):
         lib, _, name = obj.data.get("outq", DEFAULT_OUTQ).partition("/")
@@ -373,7 +377,7 @@ class Files:
                 obj = self.printers[pf.name.upper()]
                 qlib, _, qname = obj.data.get("outq", DEFAULT_OUTQ).partition("/")
                 sf = spoolmod.new_file(self.store, self.session, self.actor, obj.name, lines, obj.data.get("usrdta", ""),
-                                       (qlib.upper(), qname.upper()))
+                                       (qlib.upper(), qname.upper()), status="OPN", copies=obj.data.get("copies", 1))
                 self._spooled[id(pf)] = sf
                 changed = True
             elif sf.lines != lines:
@@ -425,6 +429,18 @@ class Files:
         for key in list(self._held_locks):
             self.store.record_locks.pop(key, None)
         self._held_locks.clear()
+
+    def close_spool_files(self) -> None:
+        """Every spooled file this run is still writing to goes from OPN to RDY: what closing a
+        printer file (the program ending, same as an implicit CLOSE) does on a real system. Left
+        alone if something else already moved it (HLD, say)."""
+        changed = False
+        for sf in self._spooled.values():
+            if sf.status == "OPN":
+                sf.status = "RDY"
+                changed = True
+        if changed:
+            self.store.on_change()
 
     def save(self) -> None:
         changed = False

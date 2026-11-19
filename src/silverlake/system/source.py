@@ -337,13 +337,14 @@ KINDS = {"PF": "Physical file", "DSPF": "Display file", "PRTF": "Printer file", 
 
 
 def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: str, srcfile: str, srcmbr: str,
-                text: str) -> Done:
+                text: str, page_length: int | None = None, copies: int = 1) -> Done:
     """CRTPF, CRTDSPF, CRTPRTF and CRTLF, all from a DDS member. A file with no source (SRCFILE(*NONE) and a
     record length) is not built; CRTLF never takes that path, since a logical file is DDS described or not
     built at all. A logical file's DDS carries no records of its own (data["based_on"] names the physical
     file it reads through, and data["joined"] names every secondary of a join logical file); its PFILE (or
     JFILE, for a join) must name physical files already on the library list, found and checked for *USE the
-    same way a program's own F-specs are."""
+    same way a program's own F-specs are. page_length and copies are CRTPRTF-only (PAGESIZE and COPIES);
+    every other kind ignores them."""
     from rpgle import RpgleError, find_pfiles, parse_dds, parse_lf, parse_pf, parse_prtf
     name = file.split("/")[-1].upper()
     if srcfile == "*NONE":
@@ -412,6 +413,9 @@ def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: s
         data["records"] = []
     if kind == "PRTF":
         data["outq"] = "QGPL/QPRINT"
+        if page_length is not None:
+            data["page_length"] = page_length
+        data["copies"] = copies
     if kind == "LF":
         data["based_on"] = f"{based_on.library}/{based_on.name}"
         if joined_objs:

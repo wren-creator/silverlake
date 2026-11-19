@@ -241,6 +241,8 @@ CHGPF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SIZE", "ignore
                 Param("CONTIG", "ignored", SAME)]
 RGZPFM_PARAMS = [Param("FILE", "qname", "", required=True), Param("MBR", "name*", "*FIRST")]
 CLRPFM_PARAMS = [Param("FILE", "qname", "", required=True), Param("MBR", "name*", "*FIRST")]
+CHGPRTF_PARAMS = [Param("FILE", "qname", "", required=True), Param("OUTQ", "outqsame", SAME),
+                  Param("PAGESIZE", "pagesize", SAME), Param("COPIES", "copies", SAME)]
 CPYSRCF_PARAMS = [Param("FROMFILE", "qname", "", required=True), Param("TOFILE", "qname", "", required=True),
                   Param("FROMMBR", "name*", "", required=True), Param("TOMBR", "name*", "*FROMMBR"),
                   Param("MBROPT", "name*", "*REPLACE")]
@@ -261,7 +263,8 @@ CRTPF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SRCFILE", "qna
                 Param("FILETYPE", "ignored", "*DATA"), Param("MBR", "ignored", "*FILE"),
                 Param("TEXT", "text", "*SRCMBRTXT")]
 CRTDSPF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*REQUESTER"))
-CRTPRTF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*JOB"), Param("DEVTYPE", "ignored", "*SCS"))
+CRTPRTF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*JOB"), Param("DEVTYPE", "ignored", "*SCS"),
+                                 Param("PAGESIZE", "pagesize", "*DFT"), Param("COPIES", "copies", "1"))
 CRTLF_PARAMS = _crt_dds_params("QDDSSRC")
 DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU": ("MENU", "*MENU"),
                    "DLTPGM": ("PGM", "*PGM"), "DLTMSGQ": ("MSGQ", "*MSGQ"),
@@ -270,7 +273,7 @@ DELETE_COMMANDS = {"DLTF": ("FILE", "*FILE"), "DLTCMD": ("CMD", "*CMD"), "DLTMNU
 COMMANDS = {
     "CPYF": CPYF_PARAMS, "DSPPFM": DSPPFM_PARAMS, "OVRDBF": OVRDBF_PARAMS, "OVRPRTF": OVRPRTF_PARAMS,
     "DLTOVR": DLTOVR_PARAMS, "DSPOVR": DSPOVR_PARAMS,
-    "CHGPF": CHGPF_PARAMS, "RGZPFM": RGZPFM_PARAMS, "CLRPFM": CLRPFM_PARAMS,
+    "CHGPF": CHGPF_PARAMS, "RGZPFM": RGZPFM_PARAMS, "CLRPFM": CLRPFM_PARAMS, "CHGPRTF": CHGPRTF_PARAMS,
     "CPYSRCF": CPYSRCF_PARAMS, "CPYTOIMPF": CPYTOIMPF_PARAMS,
     "STRPDM": STRPDM_PARAMS, "WRKMBRPDM": WRKMBRPDM_PARAMS, "WRKOBJPDM": WRKOBJPDM_PARAMS, "STRSEU": STRSEU_PARAMS,
     "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTPF": CRTPF_PARAMS,
@@ -440,6 +443,12 @@ def convert(store: ProfileStore, p: Param, values: list[str]):
     if k in ("copies", "pty"):
         if len(values) != 1 or not values[0].isdigit():
             raise BindError(f"Value for parameter {p.key} not valid. Use a number.")
+        return int(values[0])
+    if k == "pagesize":
+        if values == ["*DFT"]:
+            return None
+        if len(values) != 1 or not values[0].isdigit() or not 1 <= int(values[0]) <= 255:
+            raise BindError(f"Value for parameter {p.key} not valid. Use *DFT or a number from 1 to 255.")
         return int(values[0])
     if k == "outqsame":
         return _qualified(p.key, values)
@@ -942,6 +951,11 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         return Outcome(dbfiles.reorganize_member(store, actor, session, b["FILE"]).message)
     if name == "CLRPFM":
         return Outcome(dbfiles.clear_member(store, actor, session, b["FILE"]).message)
+    if name == "CHGPRTF":
+        changes = {k: b[k] for k in ("OUTQ", "PAGESIZE", "COPIES") if b[k] != SAME}
+        if not changes:
+            return Outcome(messages.syntax("Give at least one attribute to change."))
+        return Outcome(spool.change_printer_file(store, actor, session, b["FILE"], changes).message)
     if name == "CPYSRCF":
         if b["MBROPT"] not in ("*REPLACE", "*ADD"):
             return Outcome(messages.syntax("Value for parameter MBROPT not valid. Use *REPLACE or *ADD."))
@@ -990,8 +1004,9 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         return Outcome(source.compile_rpg(store, actor, session, b["PGM"], b["SRCFILE"], b["SRCMBR"], b["TEXT"],
                                           b["USRPRF"], b["USEADPAUT"]).message)
     if name in ("CRTPF", "CRTDSPF", "CRTPRTF", "CRTLF"):
+        extra = {"page_length": b["PAGESIZE"], "copies": b["COPIES"]} if name == "CRTPRTF" else {}
         return Outcome(source.compile_dds(store, actor, session, name[3:], b["FILE"], b["SRCFILE"], b["SRCMBR"],
-                                          b["TEXT"]).message)
+                                          b["TEXT"], **extra).message)
     if name == "DSPPGM":
         prog, err = objects.use_object(store, actor, b["PGM"], "*PGM", session.search_order())
         return Outcome(err) if err else Outcome(view=("dsppgm", prog))
