@@ -165,8 +165,8 @@ def paykeyf(store, public=USE, owner="OPERATOR"):
     return obj
 
 
-def lf_probe(store, name, owner="STUDENT", usrprf="*USER", usage="I", body=""):
-    src = PROBE.replace("PAYROLL", "PAYKEYF").format(u=usage, body=body)
+def lf_probe(store, name, owner="STUDENT", usrprf="*USER", usage="I", body="", target="PAYKEYF"):
+    src = PROBE.replace("PAYROLL", target).format(u=usage, body=body)
     obj = SecuredObject(name, owner, public=USE, library="APPLIB", type="*PGM",
                         data={"attr": "RPGLE", "usrprf": usrprf, "useadpaut": "*YES", "source": src, "dspf": ""})
     store.objects[obj.key] = obj
@@ -196,4 +196,81 @@ def test_writing_through_the_logical_file_changes_the_physical_files_own_records
     c = signed(store)
     assert "ended abnormally" not in text(c.handle("ENTER", {"command": "CALL PGM(VIALF3)"}))
     assert salary(store, 10003) == 1
+
+
+# -- join logical files: a *FILE object over PAYROLL and a second physical file, joined on DEPT -------------
+
+def _ddsline(kind="", name="", keywords=""):
+    """One fixed-column DDS line: kind at column 17, name at 19 (for an R/K/field line), keywords
+    at 45 (for a file-level or J line) -- the same columns parse_lf/parse_pf read."""
+    line = list(" " * 80)
+    line[5] = "A"
+    if kind:
+        line[16] = kind
+    if name:
+        line[18:18 + len(name)] = name
+    if keywords:
+        line[44:44 + len(keywords)] = keywords
+    return "".join(line).rstrip()
+
+
+DEPTS_DDS = "\n".join([
+    _ddsline("R", "DEPTREC"),
+    "     A            DEPT           4",
+    "     A            DEPTNAME      10",
+    _ddsline("K", "DEPT"),
+]) + "\n"
+
+PAYDEPT_DDS = "\n".join([
+    _ddsline(keywords="JFILE(PAYROLL DEPTS)"),
+    _ddsline("R", "PAYREC"),
+    _ddsline("J", keywords="JOIN(1)"),
+    _ddsline(keywords="JFLD(DEPT DEPT)"),
+    _ddsline("K", "EMPNO"),
+]) + "\n"
+
+
+def depts(store, owner="OPERATOR"):
+    """DEPTS: a small department-name lookup, PAYDEPT's secondary file."""
+    obj = SecuredObject("DEPTS", owner, public=USE, library="APPLIB", type="*FILE",
+                        data={"attr": "PF", "dds": DEPTS_DDS,
+                              "records": [{"DEPT": "OPS", "DEPTNAME": "Operations"},
+                                         {"DEPT": "ENG", "DEPTNAME": "Engineering"}]})
+    store.objects[obj.key] = obj
+    return obj
+
+
+def paydept(store, owner="OPERATOR", joined=("APPLIB/DEPTS",)):
+    """PAYDEPT: a join logical file over PAYROLL and DEPTS, keyed by EMPNO same as PAYROLL. Exactly as
+    long as 'PAYROLL', so the PROBE substitution trick below moves nothing else on the line."""
+    obj = SecuredObject("PAYDEPT", owner, public=USE, library="APPLIB", type="*FILE",
+                        data={"attr": "LF", "dds": PAYDEPT_DDS, "based_on": "APPLIB/PAYROLL",
+                              "joined": list(joined)})
+    store.objects[obj.key] = obj
+    return obj
+
+
+def test_a_join_logical_file_combines_fields_from_both_physical_files(store):
+    depts(store)
+    paydept(store)
+    lf_probe(store, "VIAJOIN", target="PAYDEPT")
+    c = signed(store)
+    assert "ended abnormally" not in text(c.handle("ENTER", {"command": "CALL PGM(VIAJOIN)"}))
+
+
+def test_a_join_logical_files_own_authority_gates_it_not_either_physical_file(store):
+    depts(store)
+    paydept(store, owner="OPERATOR")
+    store.objects[("APPLIB", "PAYDEPT", "*FILE")].public = EXCLUDE
+    lf_probe(store, "VIAJOIN2", target="PAYDEPT")
+    c = signed(store)
+    c.handle("ENTER", {"command": "CALL PGM(VIAJOIN2)"})
+    assert "Not authorized to use object PAYDEPT in library APPLIB type *FILE." in joblog(c)
+
+
+def test_a_missing_secondary_physical_file_says_so_before_the_program_starts(store):
+    paydept(store, joined=("APPLIB/NOSUCH",))
+    lf_probe(store, "VIAJOIN3", target="PAYDEPT")
+    c = signed(store)
+    assert "NOSUCH" in text(c.handle("ENTER", {"command": "CALL PGM(VIAJOIN3)"}))
 

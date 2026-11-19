@@ -264,3 +264,71 @@ def test_a_logical_file_with_a_key_not_on_the_physical_file_is_not_built(store):
     out = run(store, "STUDENT", "CRTLF FILE(SCRATCH/BADLF) SRCFILE(SCRATCH/QDDSSRC)", s)
     assert "not created" in said(out)
     assert "NOSUCHFLD" in "\n".join([x for x in store.spool if x.name == "QSYSPRT"][-1].lines)
+
+
+# -- CRTLF over a join: JFILE names more than one physical file -----------------------------------------
+
+VISITS = ["     A          R VISIT", "     A            ID             5S 0", "     A            NOTE          10A",
+          "     A          K ID"]
+
+
+def _ddsline(kind="", name="", keywords=""):
+    """One fixed-column DDS line: kind at column 17, name at 19 (for an R/K line), keywords at
+    45 (for a file-level or J line) -- the same columns find_pfiles/parse_lf read."""
+    line = list(" " * 80)
+    line[5] = "A"
+    if kind:
+        line[16] = kind
+    if name:
+        line[18:18 + len(name)] = name
+    if keywords:
+        line[44:44 + len(keywords)] = keywords
+    return "".join(line).rstrip()
+
+
+def _people_visits_jlf(jfile="JFILE(PEOPLE VISITS)"):
+    return [
+        _ddsline(keywords=jfile),
+        _ddsline("R", "JOINREC"),
+        _ddsline("J", keywords="JOIN(1)"),
+        _ddsline(keywords="JFLD(ID ID)"),
+        _ddsline("K", "ID"),
+    ]
+
+
+def _people_and_visits(store, f, s):
+    source.put_member(store, f, "PEOPLE", PF, "PF", "People")
+    run(store, "STUDENT", "CRTPF FILE(SCRATCH/PEOPLE) SRCFILE(SCRATCH/QDDSSRC)", s)
+    source.put_member(store, f, "VISITS", VISITS, "PF", "Visits")
+    run(store, "STUDENT", "CRTPF FILE(SCRATCH/VISITS) SRCFILE(SCRATCH/QDDSSRC)", s)
+
+
+def test_crtlf_builds_a_join_logical_file_over_two_physical_files(store):
+    f, s = src_file(store, spec="SCRATCH/QDDSSRC")
+    _people_and_visits(store, f, s)
+    source.put_member(store, f, "PEOPVIS", _people_visits_jlf(), "LF", "People joined to visits")
+    out = run(store, "STUDENT", "CRTLF FILE(SCRATCH/PEOPVIS) SRCFILE(SCRATCH/QDDSSRC)", s)
+    assert said(out) == "File PEOPVIS created in library SCRATCH."
+    o = store.objects[("SCRATCH", "PEOPVIS", "*FILE")]
+    assert o.data["attr"] == "LF" and o.data["based_on"] == "SCRATCH/PEOPLE"
+    assert o.data["joined"] == ["SCRATCH/VISITS"]
+
+
+def test_crtlf_join_needs_a_secondary_physical_file_to_exist(store):
+    f, s = src_file(store, spec="SCRATCH/QDDSSRC")
+    source.put_member(store, f, "PEOPLE", PF, "PF", "People")
+    run(store, "STUDENT", "CRTPF FILE(SCRATCH/PEOPLE) SRCFILE(SCRATCH/QDDSSRC)", s)
+    source.put_member(store, f, "PEOPVIS", _people_visits_jlf("JFILE(PEOPLE NOSUCH)"), "LF")
+    out = run(store, "STUDENT", "CRTLF FILE(SCRATCH/PEOPVIS) SRCFILE(SCRATCH/QDDSSRC)", s)
+    assert "not created" in said(out)
+    assert "NOSUCH" in "\n".join([x for x in store.spool if x.name == "QSYSPRT"][-1].lines)
+
+
+def test_crtlf_join_needs_authority_to_every_secondary_file(store):
+    f, s = src_file(store, spec="SCRATCH/QDDSSRC")
+    _people_and_visits(store, f, s)
+    store.objects[("SCRATCH", "VISITS", "*FILE")].public = EXCLUDE
+    source.put_member(store, f, "PEOPVIS", _people_visits_jlf(), "LF")
+    out = run(store, "OPERATOR", "CRTLF FILE(SCRATCH/PEOPVIS) SRCFILE(SCRATCH/QDDSSRC)", sess(store, "OPERATOR", "SCRATCH"))
+    assert "not created" in said(out)
+    assert ("SCRATCH", "PEOPVIS", "*FILE") not in store.objects

@@ -60,7 +60,7 @@
 - [x] Phase 4c-3: DSPF objects instead of one DDS string per program (found through the library list, need *USE, shared between programs; the old inline form still works when no object is found)
 - [x] Phase 4c-4: OVRDBF and DLTOVR, QTEMP per job (shadowing by library list order), seeded EMPDIR/EMPDIRX (override redirects an adopting program's file) and PAYRUN/PAYRUNX (a program in QTEMP runs in place of the one called by name)
 - [x] Phase 4c-5: CPYF (member options, CRTFILE, FMTOPT, record range) and DSPPFM (control, shift), authority from IBM's pages as remembered, wording and layout ours
-- [x] Logical files, the re-keying slice: CRTLF, a `*FILE` (attribute LF) built over one physical file by its PFILE keyword, with its own K lines and its own authority from there on; an F-spec opens it exactly as it would the physical file, sharing its records but positioned independently. Needed a change to rpgle_library itself (`lf.py`, `Database.open_logical`), Python only for now (JS and Go to follow, same order DISK files shipped). Not this pass: join logical files, select/omit, choosing or renaming individual fields (a field line in the DDS refuses rather than guessing); see docs/rpg.md
+- [x] Logical files, the re-keying slice: CRTLF, a `*FILE` (attribute LF) built over one physical file by its PFILE keyword, with its own K lines and its own authority from there on; an F-spec opens it exactly as it would the physical file, sharing its records but positioned independently. Needed a change to rpgle_library itself (`lf.py`, `Database.open_logical`), Python only for now (JS and Go to follow, same order DISK files shipped). Not this pass: join logical files, select/omit (see the Phase 4c later line below, now done), choosing or renaming individual fields (a field line in the DDS refuses rather than guessing); see docs/rpg.md
 - [x] USROPN in the runtime, so a program can override before it opens: an F-spec keyword (`OPEN`/`CLOSE` statements, deferred authority check, the override re-applied live at OPEN time rather than at program start), see docs/rpg.md
 - [x] QTEMP filtered by job in WRKOBJ, WRKOBJOWN and CHGOBJD's generic/*ALL match (DSPOBJD and a single-named CHGOBJD already went through `locate()`, which was already job-scoped), see docs/rpg.md
 - [x] File commands CHGPF, RGZPFM, CLRPFM, authority-gated the way CPYF and DSPPFM already were, see docs/rpg.md
@@ -68,7 +68,7 @@
 - [x] Record level locking: a CHAIN for update locks the record, a second job's CHAIN on it is refused, see docs/rpg.md
 - [x] DSPOVR (captured on PUB400) and OVRPRTF/printer file overrides, see docs/rpg.md
 - [x] DSPPFM F10/F11 hex view and Find, see docs/rpg.md
-- [ ] Phase 4c later: join logical files and select/omit
+- [x] Phase 4c later: join logical files and select/omit, see docs/rpg.md
 - [x] Phase 4d-1: source files with members (CRTSRCPF), CRTBNDRPG, CRTPF, CRTDSPF, CRTPRTF, compile listing to the spool as QSYSPRT. Seeded SRCLIB/QRPGLESRC and QDDSSRC with HELLO, HELLOD, CUSTPF. Oracle capture `auth-pdm`
 - [x] Phase 4d-2: STRPDM, WRKMBRPDM, WRKOBJPDM (alias to WRKOBJ) and STRSEU, with a SEU-like editor (line commands, blocks, FIND and CHANGE, F3 exit display, browse, member locks). The menu and refusals are captured, the Work with Members and editor layouts are ours
 - [x] Phase 4d-3: F4 prompts for CRTBNDRPG, CRTPF, CRTDSPF, CRTPRTF and CRTSRCPF on the captured layouts, from any command line and from PDM (option 14 with F4 fills in the member)

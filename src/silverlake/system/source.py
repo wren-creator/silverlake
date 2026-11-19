@@ -341,9 +341,10 @@ def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: s
     """CRTPF, CRTDSPF, CRTPRTF and CRTLF, all from a DDS member. A file with no source (SRCFILE(*NONE) and a
     record length) is not built; CRTLF never takes that path, since a logical file is DDS described or not
     built at all. A logical file's DDS carries no records of its own (data["based_on"] names the physical
-    file it reads through); its PFILE must name a physical file already on the library list, found and
-    checked for *USE the same way a program's own F-specs are."""
-    from rpgle import RpgleError, find_pfile, parse_dds, parse_lf, parse_pf, parse_prtf
+    file it reads through, and data["joined"] names every secondary of a join logical file); its PFILE (or
+    JFILE, for a join) must name physical files already on the library list, found and checked for *USE the
+    same way a program's own F-specs are."""
+    from rpgle import RpgleError, find_pfiles, parse_dds, parse_lf, parse_pf, parse_prtf
     name = file.split("/")[-1].upper()
     if srcfile == "*NONE":
         return _no(messages.info("A file without DDS source is not built. Name a SRCFILE."))
@@ -359,6 +360,7 @@ def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: s
     dds = "\n".join(lines) + "\n"
     problems: list[tuple[str, str]] = []
     based_on = None
+    joined_objs: list = []
     try:
         if kind == "PF":
             pf = parse_pf(name, dds)
@@ -367,20 +369,34 @@ def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: s
         elif kind == "PRTF":
             parse_prtf(name, dds)
         elif kind == "LF":
-            pfile = find_pfile(dds)
-            if not pfile:
-                problems.append(("40", "No PFILE keyword found in the DDS."))
+            # PFILE names one physical file; JFILE (a join logical file) names it and every
+            # secondary, primary first. Each one is found and checked for *USE the same way a
+            # program's own F-specs are.
+            pfiles = find_pfiles(dds)
+            if not pfiles:
+                problems.append(("40", "No PFILE or JFILE keyword found in the DDS."))
             else:
-                based_on, err = locate(store, actor, pfile, "*FILE", session.search_order())
-                if err:
-                    problems.append(("40", f"Physical file {pfile} for PFILE was not found."))
-                elif based_on.data.get("attr") != "PF" or not based_on.data.get("dds"):
-                    problems.append(("40", f"{based_on.name} is not a physical file with a record layout."))
-                elif USE & ~store.authority_to_object(actor, based_on):
-                    problems.append(("40", f"You do not have authority to file {based_on.name} in "
-                                           f"{based_on.library}."))
+                resolved: dict = {}
+                bad = ""
+                for pfile in pfiles:
+                    pf_obj, err = locate(store, actor, pfile, "*FILE", session.search_order())
+                    if err:
+                        bad = f"Physical file {pfile} for PFILE/JFILE was not found."
+                    elif pf_obj.data.get("attr") != "PF" or not pf_obj.data.get("dds"):
+                        bad = f"{pf_obj.name} is not a physical file with a record layout."
+                    elif USE & ~store.authority_to_object(actor, pf_obj):
+                        bad = f"You do not have authority to file {pf_obj.name} in {pf_obj.library}."
+                    else:
+                        resolved[pfile] = pf_obj
+                    if bad:
+                        break
+                if bad:
+                    problems.append(("40", bad))
                 else:
-                    parse_lf(name, dds, parse_pf(based_on.name, based_on.data["dds"]))
+                    based_on = resolved[pfiles[0]]
+                    joined_objs = [resolved[n] for n in pfiles[1:]]
+                    secondaries = {n: parse_pf(resolved[n].name, resolved[n].data["dds"]) for n in pfiles[1:]}
+                    parse_lf(name, dds, parse_pf(based_on.name, based_on.data["dds"]), secondaries or None)
         else:
             parse_dds(dds)
     except RpgleError as exc:
@@ -398,6 +414,8 @@ def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: s
         data["outq"] = "QGPL/QPRINT"
     if kind == "LF":
         data["based_on"] = f"{based_on.library}/{based_on.name}"
+        if joined_objs:
+            data["joined"] = [f"{o.library}/{o.name}" for o in joined_objs]
     obj, err = _place(store, actor, session, lib_name, name, "*FILE", _text_for(text, mem), data, replace_ok=False)
     if err:
         return _no(err)

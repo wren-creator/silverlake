@@ -232,8 +232,14 @@ class Files:
                     raise RpgleError(f"Physical file for logical file {obj.name} in library {obj.library} was "
                                      "not found.")
                 pf = parse_pf(based_on.name, based_on.data["dds"])
-                lf = parse_lf(obj.name, obj.data["dds"], pf)
                 self._load_pf(based_on, pf)
+                secondaries = {}
+                for sobj in self._lf_joined(obj):
+                    spf = parse_pf(sobj.name, sobj.data["dds"])
+                    self._load_pf(sobj, spf)
+                    secondaries[sobj.name] = spf
+                    pfs.setdefault(sobj.name, spf)
+                lf = parse_lf(obj.name, obj.data["dds"], pf, secondaries or None)
                 self._lf_objs[obj.name] = obj
                 pfs[name] = lf
                 pfs.setdefault(based_on.name, pf)
@@ -288,6 +294,20 @@ class Files:
         re-resolved against the library list on every open, the same as a real system."""
         lib, _, name = obj.data.get("based_on", "").partition("/")
         return self.store.objects.get((lib.upper(), name.upper(), "*FILE"))
+
+    def _lf_joined(self, obj) -> list:
+        """The secondary physical files a join logical file was created over, by the fully qualified
+        names CRTLF recorded in data["joined"] (JFILE order, after the primary). [] for a plain,
+        single-file logical file."""
+        out = []
+        for qualified in obj.data.get("joined", []):
+            lib, _, name = qualified.partition("/")
+            pf_obj = self.store.objects.get((lib.upper(), name.upper(), "*FILE"))
+            if pf_obj is None:
+                raise RpgleError(f"Physical file {qualified} for logical file {obj.name} in library "
+                                 f"{obj.library} was not found.")
+            out.append(pf_obj)
+        return out
 
     def display(self, prog, stack: list[str], inline: str = ""):
         """The record formats of the display files a program declares. Each WORKSTN F-spec names a `*FILE`
