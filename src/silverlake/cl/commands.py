@@ -209,6 +209,11 @@ CRTBNDRPG_PARAMS = [Param("PGM", "qname*", "*CTLSPEC"), Param("SRCFILE", "qname"
                     Param("GENLVL", "ignored", "10"), Param("TEXT", "text", "*SRCMBRTXT"),
                     Param("DFTACTGRP", "ignored", "*YES"), Param("USRPRF", "usrprfopt", "*USER"),
                     Param("USEADPAUT", "yesno", "*YES")]
+CRTRPGMOD_PARAMS = [Param("MODULE", "qname", "", required=True), Param("SRCFILE", "qname", "QRPGLESRC"),
+                    Param("SRCMBR", "name*", "*MODULE"), Param("TEXT", "text", "*SRCMBRTXT")]
+CRTPGM_PARAMS = [Param("PGM", "qname", "", required=True), Param("MODULE", "qname*", "*PGM"),
+                 Param("USRPRF", "usrprfopt", "*USER"), Param("USEADPAUT", "yesno", "*YES"),
+                 Param("TEXT", "text", "*SRCMBRTXT")]
 
 
 def _crt_dds_params(first_default: str, *middle: Param) -> list[Param]:
@@ -276,7 +281,8 @@ COMMANDS = {
     "CHGPF": CHGPF_PARAMS, "RGZPFM": RGZPFM_PARAMS, "CLRPFM": CLRPFM_PARAMS, "CHGPRTF": CHGPRTF_PARAMS,
     "CPYSRCF": CPYSRCF_PARAMS, "CPYTOIMPF": CPYTOIMPF_PARAMS,
     "STRPDM": STRPDM_PARAMS, "WRKMBRPDM": WRKMBRPDM_PARAMS, "WRKOBJPDM": WRKOBJPDM_PARAMS, "STRSEU": STRSEU_PARAMS,
-    "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTPF": CRTPF_PARAMS,
+    "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTRPGMOD": CRTRPGMOD_PARAMS,
+    "CRTPGM": CRTPGM_PARAMS, "CRTPF": CRTPF_PARAMS,
     "CRTDSPF": CRTDSPF_PARAMS, "CRTPRTF": CRTPRTF_PARAMS, "CRTLF": CRTLF_PARAMS,
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
     "DLTUSRPRF": DLT_PARAMS, "WRKUSRPRF": WRK_PARAMS, "SIGNOFF": [],
@@ -1003,6 +1009,12 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "CRTBNDRPG":
         return Outcome(source.compile_rpg(store, actor, session, b["PGM"], b["SRCFILE"], b["SRCMBR"], b["TEXT"],
                                           b["USRPRF"], b["USEADPAUT"]).message)
+    if name == "CRTRPGMOD":
+        return Outcome(source.compile_rpg_module(store, actor, session, b["MODULE"], b["SRCFILE"], b["SRCMBR"],
+                                                 b["TEXT"]).message)
+    if name == "CRTPGM":
+        return Outcome(source.create_program(store, actor, session, b["PGM"], b["MODULE"], b["USRPRF"],
+                                             b["USEADPAUT"], b["TEXT"]).message)
     if name in ("CRTPF", "CRTDSPF", "CRTPRTF", "CRTLF"):
         extra = {"page_length": b["PAGESIZE"], "copies": b["COPIES"]} if name == "CRTPRTF" else {}
         return Outcome(source.compile_dds(store, actor, session, name[3:], b["FILE"], b["SRCFILE"], b["SRCMBR"],

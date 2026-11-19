@@ -331,6 +331,74 @@ def _check_rpg(store: ProfileStore, actor: Profile, session, source: str) -> lis
     return problems or [("00", "No errors.")]
 
 
+# -- CRTRPGMOD, CRTPGM --------------------------------------------------------------------------------------
+
+def compile_rpg_module(store: ProfileStore, actor: Profile, session, module: str, srcfile: str, srcmbr: str,
+                       text: str) -> Done:
+    """CRTRPGMOD: the same check and listing CRTBNDRPG runs, placed as a *MODULE instead of a *PGM. A
+    module by itself does not run (CALL needs a *PGM); CRTPGM binds one into a program."""
+    from .rpg import AVAILABLE
+    if not AVAILABLE:
+        return _no(messages.info("The RPG runtime (rpgle_library) is not installed, so RPG programs cannot be compiled."))
+    mod_name = module.split("/")[-1].upper()
+    if srcmbr == "*MODULE":
+        srcmbr = mod_name
+    srcmbr = srcmbr.upper()
+    src, mem, cannot = _open_for_compile(store, actor, session, srcfile, srcmbr)
+    if cannot:
+        return _no(cannot)
+    lib_arg = module.split("/")[0] if "/" in module else "*CURLIB"
+    lib_name, name, _, err = _target(store, actor, session, f"{lib_arg}/{mod_name}")
+    if err:
+        return _no(err)
+    lines = list(mem["lines"])
+    problems = _check_rpg(store, actor, session, "\n".join(lines) + "\n")
+    cmd = f"CRTRPGMOD MODULE({lib_name}/{name}) SRCFILE({src.library}/{src.name}) SRCMBR({srcmbr})"
+    title = "Compile listing, RPG IV"
+    errors = [p for p in problems if p[0] != "00"]
+    if errors:
+        _listing(store, actor, session, title, cmd, lines, problems,
+                 f"Compilation failed. Module {name} not created in library {lib_name}.", name)
+        return _no(_doc("RNS9308", f"Compilation failed. Module {name} not created in library {lib_name}."))
+    data = {"attr": "RPGLE", "source": "\n".join(lines) + "\n", "srcfile": f"{src.library}/{src.name}",
+            "srcmbr": srcmbr, "created": datetime.now().isoformat(timespec="seconds")}
+    obj, err = _place(store, actor, session, lib_name, name, "*MODULE", _text_for(text, mem), data, replace_ok=True)
+    if err:
+        return _no(err)
+    now = datetime.now()
+    done = f"Module {name} placed in library {lib_name}. 00 highest severity. Created on {now:%m/%d/%y} at {now:%H:%M:%S}."
+    _listing(store, actor, session, title, cmd, lines, problems, done, name)
+    return Done(True, _doc("RNS9310", done))
+
+
+def create_program(store: ProfileStore, actor: Profile, session, pgm: str, module: str, usrprf: str,
+                   useadpaut: bool, text: str) -> Done:
+    """CRTPGM: binds one module into a program, copying its source and giving it the program-level
+    attributes (USRPRF, USEADPAUT) a module does not carry on its own. MODULE(*PGM), the default,
+    means a module with the same simple name as PGM, found through the library list like any
+    unqualified name. Only one module: nothing here models several separately-compiled modules
+    calling each other without re-parsing source, the way a real bound program can."""
+    pgm_name = pgm.split("/")[-1].upper()
+    mod_spec = pgm_name if module == "*PGM" else module
+    obj, err = locate(store, actor, mod_spec, "*MODULE", session.search_order())
+    if err:
+        return _no(err)
+    if USE & ~store.authority_to_object(actor, obj):
+        return _no(messages.not_authorized_to_object(obj.name, obj.library, "*MODULE"))
+    lib_name, name, _, err = _target(store, actor, session, pgm)
+    if err:
+        return _no(err)
+    data = dict(obj.data)
+    data["usrprf"] = usrprf
+    data["useadpaut"] = "*YES" if useadpaut else "*NO"
+    data["module"] = f"{obj.library}/{obj.name}"
+    out_obj, err = _place(store, actor, session, lib_name, name, "*PGM",
+                          text if text != "*SRCMBRTXT" else obj.text, data, replace_ok=True)
+    if err:
+        return _no(err)
+    return _ok(f"Program {name} in library {lib_name} created.")
+
+
 # -- CRTPF, CRTDSPF, CRTPRTF, CRTLF ------------------------------------------------------------------------
 
 KINDS = {"PF": "Physical file", "DSPF": "Display file", "PRTF": "Printer file", "LF": "Logical file"}

@@ -280,7 +280,7 @@ def objects_secured_by(store: ProfileStore, actor: Profile, autl: str) -> list[S
 
 
 DELETE_NEEDS = {"*FILE": Auth.OBJEXIST | Auth.OBJOPR, "*MENU": Auth.OBJEXIST | Auth.OBJOPR,
-                "*PGM": Auth.OBJEXIST, "*CMD": Auth.OBJEXIST,
+                "*PGM": Auth.OBJEXIST, "*CMD": Auth.OBJEXIST, "*MODULE": Auth.OBJEXIST,
                 "*MSGQ": Auth.OBJEXIST | Auth.OBJOPR | Auth.READ | Auth.DLT, "*OUTQ": Auth.OBJEXIST,
                 "*DTAARA": Auth.OBJEXIST, "*USRSPC": Auth.OBJEXIST}
 

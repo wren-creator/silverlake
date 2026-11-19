@@ -332,3 +332,60 @@ def test_crtlf_join_needs_authority_to_every_secondary_file(store):
     out = run(store, "OPERATOR", "CRTLF FILE(SCRATCH/PEOPVIS) SRCFILE(SCRATCH/QDDSSRC)", sess(store, "OPERATOR", "SCRATCH"))
     assert "not created" in said(out)
     assert ("SCRATCH", "PEOPVIS", "*FILE") not in store.objects
+
+
+# -- CRTRPGMOD, CRTPGM --------------------------------------------------------------------------------------
+
+def test_crtrpgmod_builds_a_module_the_default_member_is_the_module_name(store):
+    f, s = src_file(store)
+    source.put_member(store, f, "HELLO", HELLO)
+    out = run(store, "STUDENT", "CRTRPGMOD MODULE(SCRATCH/HELLO) SRCFILE(SCRATCH/QRPGLESRC)", s)
+    assert "placed" in said(out)
+    m = store.objects[("SCRATCH", "HELLO", "*MODULE")]
+    assert m.data["attr"] == "RPGLE" and "usrprf" not in m.data
+    assert ("SCRATCH", "HELLO", "*PGM") not in store.objects       # a module alone is not a program
+
+
+def test_crtrpgmod_with_errors_makes_no_module_and_prints_a_listing(store):
+    f, s = src_file(store)
+    source.put_member(store, f, "BAD", ["     C                   NOTANOPCODE"])
+    out = run(store, "STUDENT", "CRTRPGMOD MODULE(SCRATCH/BAD) SRCFILE(SCRATCH/QRPGLESRC)", s)
+    assert "not created" in said(out)
+    assert ("SCRATCH", "BAD", "*MODULE") not in store.objects
+
+
+def test_crtpgm_binds_a_module_into_a_program_that_runs(store):
+    f, s = src_file(store)
+    source.put_member(store, f, "HELLO", HELLO)
+    run(store, "STUDENT", "CRTRPGMOD MODULE(SCRATCH/HELLO) SRCFILE(SCRATCH/QRPGLESRC)", s)
+    out = run(store, "STUDENT", "CRTPGM PGM(SCRATCH/HELLO)", s)
+    assert "created" in said(out)
+    p = store.objects[("SCRATCH", "HELLO", "*PGM")]
+    assert p.data["attr"] == "RPGLE" and p.data["usrprf"] == "*USER" and p.data["module"] == "SCRATCH/HELLO"
+    assert run(store, "STUDENT", "CALL PGM(SCRATCH/HELLO)", s).view is None
+
+
+def test_crtpgm_module_name_can_differ_from_the_program(store):
+    f, s = src_file(store)
+    source.put_member(store, f, "HELLO", HELLO)
+    run(store, "STUDENT", "CRTRPGMOD MODULE(SCRATCH/HELLO) SRCFILE(SCRATCH/QRPGLESRC)", s)
+    out = run(store, "STUDENT", "CRTPGM PGM(SCRATCH/GREET) MODULE(SCRATCH/HELLO)", s)
+    assert "created" in said(out)
+    assert ("SCRATCH", "GREET", "*PGM") in store.objects
+
+
+def test_crtpgm_needs_the_module_to_exist(store):
+    s = sess(store, "STUDENT", "SCRATCH")
+    out = run(store, "STUDENT", "CRTPGM PGM(SCRATCH/NOPE)", s)
+    assert "not found" in said(out)
+    assert ("SCRATCH", "NOPE", "*PGM") not in store.objects
+
+
+def test_crtpgm_needs_use_authority_to_the_module(store):
+    f, s = src_file(store)
+    source.put_member(store, f, "HELLO", HELLO)
+    run(store, "STUDENT", "CRTRPGMOD MODULE(SCRATCH/HELLO) SRCFILE(SCRATCH/QRPGLESRC)", s)
+    store.objects[("SCRATCH", "HELLO", "*MODULE")].public = EXCLUDE
+    out = run(store, "OPERATOR", "CRTPGM PGM(SCRATCH/HELLO)", sess(store, "OPERATOR", "SCRATCH"))
+    assert "Not authorized" in said(out)
+    assert ("SCRATCH", "HELLO", "*PGM") not in store.objects
