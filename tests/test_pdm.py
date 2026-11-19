@@ -1,11 +1,17 @@
 """PDM and the source editor: STRPDM, WRKMBRPDM, STRSEU. The window is items i: row 0 is the beginning marker,
 line k of the member is item k + 1 while the window is at the top."""
 
+from datetime import date
+
 import pytest
 
 from silverlake.screens.model import Input, Text
 from silverlake.screens.signon import SignonController
 from silverlake.system import profiles, source
+
+
+def _today() -> str:
+    return date.today().isoformat()
 
 
 @pytest.fixture
@@ -443,3 +449,83 @@ def test_wrkobjpdm_delete_asks_first_and_f12_keeps_the_object(store, stu):
     seu(stu, opt0="4")
     seu(stu, "ENTER")
     assert ("SCRATCH", "QTEMPSRC", "*FILE") not in store.objects
+
+
+# -- sequence numbers and dates ------------------------------------------------------------------------
+
+def prefixes(s):
+    return [f.value for f in s.fields if isinstance(f, Input) and f.name.startswith("p")]
+
+
+def member(store, name, lib="SCRATCH", file="QRPGLESRC"):
+    return store.objects[(lib, file, "*FILE")].data["members"][name]
+
+
+def test_a_legacy_member_with_no_history_gets_sequential_numbers(store, stu):
+    put(store, "TEST", ["one", "two", "three"])
+    s = open_edit(store, stu)
+    assert prefixes(s) == ["0001.00", "0002.00", "0003.00"]
+
+
+def test_an_inserted_line_gets_a_number_between_its_neighbors_not_a_renumber(store, stu):
+    put(store, "TEST", ["one", "two"])
+    open_edit(store, stu)
+    seu(stu, p1="I1")
+    s = seu(stu, d2="between")
+    assert prefixes(s) == ["0001.00", "0001.50", "0002.00"]
+    seu(stu, seu="SAVE")
+    assert member(store, "TEST")["seqs"] == [1.0, 1.5, 2.0]
+
+
+def test_typing_over_a_line_keeps_its_seq_but_dates_it_today(store, stu):
+    source.put_member(store, store.objects[("SCRATCH", "QRPGLESRC", "*FILE")], "TEST", ["one", "two"],
+                      "RPGLE", seqs=[1.0, 2.0], line_dates=["2026-01-01", "2026-01-01"])
+    open_edit(store, stu)
+    seu(stu, d1="changed", seu="SAVE")
+    m = member(store, "TEST")
+    assert m["seqs"] == [1.0, 2.0]
+    assert m["line_dates"][0] == _today() and m["line_dates"][1] == "2026-01-01"
+
+
+def test_change_command_dates_the_lines_it_changes(store, stu):
+    source.put_member(store, store.objects[("SCRATCH", "QRPGLESRC", "*FILE")], "TEST", ["line 3", "line 4"],
+                      "RPGLE", seqs=[1.0, 2.0], line_dates=["2026-01-01", "2026-01-01"])
+    open_edit(store, stu)
+    seu(stu, seu="CHANGE 'line 3' 'row 3'")
+    seu(stu, seu="SAVE")
+    m = member(store, "TEST")
+    assert m["line_dates"][0] == _today() and m["line_dates"][1] == "2026-01-01"
+
+
+def test_a_narrow_gap_renumbers_the_whole_member_first(store, stu):
+    source.put_member(store, store.objects[("SCRATCH", "QRPGLESRC", "*FILE")], "TEST", ["one", "two"],
+                      "RPGLE", seqs=[1.0, 1.001], line_dates=["2026-01-01", "2026-01-01"])
+    open_edit(store, stu)
+    seu(stu, p1="I1")
+    seu(stu, d2="between")
+    seu(stu, seu="SAVE")
+    assert member(store, "TEST")["seqs"] == [1.0, 1.5, 2.0]
+
+
+def test_copy_carries_the_seq_history_over(store, stu):
+    source.put_member(store, store.objects[("SCRATCH", "QRPGLESRC", "*FILE")], "A", ["x"], "RPGLE",
+                      seqs=[5.0], line_dates=["2026-01-01"])
+    cmd(stu, "WRKMBRPDM FILE(SCRATCH/QRPGLESRC)")
+    seu(stu, opt0="3", command="A2")
+    assert member(store, "A2")["seqs"] == [5.0] and member(store, "A2")["line_dates"] == ["2026-01-01"]
+
+
+def test_rename_carries_the_seq_history_over(store, stu):
+    source.put_member(store, store.objects[("SCRATCH", "QRPGLESRC", "*FILE")], "A", ["x"], "RPGLE",
+                      seqs=[5.0], line_dates=["2026-01-01"])
+    cmd(stu, "WRKMBRPDM FILE(SCRATCH/QRPGLESRC)")
+    seu(stu, opt0="7", command="A3")
+    assert member(store, "A3")["seqs"] == [5.0] and member(store, "A3")["line_dates"] == ["2026-01-01"]
+
+
+def test_change_text_only_keeps_the_seq_history(store, stu):
+    source.put_member(store, store.objects[("SCRATCH", "QRPGLESRC", "*FILE")], "A", ["x"], "RPGLE",
+                      seqs=[5.0], line_dates=["2026-01-01"])
+    cmd(stu, "WRKMBRPDM FILE(SCRATCH/QRPGLESRC)")
+    seu(stu, opt0="13", command="New words")
+    assert member(store, "A")["seqs"] == [5.0] and member(store, "A")["line_dates"] == ["2026-01-01"]

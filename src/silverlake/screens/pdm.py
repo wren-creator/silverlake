@@ -15,7 +15,9 @@ same thing everywhere in Silverlake: 2=Edit Object Authority, 3=Copy (CRTDUPOBJ)
 Object Authority, 7=Rename, 8=Display Object Description, 13=Change text; 6, 9 and 14-17 are not built.
 SEU is a small one: line commands I, D, C, M, R (with counts, and doubled for a block, A and B to place
 a copy or move), a command line (TOP, BOTTOM, FIND, CHANGE, SAVE, FILE, CANCEL), Roll, and an exit
-display. Not built: prefix areas for formatting, syntax prompts, and column shifting."""
+display. Every line carries a real sequence number and a last-changed date with the member, same as a
+source physical file's own record would (see Editor's own docstring). Not built: prefix areas for
+formatting, syntax prompts, and column shifting."""
 
 from __future__ import annotations
 
@@ -53,6 +55,10 @@ class Step:
 
 def _title(text: str, col: int) -> Text:
     return Text(0, col, text, ds.ATTR_WHITE)
+
+
+def _today() -> str:
+    return datetime.now().date().isoformat()
 
 
 def _msg(rows: list, message: str) -> None:
@@ -273,7 +279,9 @@ class MemberList:
         if opt == "13":
             if not source.can_write(ctx.store, ctx.profile, f):
                 return Step(f"You do not have authority to file {f.name} in {f.library}.")
-            source.put_member(ctx.store, f, name, f.data["members"][name]["lines"], text=param[:50])
+            m = f.data["members"][name]
+            source.put_member(ctx.store, f, name, m["lines"], text=param[:50], seqs=m.get("seqs"),
+                             line_dates=m.get("line_dates"))
             return Step(f"Text of member {name} changed.")
         if opt in ("3", "7"):
             new = param.upper()
@@ -284,7 +292,8 @@ class MemberList:
             if source.member(f, new):
                 return Step(f"Member {new} already exists in file {f.name}.")
             m = f.data["members"][name]
-            source.put_member(ctx.store, f, new, list(m["lines"]), m.get("type", ""), m.get("text", ""))
+            source.put_member(ctx.store, f, new, list(m["lines"]), m.get("type", ""), m.get("text", ""),
+                             m.get("seqs"), m.get("line_dates"))
             if opt == "7":
                 source.delete_member(ctx.store, f, name)
             return Step(f"Member {name} {'copied' if opt == '3' else 'renamed'} to {new}.")
@@ -504,15 +513,24 @@ def _ruler() -> str:
 
 
 class Editor:
-    """Source Entry Utility, small. A line is [text, id]; the ids stay put while lines move so a block
-    command typed on one screen can be finished on a later one."""
+    """Source Entry Utility, small. A line is [text, id, seq, date]; the ids stay put while lines move so a
+    block command typed on one screen can be finished on a later one. seq is SEU's own sequence number
+    (a float, drawn as NNNN.NN) and date its last-changed date: both persist with the member, same as a
+    real source physical file's record carries them, through `source.put_member`/`seq_and_dates_for`.
+    A line created by an edit (typed into a blank, R, or a copy/move landing) starts with seq and date
+    both None, filled in by `_fill_gaps` once every command on the screen has run, interpolated between
+    its real neighbors (even spacing across a run of new lines, not SEU's own halving, which comes to the
+    same thing: a strictly increasing number with two decimal places). date is kept but not drawn, since
+    nothing here says what a real small editor's date column looks like."""
 
     def __init__(self, ctx: Context, file: SecuredObject, name: str, lines: list[str], browse: bool, new: bool,
-                 type_: str, text: str) -> None:
+                 type_: str, text: str, seqs: list[float] | None = None, dates: list[str] | None = None) -> None:
         self.ctx, self.file, self.name, self.browse, self.new = ctx, file, name, browse, new
         self.type, self.text = type_, text
         self._next = 0
-        self.lines = [self._line(t) for t in lines]
+        seqs = seqs if seqs is not None else [float(i + 1) for i in range(len(lines))]
+        dates = dates if dates is not None else [_today()] * len(lines)
+        self.lines = [self._line(t, s, d) for t, s, d in zip(lines, seqs, dates)]
         self.top = 0                             # index into the display items
         self.dirty = False
         self.inserts: dict[int, int] = {}        # line id -> blank lines being entered after it
@@ -523,9 +541,9 @@ class Editor:
         self.shown: list[tuple] = []             # what the last draw put on each row, to read the answers back
         self.find_text = ""
 
-    def _line(self, text: str) -> list:
+    def _line(self, text: str, seq: float | None = None, when: str | None = None) -> list:
         self._next += 1
-        return [text, self._next]
+        return [text, self._next, seq, when]
 
     @classmethod
     def open(cls, ctx: Context, file: SecuredObject, name: str, browse: bool = False, new: bool = False,
@@ -545,8 +563,9 @@ class Editor:
             if holder and holder != who:
                 return None, f"Member {name} of file {file.name} in library {file.library} is in use."
             ctx.store.member_locks[key] = who
+        seqs, dates = source.seq_and_dates_for(m or {})
         ed = cls(ctx, file, name, list((m or {}).get("lines", [])), browse, new and m is None,
-                 (m or {}).get("type", type_), (m or {}).get("text", text))
+                 (m or {}).get("type", type_), (m or {}).get("text", text), seqs, dates)
         ed.lock_key = None if browse else key
         return ed, ""
 
@@ -561,7 +580,7 @@ class Editor:
 
     def _items(self) -> list[tuple]:
         items: list[tuple] = [("beg",)]
-        for idx, (text, lid) in enumerate(self.lines):
+        for idx, (text, lid, _, _) in enumerate(self.lines):
             items.append(("line", idx))
             items += [("ins", lid, k) for k in range(self.inserts.get(lid, 0))]
         items.append(("end",))
@@ -592,7 +611,7 @@ class Editor:
             elif item[0] == "line":
                 idx = item[1]
                 text = self.lines[idx][0]
-                rows.append(Input(r, 0, PFX_LEN, f"p{i}", monocase=True, value=f"{idx + 1:04d}.00"))
+                rows.append(Input(r, 0, PFX_LEN, f"p{i}", monocase=True, value=self._seq_str(self.lines[idx][2])))
                 rows.append(Input(r, DATA_COL, DATA_LEN, f"d{i}", value=text[:DATA_LEN]) if not self.browse
                             else Text(r, DATA_COL, text[:DATA_LEN], ds.ATTR_GREEN))
             else:
@@ -665,8 +684,9 @@ class Editor:
                     updated = (typed + old[DATA_LEN:]).rstrip()
                     if updated != old:
                         self.lines[idx][0] = updated
+                        self.lines[idx][3] = _today()
                         self.dirty = True
-                parsed = self._prefix(values[f"p{i}"], f"{idx + 1:04d}.00") if f"p{i}" in values else None
+                parsed = self._prefix(values[f"p{i}"], self._seq_str(self.lines[idx][2])) if f"p{i}" in values else None
                 if parsed:
                     cmds.append((lid, *parsed))
             elif item[0] == "ins":
@@ -685,7 +705,62 @@ class Editor:
         cmds.sort(key=lambda c: c[1] in ("A", "B"))        # a copy or move target is used after its source is picked
         for lid, cmd, count in cmds:
             error = self._line_command(lid, cmd, count) or error
+        self._fill_gaps()
         return error
+
+    @staticmethod
+    def _seq_str(seq: float | None) -> str:
+        if seq is None:
+            return "    .  "
+        whole, frac = divmod(round(seq * 100), 100)
+        return f"{whole:04d}.{frac:02d}"
+
+    def _gaps(self) -> list[tuple[int, int]]:
+        """(start, stop) of every run of lines whose seq is still None (not yet given one)."""
+        gaps, n, i = [], len(self.lines), 0
+        while i < n:
+            if self.lines[i][2] is None:
+                j = i
+                while j < n and self.lines[j][2] is None:
+                    j += 1
+                gaps.append((i, j))
+                i = j
+            else:
+                i += 1
+        return gaps
+
+    def _fill_gaps(self) -> None:
+        """Every line created this round (typed into a blank, R, or a copy/move landing) has seq and
+        date both None; give each a sequence number interpolated between its real neighbors (spread
+        evenly across a run of them, same as SEU's own halving comes to) and today's date. If a gap is
+        too narrow to fit another number at two decimal places, the whole member is renumbered to
+        whole numbers first, same as real SEU does when sequence numbers run out."""
+        today = _today()
+        gaps = self._gaps()
+        n = len(self.lines)
+        if any(self._too_narrow(i, j) for i, j in gaps):
+            self._renumber_all()
+        for i, j in gaps:
+            lo = self.lines[i - 1][2] if i > 0 else 0.0
+            hi = self.lines[j][2] if j < n else lo + (j - i + 1)
+            step = (hi - lo) / (j - i + 1)
+            for k in range(j - i):
+                self.lines[i + k][2] = round(lo + step * (k + 1), 2)
+                self.lines[i + k][3] = today
+
+    def _too_narrow(self, i: int, j: int) -> bool:
+        n = len(self.lines)
+        lo = self.lines[i - 1][2] if i > 0 else 0.0
+        hi = self.lines[j][2] if j < n else lo + (j - i + 1)
+        step = (hi - lo) / (j - i + 1)
+        return round(lo + step, 2) <= round(lo, 2) or round(hi - step, 2) >= round(hi, 2)
+
+    def _renumber_all(self) -> None:
+        n = 0
+        for ln in self.lines:
+            if ln[2] is not None:
+                n += 1
+                ln[2] = float(n)
 
     @staticmethod
     def _prefix(value: str, original: str) -> tuple[str, int] | None:
@@ -704,7 +779,7 @@ class Editor:
         return m.group(1).upper(), int(m.group(2)) if m.group(2) else 0
 
     def _index(self, lid: int) -> int:
-        return next(i for i, (_, x) in enumerate(self.lines) if x == lid)
+        return next(i for i, (_, x, _, _) in enumerate(self.lines) if x == lid)
 
     def _line_command(self, lid: int, cmd: str, count: int) -> str:
         n = max(1, count)
@@ -722,7 +797,7 @@ class Editor:
             self.dirty = True
             return ""
         if cmd in ("C", "M"):
-            self.carry = (cmd, [x for _, x in self.lines[i:i + n]])
+            self.carry = (cmd, [x for _, x, _, _ in self.lines[i:i + n]])
             return ""
         if cmd in ("DD", "CC", "MM", "RR"):
             if self.block and self.block[0] == cmd:
@@ -754,11 +829,11 @@ class Editor:
             del self.lines[a:b + 1]
             self.dirty = True
         elif cmd == "RR":
-            copy = [self._line(t) for t, _ in self.lines[a:b + 1]]
+            copy = [self._line(t) for t, _, _, _ in self.lines[a:b + 1]]
             self.lines[b + 1:b + 1] = copy
             self.dirty = True
         else:
-            self.carry = ("C" if cmd == "CC" else "M", [x for _, x in self.lines[a:b + 1]])
+            self.carry = ("C" if cmd == "CC" else "M", [x for _, x, _, _ in self.lines[a:b + 1]])
         return ""
 
     def _command(self, text: str) -> Step:
@@ -813,6 +888,7 @@ class Editor:
             if old.lower() in ln[0].lower():
                 pat = re.compile(re.escape(old), re.I)
                 ln[0] = pat.sub(lambda _: new, ln[0], count=0 if everywhere else 1)
+                ln[3] = _today()
                 count += 1
                 self.dirty = True
                 if not everywhere:
@@ -821,7 +897,8 @@ class Editor:
 
     def _save(self, name: str, text: str) -> None:
         store = self.ctx.store
-        m = source.put_member(store, self.file, name, [t for t, _ in self.lines], self.type, text)
+        m = source.put_member(store, self.file, name, [ln[0] for ln in self.lines], self.type, text,
+                              [ln[2] for ln in self.lines], [ln[3] for ln in self.lines])
         self.new = False
         self.dirty = False
         self.name, self.text = name.upper(), text

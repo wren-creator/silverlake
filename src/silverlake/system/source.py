@@ -92,13 +92,28 @@ def member(obj: SecuredObject, name: str) -> dict | None:
 
 
 def put_member(store: ProfileStore, obj: SecuredObject, name: str, lines: list[str], type_: str | None = None,
-               text: str | None = None) -> dict:
+               text: str | None = None, seqs: list[float] | None = None,
+               line_dates: list[str] | None = None) -> dict:
     """Create or replace a member. Lines are cut to the file's width, which is what a record of that
-    length can hold."""
+    length can hold. seqs and line_dates are each line's own sequence number and last-changed date --
+    SEU shows the sequence number while editing; the date is kept (for `seq_and_dates_for`) but not
+    drawn, since nothing here says what a real small editor's date column looks like. A caller that
+    is really just moving or duplicating existing records (CPYSRCF, PDM's own copy and rename, a
+    change-text-only save) passes the source member's own seqs/line_dates through so that history
+    survives; a caller that does not is fresh content, and gets fresh ones synthesized the next time
+    something needs them (`seq_and_dates_for`), not stale ones left over from different content."""
     name = name.upper()
     members = obj.data.setdefault("members", {})
     cur = members.get(name, {"type": type_ or "", "text": "", "lines": []})
     cur["lines"] = [ln.rstrip()[:width(obj)] for ln in lines]
+    if seqs is not None:
+        cur["seqs"] = list(seqs)
+    else:
+        cur.pop("seqs", None)
+    if line_dates is not None:
+        cur["line_dates"] = list(line_dates)
+    else:
+        cur.pop("line_dates", None)
     if type_ is not None:
         cur["type"] = type_
     if text is not None:
@@ -107,6 +122,18 @@ def put_member(store: ProfileStore, obj: SecuredObject, name: str, lines: list[s
     members[name] = cur
     store.on_change()
     return cur
+
+
+def seq_and_dates_for(mem: dict) -> tuple[list[float], list[str]]:
+    """Every line's own sequence number and last-changed date, synthesized for a member that does not
+    carry them yet (seeded, or saved before this existed): sequential whole numbers and the member's
+    own last-changed date, or today if even that is missing."""
+    lines = mem.get("lines", [])
+    seqs, dates = mem.get("seqs"), mem.get("line_dates")
+    if seqs is not None and dates is not None and len(seqs) == len(lines) and len(dates) == len(lines):
+        return list(seqs), list(dates)
+    when = mem.get("changed", "")[:10] or datetime.now().date().isoformat()
+    return [float(i + 1) for i in range(len(lines))], [when] * len(lines)
 
 
 def delete_member(store: ProfileStore, obj: SecuredObject, name: str) -> bool:
@@ -152,7 +179,8 @@ def copy_members(store: ProfileStore, actor: Profile, session, frm: str, to: str
         if to_name in dst_members and mbropt == "*ADD":
             skipped += 1
             continue
-        put_member(store, dst, to_name, list(mem.get("lines", [])), mem.get("type") or None, mem.get("text", ""))
+        put_member(store, dst, to_name, list(mem.get("lines", [])), mem.get("type") or None, mem.get("text", ""),
+                  mem.get("seqs"), mem.get("line_dates"))
     copied = len(names) - skipped
     if copied == 0:
         return _no(messages.info("No members copied: the target member already exists and MBROPT(*ADD) was "
