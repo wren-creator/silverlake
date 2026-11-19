@@ -156,7 +156,8 @@ class MemberList:
             Text(2, 1, "  Library  . . . .     " + self.file.library, ds.ATTR_GREEN),
             Text(2, 40, "Position to  . . . . .", ds.ATTR_GREEN), Input(2, 63, 10, "pos", monocase=True),
             Text(4, 1, "Type options, press Enter.", ds.ATTR_BLUE),
-            Text(5, 3, "2=Edit  3=Copy  4=Delete  5=Display  7=Rename  13=Chg text  14=Compile", ds.ATTR_BLUE),
+            Text(5, 3, "2=Edit  3=Copy  4=Delete  5=Display  6=Print  7=Rename  8=Descrip", ds.ATTR_BLUE),
+            Text(6, 3, "13=Chg text  14=Compile", ds.ATTR_BLUE),
             Text(7, 1, "Opt  Member       Type        Text", ds.ATTR_WHITE),
         ]
         for i, name in enumerate(shown):
@@ -298,7 +299,17 @@ class MemberList:
                 line = f"{cmd} FILE({f.library}/{name}) SRCFILE({f.library}/{f.name}) SRCMBR({name})"
             out = ctx.run(line)
             return Step(out.message.text if out.message else "")
-        return Step(f"Option {opt} is not valid." if opt not in ("6", "8", "9", "15", "16", "17") else
+        if opt == "6":
+            return Step(source.print_member(ctx.store, ctx.profile, ctx.session, f, name).message.text)
+        if opt == "8":
+            m = f.data["members"][name]
+            changed = m.get("changed", "")
+            when = datetime.fromisoformat(changed).strftime("%m/%d/%y %H:%M:%S") if changed else "*NONE"
+            return Step(f"Member {name}: type {m.get('type') or '(none)'}, {len(m['lines'])} lines, "
+                       f"text '{m.get('text', '')}', changed {when}.")
+        if opt == "9":
+            return Step("Save is not available in Silverlake yet: no save file or media is modeled.")
+        return Step(f"Option {opt} is not valid." if opt not in ("15", "16", "17") else
                     f"Option {opt} is not built yet.")
 
     def _in_confirm(self, aid: str) -> Step:

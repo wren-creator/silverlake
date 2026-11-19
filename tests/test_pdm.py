@@ -307,6 +307,31 @@ def test_copy_rename_and_change_text_read_their_value_from_the_command_line(stor
     assert store.objects[("SCRATCH", "QRPGLESRC", "*FILE")].data["members"]["A2"]["text"] == "New words"
 
 
+def test_option_6_prints_the_member_to_qsysprt(store, stu):
+    put(store, "A", ["line one", "line two"])
+    cmd(stu, "WRKMBRPDM FILE(SCRATCH/QRPGLESRC)")
+    s = seu(stu, opt0="6")
+    assert "printed" in " ".join(texts(s))
+    listing = next(f for f in store.spool if f.name == "QSYSPRT")
+    assert "line one" in "\n".join(listing.lines) and "line two" in "\n".join(listing.lines)
+
+
+def test_option_8_shows_the_member_description(store, stu):
+    put(store, "A", ["x", "y", "z"])
+    source.put_member(store, store.objects[("SCRATCH", "QRPGLESRC", "*FILE")], "A", ["x", "y", "z"], "RPGLE", "Some text")
+    cmd(stu, "WRKMBRPDM FILE(SCRATCH/QRPGLESRC)")
+    s = seu(stu, opt0="8")
+    text = " ".join(texts(s))
+    assert "RPGLE" in text and "3 lines" in text and "Some text" in text
+
+
+def test_option_9_save_is_not_modeled(store, stu):
+    put(store, "A", ["x"])
+    cmd(stu, "WRKMBRPDM FILE(SCRATCH/QRPGLESRC)")
+    s = seu(stu, opt0="9")
+    assert "not available" in " ".join(texts(s))
+
+
 def test_position_to_scrolls_the_list(store, stu):
     for n in "ABCDEFGHIJKLMNOP":
         put(store, n, ["x"])

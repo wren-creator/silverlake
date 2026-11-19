@@ -220,6 +220,21 @@ def _listing(store: ProfileStore, actor: Profile, session, title: str, command: 
     spoolmod.new_file(store, session, actor, "QSYSPRT", out, user_data)
 
 
+def print_member(store: ProfileStore, actor: Profile, session, f: SecuredObject, name: str) -> Done:
+    """PDM's Print option (6): a plain listing of the member's lines spooled to QSYSPRT on
+    QGPL/QPRINT, same shape as a compile listing's source section, but with no compile run."""
+    mem = member(f, name)
+    if mem is None:
+        return _no(messages.info(f"Member {name} not found in file {f.name}."))
+    now = datetime.now()
+    out = [f" {'Source Listing':<60}{now:%y-%m-%d}  {now:%H:%M:%S}",
+           f" File . . . . . . . : {f.name:<10} Member . . . . . . : {name}", "", " Line  Source"]
+    out += [f" {i:>4}  {ln}" for i, ln in enumerate(mem["lines"], 1)] or ["       (no source lines)"]
+    out += ["", "      * * * * *   E N D   O F   L I S T I N G   * * * * *"]
+    spoolmod.new_file(store, session, actor, "QSYSPRT", out, name)
+    return _ok(f"Member {name} in file {f.name} printed.")
+
+
 # -- opening the member to compile ------------------------------------------------------------------------
 
 def _open_for_compile(store, actor, session, srcfile: str, mbr: str):
