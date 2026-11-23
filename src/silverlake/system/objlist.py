@@ -44,8 +44,9 @@ reach through *PUBLIC."""
 import copy
 import fnmatch
 from dataclasses import replace
+from datetime import datetime
 
-from . import messages
+from . import messages, spool as spoolmod
 from .authority import ALL, USE, Auth, SecuredObject, SpecialAuthority
 from .objects import NAME, SYSTEM_LIBRARIES, TYPES, Done, _no, _ok, authority_to_library, locate, visible
 from .profiles import Profile, ProfileStore
@@ -332,3 +333,23 @@ def describe_object(store: ProfileStore, actor: Profile, qualified: str, typ: st
     if not _allobj(store, actor) and store.authority_to_object(actor, obj) == Auth.NONE:
         return None, messages.not_authorized_to_object_2189(obj.name, obj.library, typ)
     return obj, None
+
+
+def print_object(store: ProfileStore, actor: Profile, session, obj: SecuredObject) -> Done:
+    """Work with Objects Using PDM's Print option (6): the same fields Display Object Description -
+    Full shows (captured), spooled to QSYSPRT on QGPL/QPRINT instead of drawn. Same authority DSPOBJD
+    itself needs (some authority other than *EXCLUDE on the object)."""
+    if not _allobj(store, actor) and store.authority_to_object(actor, obj) == Auth.NONE:
+        return _no(messages.not_authorized_to_object_2189(obj.name, obj.library, obj.type))
+    now = datetime.now()
+    made = obj.data.get("created")
+    created = datetime.fromisoformat(made).strftime("%m/%d/%y %H:%M:%S") if made else "*NONE"
+    out = [f" {'Object Description':<60}{now:%y-%m-%d}  {now:%H:%M:%S}",
+           f" Object . . . . . . : {obj.name:<10} Library  . . . . . : {obj.library}",
+           f" Type . . . . . . . : {obj.type:<10} Attribute  . . . . : {obj.data.get('attr', '')}",
+           f" Owner  . . . . . . : {obj.owner}",
+           f" Text . . . . . . . : {obj.text}",
+           f" Created  . . . . . : {created}", "",
+           "      * * * * *   E N D   O F   L I S T I N G   * * * * *"]
+    spoolmod.new_file(store, session, actor, "QSYSPRT", out, obj.name)
+    return _ok(f"Object {obj.name} in library {obj.library} printed.")

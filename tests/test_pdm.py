@@ -451,6 +451,38 @@ def test_wrkobjpdm_delete_asks_first_and_f12_keeps_the_object(store, stu):
     assert ("SCRATCH", "QTEMPSRC", "*FILE") not in store.objects
 
 
+def test_wrkobjpdm_option_6_prints_the_object_description(store):
+    c = signed(store, "DEVELOPER")
+    cmd(c, "WRKOBJPDM LIB(SRCLIB) OBJ(*ALL)")
+    s = seu(c, opt0="6")
+    assert "printed" in " ".join(texts(s))
+    spooled = store.spool[-1]
+    assert spooled.name == "QSYSPRT" and "Object Description" in spooled.lines[0]
+
+
+def test_wrkobjpdm_option_9_says_save_is_not_modeled(store, stu):
+    cmd(stu, "WRKOBJPDM LIB(SCRATCH) OBJ(QRPGLESRC)")
+    s = seu(stu, opt0="9")
+    assert "no save file or media is modeled" in " ".join(texts(s))
+
+
+def test_wrkobjpdm_option_14_recompiles_a_program_from_its_own_recorded_source(store):
+    c = signed(store, "DEVELOPER")
+    cmd(c, "ADDLIBLE SRCLIB")
+    cmd(c, "CRTDSPF FILE(SRCLIB/HELLOD) SRCFILE(SRCLIB/QDDSSRC)")     # HELLO's own F-spec needs it
+    cmd(c, "CRTBNDRPG PGM(SRCLIB/HELLO) SRCFILE(SRCLIB/QRPGLESRC)")
+    cmd(c, "WRKOBJPDM LIB(SRCLIB) OBJ(HELLO)")
+    s = seu(c, opt0="14")
+    assert "Program HELLO placed in library SRCLIB." in " ".join(texts(s))
+
+
+def test_wrkobjpdm_option_14_on_an_object_with_no_recorded_source(store, stu):
+    cmd(stu, "CRTSRCPF FILE(SCRATCH/QTEMPSRC)")
+    cmd(stu, "WRKOBJPDM LIB(SCRATCH) OBJ(QTEMPSRC)")
+    s = seu(stu, opt0="14")
+    assert "has no recorded source to compile from" in " ".join(texts(s))
+
+
 # -- sequence numbers and dates ------------------------------------------------------------------------
 
 def prefixes(s):

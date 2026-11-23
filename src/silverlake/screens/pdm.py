@@ -12,7 +12,12 @@ Work with Objects and SEU displays are laid out from the way they are known to l
 their wording and positions are ours. Work with Objects Using PDM reuses the exact numbers Work with
 Objects (also ours) already gives each option, just drawn in PDM's own layout, so a number means the
 same thing everywhere in Silverlake: 2=Edit Object Authority, 3=Copy (CRTDUPOBJ), 4=Delete, 5=Display
-Object Authority, 7=Rename, 8=Display Object Description, 13=Change text; 6, 9 and 14-17 are not built.
+Object Authority, 7=Rename, 8=Display Object Description, 13=Change text; 6=Print spools the
+same fields Display Object Description - Full shows (also ours); 9=Save plainly says no save file
+or media is modeled, same wording Work with Members already gives its own option 9; 14=Compile
+recompiles a *PGM or *MODULE from its own recorded SRCFILE/SRCMBR (CRTBNDRPG or CRTRPGMOD), or says
+plainly there is none to recompile from; 15, 16 and 17 stay not built, the way 15 to 17 already sit
+unbuilt on Work with Members.
 SEU is a small one: line commands I, D, C, M, R (with counts, and doubled for a block, A and B to place
 a copy or move), a command line (TOP, BOTTOM, FIND, CHANGE, SAVE, FILE, CANCEL), Roll, and an exit
 display. Every line carries a real sequence number and a last-changed date with the member, same as a
@@ -387,7 +392,8 @@ class ObjectList:
             Text(1, 1, "Library  . . . . . .   " + self.lib, ds.ATTR_GREEN),
             Text(2, 40, "Position to  . . . . .", ds.ATTR_GREEN), Input(2, 63, 10, "pos", monocase=True),
             Text(4, 1, "Type options, press Enter.", ds.ATTR_BLUE),
-            Text(5, 3, "2=Edit  3=Copy  4=Delete  5=Display  7=Rename  8=Descrip  13=Chg text", ds.ATTR_BLUE),
+            Text(5, 3, "2=Edit  3=Copy  4=Delete  5=Display  6=Print  7=Rename  8=Descrip", ds.ATTR_BLUE),
+            Text(6, 3, "9=Save  13=Chg text  14=Compile", ds.ATTR_BLUE),
             Text(7, 1, "Opt  Object      Type   Attribute   Text", ds.ATTR_WHITE),
         ]
         for i, obj in enumerate(shown):
@@ -478,7 +484,18 @@ class ObjectList:
         if opt == "13":
             text = param.replace("'", "''")
             return self._run(f"CHGOBJD {ref} TEXT('{text}')")
-        return Step(f"Option {opt} is not valid." if opt not in ("6", "9", "14", "15", "16", "17") else
+        if opt == "6":
+            from ..system import objlist
+            return Step(objlist.print_object(self.ctx.store, self.ctx.profile, self.ctx.session, obj).message.text)
+        if opt == "9":
+            return Step("Save is not available in Silverlake yet: no save file or media is modeled.")
+        if opt == "14":
+            srcfile, srcmbr = obj.data.get("srcfile"), obj.data.get("srcmbr")
+            if obj.data.get("attr") != "RPGLE" or not srcfile or not srcmbr:
+                return Step(f"Object {obj.name} has no recorded source to compile from.")
+            command = "CRTRPGMOD MODULE" if obj.type == "*MODULE" else "CRTBNDRPG PGM"
+            return self._run(f"{command}({obj.library}/{obj.name}) SRCFILE({srcfile}) SRCMBR({srcmbr})")
+        return Step(f"Option {opt} is not valid." if opt not in ("15", "16", "17") else
                     f"Option {opt} is not built yet.")
 
     def _in_confirm(self, aid: str) -> Step:
