@@ -17,8 +17,6 @@ import sys
 _TITLE = re.compile(r"\((\w+)\)\s*$")
 LABEL_COL, KEYWORD_COL = 1, 34
 REQUIRED_ATTR = "0x26"      # the host draws a required parameter brighter than the rest
-_FIELD_NAME = re.compile(r"[A-Z][A-Z0-9]*(\+)?(@\d*)?$")   # a real keyword, not F11's choices view (no
-                                                            # keyword column at all, so extract() reads "", "@", ">", ...)
 
 
 # A change command (CHGPRF, CHGJOB) shows the current values of the profile it was captured with, and those are
@@ -32,6 +30,18 @@ _BANNER = re.compile(r"^'-=\* .*pub400.*", re.I)
 
 def scrub(default: str) -> str:
     return "*SAME" if _BANNER.match(default) else SCRUB.get(default, default)
+
+
+FIELD_COL = 45      # every captured field sits at 49 or 51; F11's choices view shifts both 13 left (to 36, 38)
+
+
+def _real_page(rows: list[tuple]) -> bool:
+    """False for F11's choices view: its fields sit shifted 13 columns left of where a prompt's own
+    ever do, so a Roll Up chain that walks into one (F9 followed by F11, `auth-f9-gaps`) does not
+    mistake it for a further page. A page of nothing but a keyword's own continuation (no field of
+    its own moved, `carry` fills in the rest) still has every field at its usual column, so this
+    does not reject it the way checking for a keyword on the page itself would have."""
+    return all(r[3] == 0 or r[3] >= FIELD_COL for r in rows)
 
 
 def _runs_by_row(snapshot: dict) -> dict[int, list[dict]]:
@@ -158,8 +168,7 @@ def extract_all(captures: list[dict]) -> dict[str, dict]:
                 if spec["bottom"] != "More...":
                     continue
                 cur, end, j = spec, spec["end"], i
-            elif spec["rows"] != found[name]["rows"] and all(
-                    _FIELD_NAME.fullmatch(r[2]) for r in spec["rows"] if r[3]):
+            elif spec["rows"] != found[name]["rows"] and _real_page(spec["rows"]):
                 # a page a blank prompt could never reach: the host redraws the first page's own
                 # fields too (filled, since that is what unblocked it), so only what is new goes in.
                 seen = {r[2] for r in found[name]["rows"] if r[2]}
@@ -175,7 +184,7 @@ def extract_all(captures: list[dict]) -> dict[str, dict]:
                 continue
             while cur["bottom"] == "More..." and j + 1 < len(snaps):
                 nxt = extract(snaps[j + 1], end)
-                if (not nxt or nxt[0] != name or nxt[1]["rows"] == cur["rows"]
+                if (not nxt or nxt[0] != name or nxt[1]["rows"] == cur["rows"] or not _real_page(nxt[1]["rows"])
                         or any(r["row"] == 23 for r in snaps[j + 1]["runs"])):
                     break
                 found[name]["pages"].append((nxt[1]["rows"], nxt[1]["bottom"]))
@@ -206,7 +215,7 @@ def extract_f10(captures: list[dict]) -> dict[str, dict]:
             cur, end, j = first[1], first[1]["end"], i + 1
             while cur["bottom"] == "More..." and j + 1 < len(snaps):
                 nxt = extract(snaps[j + 1], end)
-                if (not nxt or nxt[0] != name or nxt[1]["rows"] == cur["rows"]
+                if (not nxt or nxt[0] != name or nxt[1]["rows"] == cur["rows"] or not _real_page(nxt[1]["rows"])
                         or any(r["row"] == 23 for r in snaps[j + 1]["runs"])):
                     break
                 pages.append((nxt[1]["rows"], nxt[1]["bottom"]))
@@ -241,7 +250,7 @@ def extract_f9(captures: list[dict], more: dict[str, dict]) -> dict[str, dict]:
             cur, end, j = first[1], first[1]["end"], i + 1
             while cur["bottom"] == "More..." and j + 1 < len(snaps):
                 nxt = extract(snaps[j + 1], end)
-                if (not nxt or nxt[0] != name or nxt[1]["rows"] == cur["rows"]
+                if (not nxt or nxt[0] != name or nxt[1]["rows"] == cur["rows"] or not _real_page(nxt[1]["rows"])
                         or any(r["row"] == 23 for r in snaps[j + 1]["runs"])):
                     break
                 pages.append((nxt[1]["rows"], nxt[1]["bottom"]))

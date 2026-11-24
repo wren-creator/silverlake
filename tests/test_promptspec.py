@@ -77,9 +77,9 @@ def test_a_gated_blank_prompt_pages_once_a_filled_occurrence_reveals_more():
     assert spec["pages"] == [([(9, "Colour . . . . . . . . . . . . .".ljust(33) + "COLOUR", "COLOUR", 49, 10, "*RED")], "Bottom")]
 
 
-def test_a_later_occurrence_with_no_keyword_column_is_not_mistaken_for_a_page():
-    """F11's choices view redraws every row with the keyword gone from column 34 (its hint goes at
-    column 50 instead), so extract() reads no field names at all ("", "@"): not a second page."""
+def test_a_later_occurrence_with_fields_shifted_left_is_not_mistaken_for_a_page():
+    """F11's choices view moves every field 13 columns left (49 to 36, 51 to 38) and drops the
+    keyword from column 34, so extract() reads no real field names at all ("", "@"): not a page."""
     blank = _prompt()
     choices = _screen([
         _run(0, 19, "      Delete Thing (DLTTHG)"), _run(2, 1, "Type choices, press Enter."),
@@ -88,6 +88,24 @@ def test_a_later_occurrence_with_no_keyword_column_is_not_mistaken_for_a_page():
         _run(20, 66, "       Bottom"), _run(21, 1, "F3=Exit   F4=Prompt"), _run(22, 0, " F24=More keys"),
     ], [_field(4, 36, 10), _field(5, 38, 10)])
     spec = promptspec.extract_all([{"snapshots": [blank, choices]}])["DLTTHG"]
+    assert spec["pages"] == []
+
+
+def test_a_choices_view_mid_chain_does_not_pass_as_a_page_even_with_a_name_that_looks_real():
+    """Caught live (`auth-f9-gaps`, CHGJOB): F9 then F11 then Roll Up walks the chain into F11's
+    choices view of page one redrawn, where the keyword `extract()` carries over from the field
+    before can still spell a name that matches the usual pattern (`PRTTXT@`, not `""` or `"@"`).
+    Only the column the field sits at (shifted 13 left, same as above) reliably catches this."""
+    page1 = _prompt()
+    page1["runs"][-3] = _run(20, 66, "      More...")
+    choices_of_page1 = _screen([
+        _run(0, 19, "      Delete Thing (DLTTHG)"), _run(2, 1, "Type choices, press Enter."),
+        _run(4, 1, "Thing  . . . . . . . . . . . . ."), _run(4, 36, "MYTHING", "0x24"), _run(4, 50, "Name"),
+        _run(5, 1, "  Library  . . . . . . . . . . ."), _run(5, 38, "*LIBL", "0x24"),
+        _run(6, 1, "Device:", "0x20"), _run(6, 36, "*JOB", "0x24"),
+        _run(20, 66, "      More..."), _run(21, 1, "F3=Exit   F4=Prompt"), _run(22, 0, " F24=More keys"),
+    ], [_field(4, 36, 10), _field(5, 38, 10), _field(6, 36, 10)])
+    spec = promptspec.extract_all([{"snapshots": [page1, choices_of_page1]}])["DLTTHG"]
     assert spec["pages"] == []
 
 
