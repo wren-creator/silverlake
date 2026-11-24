@@ -133,6 +133,32 @@ def test_insert_opens_blank_lines_and_typing_in_them_adds_lines(store, stu):
     assert member_lines(store, "SCRATCH", "QRPGLESRC", "TEST") == ["one", "between a", "between b", "two"]
 
 
+def test_f11_toggles_to_the_files_last_columns_and_back(store, stu):
+    # SCRATCH/QRPGLESRC is the CRTSRCPF default width, 80: col 1, 11 and 80 marked
+    line = "A" + "." * 9 + "B" + "." * 68 + "Z"
+    put(store, "TEST", [line])
+    s = open_edit(store, stu)
+    assert "Columns . . . :    1  71" in texts(s)
+    assert shown(s)[0].startswith("A") and "Z" not in shown(s)[0]
+    s = seu(stu, "F11")
+    assert "Columns . . . :   11  80" in texts(s)
+    assert shown(s)[0].startswith("B") and shown(s)[0].endswith("Z") and "A" not in shown(s)[0]
+    s = seu(stu, "F11")
+    assert "Columns . . . :    1  71" in texts(s)
+    assert shown(s)[0].startswith("A")
+
+
+def test_typing_in_the_toggled_view_edits_the_files_last_columns(store, stu):
+    line = "A" + "." * 9 + "B" + "." * 68 + "Z"
+    put(store, "TEST", [line])
+    open_edit(store, stu)
+    seu(stu, "F11")
+    seu(stu, d1="C".ljust(70))                                 # overtype col 11 only, while toggled
+    seu(stu, seu="SAVE")
+    saved = member_lines(store, "SCRATCH", "QRPGLESRC", "TEST")[0]
+    assert saved[0] == "A" and saved[10] == "C"                 # col 1 untouched, col 11 changed
+
+
 def test_blank_insert_lines_are_dropped(store, stu):
     put(store, "TEST", ["one", "two"])
     open_edit(store, stu)

@@ -522,9 +522,9 @@ DATA_COL, DATA_LEN, PFX_LEN = 8, 71, 7
 _PREFIX = re.compile(r"^([A-Za-z]{1,2})(\d*)$")
 
 
-def _ruler() -> str:
+def _ruler(lo: int, length: int) -> str:
     out = []
-    for c in range(1, DATA_LEN + 1):
+    for c in range(lo, lo + length):
         out.append(str(c // 10 % 10) if c % 10 == 0 else ("+" if c % 10 == 5 else "."))
     return "".join(out)
 
@@ -557,6 +557,7 @@ class Editor:
         self.exit_draft = {"save": "Y", "member": name, "text": text, "back": "N"}
         self.shown: list[tuple] = []             # what the last draw put on each row, to read the answers back
         self.find_text = ""
+        self.toggled = False                     # F11: columns 1-71 (or 6-76 for RPGLE), or the fixed 31-100
 
     def _line(self, text: str, seq: float | None = None, when: str | None = None) -> list:
         self._next += 1
@@ -595,6 +596,15 @@ class Editor:
 
     # -- drawing ------------------------------------------------------------------------------------------
 
+    def _window(self) -> tuple[int, int]:
+        """0-indexed slice offset and length for the columns in view. F11 flips between columns 1-71
+        and a second view, one column narrower, anchored on the file's own last data column instead
+        of its first (captured live against PUB400: a 100-wide file toggled to columns 31-100)."""
+        if not self.toggled:
+            return 0, DATA_LEN
+        length = min(DATA_LEN - 1, source.width(self.file))
+        return source.width(self.file) - length, length
+
     def _items(self) -> list[tuple]:
         items: list[tuple] = [("beg",)]
         for idx, (text, lid, _, _) in enumerate(self.lines):
@@ -610,12 +620,14 @@ class Editor:
         height = ROWS_LAST - ROWS_FIRST + 1
         self.top = max(0, min(self.top, max(0, len(items) - 1)))
         window = items[self.top:self.top + height]
+        offset, length = self._window()
+        lo, hi = offset + 1, offset + length
         rows: list = [
-            Text(0, 1, "Columns . . . :    1  71", ds.ATTR_GREEN), _title("Browse" if self.browse else "Edit", 36),
+            Text(0, 1, f"Columns . . . :{lo:>5}{hi:>4}", ds.ATTR_GREEN), _title("Browse" if self.browse else "Edit", 36),
             Text(0, 79 - len(f"{self.file.library}/{self.file.name}"), f"{self.file.library}/{self.file.name}", ds.ATTR_GREEN),
             Text(1, 1, "SEU==>", ds.ATTR_GREEN), Input(1, 8, 62, "seu"),
             Text(1, 79 - len(self.name), self.name, ds.ATTR_GREEN),
-            Text(2, 1, "FMT **", ds.ATTR_BLUE), Text(2, DATA_COL, _ruler(), ds.ATTR_BLUE),
+            Text(2, 1, "FMT **", ds.ATTR_BLUE), Text(2, DATA_COL, _ruler(lo, length), ds.ATTR_BLUE),
         ]
         self.shown = []
         for i, item in enumerate(window):
@@ -628,13 +640,15 @@ class Editor:
             elif item[0] == "line":
                 idx = item[1]
                 text = self.lines[idx][0]
+                shown = text[offset:offset + length]
                 rows.append(Input(r, 0, PFX_LEN, f"p{i}", monocase=True, value=self._seq_str(self.lines[idx][2])))
-                rows.append(Input(r, DATA_COL, DATA_LEN, f"d{i}", value=text[:DATA_LEN]) if not self.browse
-                            else Text(r, DATA_COL, text[:DATA_LEN], ds.ATTR_GREEN))
+                rows.append(Input(r, DATA_COL, length, f"d{i}", value=shown) if not self.browse
+                            else Text(r, DATA_COL, shown, ds.ATTR_GREEN))
             else:
                 rows.append(Input(r, 0, PFX_LEN, f"p{i}", monocase=True, value=""))
-                rows.append(Input(r, DATA_COL, DATA_LEN, f"d{i}", value=""))
-        keys = "F3=Exit   F5=Refresh   F12=Cancel   F23=Select prompt" if not self.browse else "F3=Exit   F12=Cancel"
+                rows.append(Input(r, DATA_COL, length, f"d{i}", value=""))
+        keys = ("F3=Exit   F5=Refresh   F11=Toggle   F12=Cancel   F23=Select prompt" if not self.browse
+                else "F3=Exit   F11=Toggle   F12=Cancel")
         rows.append(Text(21, 1, keys, ds.ATTR_BLUE))
         if self.block or self.carry:
             pending = (f"Block {self.block[0]} started." if self.block else
@@ -676,6 +690,10 @@ class Editor:
             return Step()
         if aid == "F5":
             return Step()
+        if aid == "F11":
+            message = self._apply(values) if not self.browse else ""
+            self.toggled = not self.toggled
+            return Step(message)
         message = ""
         if not self.browse:
             message = self._apply(values)
@@ -691,14 +709,15 @@ class Editor:
         in the order they sit on the screen."""
         cmds: list[tuple[int, str, int]] = []
         new_for: dict[int, list[str]] = {}
+        offset, length = self._window()
         for i, item in enumerate(self.shown):
             if item[0] == "line":
                 idx = item[1]
                 lid = self.lines[idx][1]
                 old = self.lines[idx][0]
                 if f"d{i}" in values:
-                    typed = values[f"d{i}"].ljust(DATA_LEN)[:DATA_LEN]
-                    updated = (typed + old[DATA_LEN:]).rstrip()
+                    typed = values[f"d{i}"].ljust(length)[:length]
+                    updated = (old[:offset].ljust(offset) + typed + old[offset + length:]).rstrip()
                     if updated != old:
                         self.lines[idx][0] = updated
                         self.lines[idx][3] = _today()
@@ -709,7 +728,7 @@ class Editor:
             elif item[0] == "ins":
                 text = values.get(f"d{i}", "").rstrip()
                 if text:
-                    new_for.setdefault(item[1], []).append(text)
+                    new_for.setdefault(item[1], []).append((" " * offset + text).rstrip())
         for lid in list(self.inserts):
             self.inserts.pop(lid)
         for lid, texts in new_for.items():
