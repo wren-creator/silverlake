@@ -629,6 +629,25 @@ AUTHENTICATED["auth-qp2term-settle"] = [
 # got to F11 once and showed the object rights (Opr, Mgt, Exist, Alter, Ref) with the key line turning into
 # "F11=Display data authorities". This presses F11 four times to see where it goes from there and whether it cycles,
 # then backs out. Nothing is typed on the screen and Enter is never pressed on it, so no authority changes.
+AUTHENTICATED["auth-edtautl-own"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTAUTL AUTL({_TESTLIB}) TEXT('Silverlake oracle test, deleted at once')"},
+     "key": "ENTER", "proceed_if": [_TESTLIB, "created"]},
+    {"fill": {"0": f"EDTAUTL AUTL({_TESTLIB})"}, "key": "ENTER", "proceed_if": [_TESTLIB]},
+    {"key": "F6", "proceed_if": [_TESTLIB]},
+    {"key": "F12", "always": True},
+    {"key": "F12", "always": True},
+    {"fill": {"0": f"WRKAUTL AUTL({_TESTLIB})"}, "key": "ENTER", "proceed_if": [_TESTLIB]},
+    # field 0/1 are the blank Create row's own Opt and new name (captured: a list needs an
+    # option AND a name typed there, "Object name required for this option" otherwise); our
+    # own one row, matching the exact name, is field 2.
+    {"fill": {"2": "2"}, "key": "ENTER", "proceed_if": [_TESTLIB]},
+    {"key": "F12", "always": True},
+    {"fill": {"2": "4"}, "key": "ENTER", "proceed_if": [_TESTLIB, "confirm"]}, {"key": "F12", "always": True},
+    {"fill": {"2": "4"}, "key": "ENTER", "proceed_if": [_TESTLIB, "confirm"]},   # now confirm it, on our own list
+    {"key": "F12", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 AUTHENTICATED["auth-wrklib"] = [
     _SIGNON,
     {"fill": {"0": "WRKLIB LIB(*LIBL)"}, "key": "ENTER"},

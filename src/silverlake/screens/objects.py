@@ -152,7 +152,9 @@ def dspautl_screen(autl, entry_rows: list[tuple[str, str]], page: int = 0) -> Sc
     """Laid out like the real Display Authorization List captured from PUB400: two header rows
     (Object / List over Authority / Mgt), entries from row 7 with the user at column 1, the
     object authority at 13 and the list management mark at 24. The Mgt mark is an X for
-    *AUTLMGT, which is assumed (the capture only had a *PUBLIC row)."""
+    *AUTLMGT; DSPAUTL's own capture only ever had a *PUBLIC row to confirm that against, but
+    Edit Authorization List's own entries (`auth-edtautl-own`), the same table two rows further
+    down the same screen, confirmed it, and *PUBLIC sorting first rather than last."""
     per_page = 11
     pages_ = max(1, -(-len(entry_rows) // per_page))
     page = max(0, min(page, pages_ - 1))
@@ -172,7 +174,94 @@ def dspautl_screen(autl, entry_rows: list[tuple[str, str]], page: int = 0) -> Sc
                  Text(r, 13, auth.removesuffix(" *AUTLMGT")[:10], ds.ATTR_GREEN)]
         if auth.endswith("*AUTLMGT"):
             rows.append(Text(r, 24, "X", ds.ATTR_GREEN))
-    rows.append(Text(18, 67, "More..." if page < pages_ - 1 else "Bottom", ds.ATTR_WHITE))
+    rows.append(Text(18, 67, ("More..." if page < pages_ - 1 else "Bottom").rjust(12), ds.ATTR_WHITE))
     rows.append(Text(19, 1, "Press Enter to continue.", ds.ATTR_BLUE))
     rows.append(Text(21, 1, "F3=Exit   F12=Cancel", ds.ATTR_BLUE))
     return Screen(rows)
+
+
+@dataclass
+class EditAutl:
+    """State of one Edit Authorization List display, captured live (`auth-edtautl-own`): the
+    same header block Display Authorization List has, plus an instruction line that pushes the
+    Object/List and User/Authority/Mgt headers two rows further down than DSPAUTL's own (rows
+    7 and 8 here, not 5 and 6), *PUBLIC first then everyone else sorted, the same table DSPAUTL
+    shows. F11=Display detail object authorities and F24=More keys are real, captured keys;
+    neither was ever pressed, so neither does anything here. What a typed change does, below,
+    mirrors Edit Object Authority's own untyped-in-the-capture reasoning: blank removes a user,
+    ADDAUTLE/CHGAUTLE/RMVAUTLE's own rules apply to whatever is typed, one row at a time."""
+    autl: object
+    page: int = 0
+    per_page: int = 11
+
+    def rows(self) -> list[tuple[str, object]]:
+        a = self.autl
+        return [("*PUBLIC", a.public)] + sorted(a.entries.items())
+
+    @property
+    def pages(self) -> int:
+        return max(1, -(-len(self.rows()) // self.per_page))
+
+    def shown(self) -> list[tuple[str, object]]:
+        self.page = max(0, min(self.page, self.pages - 1))
+        return self.rows()[self.page * self.per_page:(self.page + 1) * self.per_page]
+
+    def screen(self, message: str = "") -> Screen:
+        from ..system.authority import Auth
+        a = self.autl
+        g = ds.ATTR_GREEN
+        rows: list[Text | Input] = [
+            Text(0, 28, "Edit Authorization List", ds.ATTR_WHITE),
+            Text(2, 1, "Object . . . . . . . :", g), Text(2, 26, a.name, g),
+            Text(2, 42, "Owner  . . . . . . . :", g), Text(2, 67, a.owner, g),
+            Text(3, 3, "Library  . . . . . :", g), Text(3, 28, "QSYS", g),
+            Text(3, 42, "Primary group  . . . :", g), Text(3, 67, "*NONE", g),
+            Text(5, 1, "Type changes to current authorities, press Enter.", ds.ATTR_BLUE),
+            Text(7, 14, "Object", ds.ATTR_WHITE), Text(7, 24, "List", ds.ATTR_WHITE),
+            Text(8, 1, "User", ds.ATTR_WHITE), Text(8, 13, "Authority", ds.ATTR_WHITE), Text(8, 24, "Mgt", ds.ATTR_WHITE),
+        ]
+        shown = self.shown()
+        for i, (user, auth) in enumerate(shown):
+            r = 9 + i
+            base = name_auth(auth & ~Auth.AUTLMGT) or "*EXCLUDE"
+            rows += [Text(r, 1, user, g), Input(r, 13, 8, f"auth{i}", monocase=True, value=base),
+                     Input(r, 25, 1, f"mgt{i}", monocase=True, value="X" if Auth.AUTLMGT in auth else "")]
+        rows.append(Text(20, 67, ("More..." if self.page < self.pages - 1 else "Bottom").rjust(12), ds.ATTR_WHITE))
+        rows += [Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F5=Refresh", ds.ATTR_BLUE),
+                 Text(21, 24, "F6=Add new users", ds.ATTR_BLUE),
+                 Text(22, 1, "F11=Display detail object authorities", ds.ATTR_BLUE),
+                 Text(22, 41, "F12=Cancel", ds.ATTR_BLUE), Text(22, 54, "F24=More keys", ds.ATTR_BLUE)]
+        if message:
+            rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+        return Screen(rows, cursor="auth0")
+
+
+def add_autl_users_screen(autl, entries: dict[int, tuple[str, str, bool]] | None = None, message: str = "") -> Screen:
+    """Add New Users, opened by F6 on Edit Authorization List, laid out like the real one
+    captured (`auth-edtautl-own`): the same title column Edit Object Authority's own Add New
+    Users uses, but Authorization List's own header (two lines, not four) and eleven rows of
+    User, Authority and Mgt, not ten, with no Object type or ASP device to show."""
+    entries = entries or {}
+    g = ds.ATTR_GREEN
+    rows: list[Text | Input] = [
+        Text(0, 33, "Add New Users", ds.ATTR_WHITE),
+        Text(2, 1, "Object . . . . . . . :", g), Text(2, 26, autl.name, g),
+        Text(2, 42, "Owner  . . . . . . . :", g), Text(2, 67, autl.owner, g),
+        Text(3, 3, "Library  . . . . . :", g), Text(3, 28, "QSYS", g),
+        Text(3, 42, "Primary group  . . . :", g), Text(3, 67, "*NONE", g),
+        Text(5, 1, "Type new users, press Enter.", ds.ATTR_BLUE),
+        Text(7, 14, "Object", ds.ATTR_WHITE), Text(7, 24, "List", ds.ATTR_WHITE),
+        Text(8, 1, "User", ds.ATTR_WHITE), Text(8, 13, "Authority", ds.ATTR_WHITE), Text(8, 24, "Mgt", ds.ATTR_WHITE),
+    ]
+    for i in range(11):
+        user, auth = entries.get(i, ("", ""))
+        rows += [Input(9 + i, 1, 10, f"user{i}", monocase=True, value=user),
+                 Input(9 + i, 13, 8, f"auth{i}", monocase=True, value=auth),
+                 Input(9 + i, 25, 1, f"mgt{i}", monocase=True, value="")]
+    rows += [Text(20, 67, "More...".rjust(12), ds.ATTR_WHITE),
+             Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F11=Display detail object authorities", ds.ATTR_BLUE),
+             Text(21, 51, "F12=Cancel", ds.ATTR_BLUE), Text(21, 64, "F17=Top", ds.ATTR_BLUE),
+             Text(22, 1, "F18=Bottom", ds.ATTR_BLUE)]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows, cursor="user0")

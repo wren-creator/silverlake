@@ -117,7 +117,7 @@ def test_dspautl_and_wrkautl_show_only_what_you_may_see(store):
     assert "CPF2207" in run(store, "STUDENT", "DSPAUTL PAYAUTL")
     assert "CPF2283" in run(store, "STUDENT", "DSPAUTL NOSUCH")
     out = execute(store, store.get("OPERATOR"), "DSPAUTL PAYAUTL")        # has an entry
-    assert out.view[0] == "dspautl" and ("OPERATOR", "*USE") in out.view[2] and out.view[2][-1][0] == "*PUBLIC"
+    assert out.view[0] == "dspautl" and ("OPERATOR", "*USE") in out.view[2] and out.view[2][0][0] == "*PUBLIC"
     assert "No authorization lists" in run(store, "STUDENT", "WRKAUTL")
     assert [a.name for a in execute(store, store.get("QSECOFR"), "WRKAUTL").view[1]] == ["PAYAUTL"]
     assert execute(store, store.get("QSECOFR"), "WRKAUTL PAY*").view[0] == "wrkautl"
@@ -177,9 +177,70 @@ def test_dspautl_screen_follows_the_real_layout(store):
     s = c.handle("ENTER", {"command": "dspautl mylist"})
     runs = {(f.row, f.col): f.text for f in s.fields if isinstance(f, Text)}
     assert runs[(5, 14)] == "Object" and runs[(6, 13)] == "Authority" and runs[(6, 24)] == "Mgt"
-    assert runs[(7, 1)] == "STUDENT" and runs[(7, 13)] == "*CHANGE" and runs[(7, 24)] == "X"
-    assert runs[(8, 1)] == "*PUBLIC" and (8, 24) not in runs
+    assert runs[(7, 1)] == "*PUBLIC" and (7, 24) not in runs           # *PUBLIC first, seen live on EDTAUTL's own entries
+    assert runs[(8, 1)] == "STUDENT" and runs[(8, 13)] == "*CHANGE" and runs[(8, 24)] == "X"
     assert runs[(3, 67)] == "*NONE"
+
+
+def test_edtautl_screen_follows_the_real_layout(store):
+    """Captured live (`auth-edtautl-own`): the instruction line pushes the Object/List and
+    User/Authority/Mgt headers two rows further down than DSPAUTL's own, *PUBLIC first."""
+    run(store, "DEVELOPER", "CRTAUTL MYLIST AUT(*USE)")
+    run(store, "DEVELOPER", "ADDAUTLE MYLIST STUDENT AUT(*CHANGE *AUTLMGT)")
+    c = SignonController("QPADEV0001", store)
+    c.handle("ENTER", {"user": "DEVELOPER", "password": "DEVELOPER"})
+    s = c.handle("ENTER", {"command": "edtautl mylist"})
+    runs = {(f.row, f.col): f.text for f in s.fields if isinstance(f, Text)}
+    assert runs[(0, 28)] == "Edit Authorization List"
+    assert runs[(7, 14)] == "Object" and runs[(8, 13)] == "Authority" and runs[(8, 24)] == "Mgt"
+    assert runs[(9, 1)] == "*PUBLIC" and (9, 25) not in runs
+    assert runs[(10, 1)] == "STUDENT"
+    ins = {i.name: i.value for i in s.inputs()}
+    assert ins["auth0"] == "*USE" and ins["auth1"] == "*CHANGE" and ins["mgt1"] == "X"
+
+
+def test_edtautl_refuses_without_authority_to_change(store):
+    run(store, "DEVELOPER", "CRTAUTL MYLIST AUT(*USE)")
+    assert "Not authorized to change authorities." in run(store, "STUDENT", "EDTAUTL MYLIST")
+
+
+def test_edtautl_not_found(store):
+    assert "CPF2283" in run(store, "DEVELOPER", "EDTAUTL NOSUCH")
+
+
+def test_edtautl_applies_a_typed_authority_change(store):
+    run(store, "DEVELOPER", "CRTAUTL MYLIST AUT(*USE)")
+    run(store, "DEVELOPER", "ADDAUTLE MYLIST STUDENT AUT(*CHANGE)")
+    c = SignonController("QPADEV0001", store)
+    c.handle("ENTER", {"user": "DEVELOPER", "password": "DEVELOPER"})
+    c.handle("ENTER", {"command": "edtautl mylist"})
+    s = c.handle("ENTER", {"auth0": "*USE", "auth1": "*ALL", "mgt1": "X"})
+    assert "Authorities changed." in texts(s)
+    assert store.autls["MYLIST"].entries["STUDENT"] == ALL | Auth.AUTLMGT
+
+
+def test_edtautl_blank_authority_removes_a_user(store):
+    run(store, "DEVELOPER", "CRTAUTL MYLIST AUT(*USE)")
+    run(store, "DEVELOPER", "ADDAUTLE MYLIST STUDENT AUT(*CHANGE)")
+    c = SignonController("QPADEV0001", store)
+    c.handle("ENTER", {"user": "DEVELOPER", "password": "DEVELOPER"})
+    c.handle("ENTER", {"command": "edtautl mylist"})
+    c.handle("ENTER", {"auth0": "*USE", "auth1": ""})
+    assert "STUDENT" not in store.autls["MYLIST"].entries
+
+
+def test_edtautl_f6_opens_add_new_users_and_adds_a_row(store):
+    run(store, "DEVELOPER", "CRTAUTL MYLIST AUT(*USE)")
+    c = SignonController("QPADEV0001", store)
+    c.handle("ENTER", {"user": "DEVELOPER", "password": "DEVELOPER"})
+    c.handle("ENTER", {"command": "edtautl mylist"})
+    s = c.handle("F6", {})
+    runs = {(f.row, f.col): f.text for f in s.fields if isinstance(f, Text)}
+    assert runs[(0, 33)] == "Add New Users" and runs[(8, 24)] == "Mgt"
+    s = c.handle("ENTER", {"user0": "STUDENT", "auth0": "*CHANGE", "mgt0": "X"})
+    assert store.autls["MYLIST"].entries["STUDENT"] == CHANGE | Auth.AUTLMGT
+    runs = {(f.row, f.col): f.text for f in s.fields if isinstance(f, Text)}
+    assert runs[(0, 28)] == "Edit Authorization List"      # back on the edit display
 
 
 def test_messages_after_sign_on_show_text_without_the_id(store):

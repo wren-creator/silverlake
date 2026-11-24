@@ -172,6 +172,7 @@ CHGAUTLE_PARAMS = [Param("AUTL", "autl", "", required=True), Param("USER", "user
 RMVAUTLE_PARAMS = [Param("AUTL", "autl", "", required=True), Param("USER", "users", "", 50, True)]
 DSPAUTL_PARAMS = [Param("AUTL", "autl", "", required=True), Param("OUTPUT", "output", "*")]
 WRKAUTL_PARAMS = [Param("AUTL", "wrkname", "*ALL")]
+EDTAUTL_PARAMS = [Param("AUTL", "autl", "", required=True)]
 
 WRKOBJ_PARAMS = [Param("OBJ", "wrkobj", "", required=True), Param("OBJTYPE", "objtypes", "*ALL", 100)]
 WRKOBJOWN_PARAMS = [Param("USRPRF", "wrkowner", "*CURRENT"), Param("OBJTYPE", "objtypes", "*ALL", 100)]
@@ -299,7 +300,7 @@ COMMANDS = {
     "SLSCENARIO": SLSCENARIO_PARAMS,
     "CRTAUTL": CRTAUTL_PARAMS, "DLTAUTL": DLTAUTL_PARAMS, "ADDAUTLE": ADDAUTLE_PARAMS,
     "CHGAUTLE": CHGAUTLE_PARAMS, "RMVAUTLE": RMVAUTLE_PARAMS, "DSPAUTL": DSPAUTL_PARAMS,
-    "WRKAUTL": WRKAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
+    "WRKAUTL": WRKAUTL_PARAMS, "EDTAUTL": EDTAUTL_PARAMS, "WRKOBJ": WRKOBJ_PARAMS, "WRKOBJOWN": WRKOBJOWN_PARAMS,
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "CRTMSGQ": CRTMSGQ_PARAMS, "CHGMSGQ": CHGMSGQ_PARAMS,
     "DLTMSGQ": DLTMSGQ_PARAMS, "CRTDTAARA": CRTDTAARA_PARAMS, "CHGDTAARA": CHGDTAARA_PARAMS, "DLTDTAARA": DLTDTAARA_PARAMS,
     "CRTUSRSPC": CRTUSRSPC_PARAMS, "DLTUSRSPC": DLTUSRSPC_PARAMS,
@@ -1083,7 +1084,7 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     raise AssertionError(name)
 
 
-AUTL_COMMANDS = ("CRTAUTL", "DLTAUTL", "ADDAUTLE", "CHGAUTLE", "RMVAUTLE", "DSPAUTL", "WRKAUTL")
+AUTL_COMMANDS = ("CRTAUTL", "DLTAUTL", "ADDAUTLE", "CHGAUTLE", "RMVAUTLE", "DSPAUTL", "EDTAUTL", "WRKAUTL")
 
 
 def _run_autl_command(store: ProfileStore, actor: Profile, name: str, b: dict) -> Outcome:
@@ -1102,6 +1103,14 @@ def _run_autl_command(store: ProfileStore, actor: Profile, name: str, b: dict) -
     if name == "DSPAUTL":
         autl, err = autls.display(store, actor, b["AUTL"])
         return Outcome(err) if err else Outcome(view=("dspautl", autl, autls.entry_rows(autl)))
+    if name == "EDTAUTL":
+        aname = b["AUTL"].upper()
+        autl = store.autls.get(aname)
+        if autl is None:
+            return Outcome(messages.autl_not_found(aname))
+        if not autls.can_change(store, actor, autl):
+            return Outcome(messages.not_authorized_to_change_authorities())
+        return Outcome(view=("edtautl", autl))
     pattern = b["AUTL"]
     rows = autls.visible(store, actor, pattern)
     if not rows:

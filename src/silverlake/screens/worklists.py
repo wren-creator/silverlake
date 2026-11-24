@@ -1008,6 +1008,27 @@ def confirm_delete_screen(picks: list) -> Screen:
     return Screen(rows)
 
 
+def confirm_delete_autls_screen(picks: list) -> Screen:
+    """Confirm Delete of Authorization Lists, captured live (`auth-edtautl-own`): its own
+    title, column set (just Opt, List and Text, no Type/Library/Attribute) and keys, not the
+    generic objects one above that `_AutlRow` used to stand in for before this was captured.
+    No F3 here, unlike the objects version; F11 only renames itself to "Display names only"."""
+    rows: list = [
+        Text(0, 21, "Confirm Delete of Authorization Lists", ds.ATTR_WHITE),
+        Text(2, 1, "Press Enter to confirm your choices for 4=Delete.", ds.ATTR_BLUE),
+        Text(3, 1, "Press F12 to return to change your choices.", ds.ATTR_BLUE),
+        Text(5, 1, "Opt", ds.ATTR_WHITE), Text(5, 6, "List", ds.ATTR_WHITE), Text(5, 18, "Text", ds.ATTR_WHITE),
+    ]
+    for i, o in enumerate(picks[:14]):
+        r = 6 + i
+        rows += [Text(r, 1, "4", ds.ATTR_GREEN), Text(r, 6, o.name, ds.ATTR_GREEN)]
+        if o.text:
+            rows.append(Text(r, 18, o.text[:62], ds.ATTR_GREEN))
+    rows += [Text(20, 67, ("Bottom" if len(picks) <= 14 else "More...").rjust(12), ds.ATTR_WHITE),
+             Text(21, 1, "F11=Display names only", ds.ATTR_BLUE), Text(21, 26, "F12=Cancel", ds.ATTR_BLUE)]
+    return Screen(rows)
+
+
 # F11 on Edit Object Authority goes round three views (captured, `auth-edtauth-view`): the plain one, the object
 # rights (Opr, Mgt, Exist, Alter, Ref) and the data rights (Read, Add, Update, Delete, Execute), each right an X in
 # a one character field that can be typed over. Per view: the heading over the columns, then each column as

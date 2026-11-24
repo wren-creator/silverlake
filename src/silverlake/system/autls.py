@@ -210,10 +210,14 @@ def display(store: ProfileStore, actor: Profile, name: str):
 
 
 def entry_rows(autl: AuthList) -> list[tuple[str, str]]:
+    """*PUBLIC first, then everyone else sorted by name: the order seen live (`auth-edtautl-own`,
+    Edit Authorization List's own entries, *PUBLIC above the owner), not the guess this had
+    before (every other user first, *PUBLIC last) from when the only capture there was ever
+    held just the one *PUBLIC row to go by."""
     from .authority import name_auth
     def show(a: Auth) -> str:     # the *AUTLMGT part last, so a display can split it off
         base = name_auth(a & ~Auth.AUTLMGT) or "*EXCLUDE"
         return base + (" *AUTLMGT" if Auth.AUTLMGT in a else "")
 
-    rows = [(u, show(a)) for u, a in sorted(autl.entries.items())]
-    return rows + [(PUBLIC, show(autl.public))]
+    rows = [(PUBLIC, show(autl.public))]
+    return rows + [(u, show(a)) for u, a in sorted(autl.entries.items())]

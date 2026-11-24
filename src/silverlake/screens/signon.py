@@ -21,13 +21,15 @@ from datetime import datetime
 from ..cl import commands
 from ..proto import datastream as ds
 from ..system import admin, autls, jobctl, menus, messages, msgq, objects, profiles, rpg, spool
-from ..system.authority import ALL, CHANGE, EXCLUDE, Auth
+from ..system.authority import ALL, CHANGE, EXCLUDE, Auth, name_auth
 from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
-from .objects import DSPLIBL_ROWS, DspObjAut, dsplibl_screen, dspautl_screen, slscenario_screen
-from .worklists import (DETAIL_VIEWS, EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
+from .objects import (DSPLIBL_ROWS, DspObjAut, EditAutl, add_autl_users_screen, dsplibl_screen, dspautl_screen,
+                       slscenario_screen)
+from .worklists import (DETAIL_VIEWS, EditAuth, WorkList, add_users_screen, confirm_delete_screen,
+                        confirm_delete_autls_screen, dspobjd_basic_screen,
                         WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, dsppgmref_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen, writers_screen, printers_screen)
 from . import jobextra, pdm, pfm, prompt
 from . import pase as paseui
@@ -369,6 +371,8 @@ class SignonController:
             return _plist(spec[2], lambda rows, page: dspautl_screen(autl, rows, page), 11)
         if kind == "wrkautl":
             return ("work", WorkList("autls", spec[1], spec[2]))
+        if kind == "edtautl":
+            return ("editautl", EditAutl(spec[1]))
         if kind == "wrkobj":
             return ("work", WorkList(spec[2], spec[1], spec[4], owner=spec[3] or ""))
         if kind == "wrksplf":
@@ -428,10 +432,11 @@ class SignonController:
             return self.view[3](self.view[1], self.view[2])
         if self.view[0] == "work":
             return self.view[1].screen(message)
-        if self.view[0] in ("edit", "dspauth"):
+        if self.view[0] in ("edit", "dspauth", "editautl"):
             return self.view[1].screen(message)
         if self.view[0] == "confirm":
-            return confirm_delete_screen(self.view[2])
+            _, wl, deletes = self.view
+            return confirm_delete_autls_screen(deletes) if wl.kind == "autls" else confirm_delete_screen(deletes)
         if self.view[0] == "dobjd":
             _, obj, detail, page = self.view
             if detail == "*BASIC":
@@ -483,6 +488,8 @@ class SignonController:
             return sndnetsplf_screen(f, message) if which == "send" else printstatus_screen(f, SYSTEM_NAME, message)
         if self.view[0] == "add":
             return add_users_screen(self.view[1].obj, self.view[2], message)
+        if self.view[0] == "addautl":
+            return add_autl_users_screen(self.view[1].autl, self.view[2], message)
         if self.view[0] in ("writers", "printers"):
             return (writers_screen if self.view[0] == "writers" else printers_screen)(message)
         return wrkusrprf_screen(self.view[1], self.view[2], message)
@@ -506,6 +513,10 @@ class SignonController:
             return self._in_edit(aid, values)
         if kind == "dspauth":
             return self._in_dspauth(aid)
+        if kind == "editautl":
+            return self._in_editautl(aid, values)
+        if kind == "addautl":
+            return self._in_addautl(aid, values)
         if kind == "confirm":
             return self._in_confirm(aid)
         if kind == "dobjd":
@@ -686,6 +697,8 @@ class SignonController:
                 return None, f"Option {opt} is not available in Silverlake yet."
             return None, f"Option {opt} is not valid."
         if wl.kind == "autls":
+            if opt == "2":
+                return f"EDTAUTL AUTL({row.name})", ""
             if opt == "5":
                 return f"DSPAUTL AUTL({row.name})", ""
             if opt == "8":
@@ -1167,6 +1180,94 @@ class SignonController:
             da.detail = (da.detail + 1) % len(DETAIL_VIEWS)
             return self._draw_view()
         return self._close_view()                                 # Enter and anything else: back
+
+    def _in_editautl(self, aid: str, values: dict[str, str]) -> Screen:
+        ea: EditAutl = self.view[1]
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid == "F12":
+            return self._close_view()
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            ea.page += 1 if aid == "ROLLUP" else -1
+            return self._draw_view()
+        if aid == "F5":
+            return self._draw_view()
+        if aid == "F6":
+            self.parents.append(self.view)
+            self.view = ("addautl", ea, {})
+            return self._draw_view()
+        if aid in ("F11", "F24"):                        # real, captured keys; neither was ever pressed
+            return self._draw_view()
+        return self._draw_view(self._apply_autl_edits(ea, values))
+
+    def _apply_autl_edits(self, ea: EditAutl, values: dict[str, str]) -> str:
+        """Apply what was typed over the list's own entries, one row at a time, through the
+        same rules ADDAUTLE/CHGAUTLE/RMVAUTLE already use. Ours: what the host does with a
+        typed change here was never tried in the capture, so this follows Edit Object
+        Authority's own reading of its page, which says just as little about it. Blank
+        authority removes a user; *PUBLIC can't be removed, same as RMVAUTLE itself refuses."""
+        name = ea.autl.name
+        changed = False
+        for i, (user, current) in enumerate(ea.shown()):
+            if f"auth{i}" not in values and f"mgt{i}" not in values:
+                continue
+            text = values.get(f"auth{i}", "").strip().upper()
+            mgt = bool(values.get(f"mgt{i}", "").strip())
+            if not text:
+                done = autls.remove_entry(self.store, self.profile, name, [user])
+                if not done.ok:
+                    return done.message.text
+                changed = True
+                continue
+            current_text = name_auth(current & ~Auth.AUTLMGT) or "*EXCLUDE"
+            if text == current_text and mgt == (Auth.AUTLMGT in current):
+                continue
+            try:
+                aut = autls.resolve_aut(text.split() + (["*AUTLMGT"] if mgt else []))
+            except ValueError:
+                return f"Authority {text} is not valid."
+            if isinstance(aut, messages.Message):
+                return aut.text
+            done = autls.change_entry(self.store, self.profile, name, [user], aut)
+            if not done.ok:
+                return done.message.text
+            changed = True
+        return "Authorities changed." if changed else ""
+
+    def _in_addautl(self, aid: str, values: dict[str, str]) -> Screen:
+        """Add New Users for an authorization list. Enter adds each typed row through
+        ADDAUTLE's own rules and returns to the edit display. Ours: untyped in the capture,
+        same reasoning Edit Object Authority's own Add New Users already uses. The first
+        refusal keeps you here with what you typed."""
+        ea = self.view[1]
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid == "F12":
+            return self._close_view()
+        if aid != "ENTER":
+            return self._draw_view(f"{aid} is not available in Silverlake yet.")
+        typed = {i: (values.get(f"user{i}", "").strip().upper(), values.get(f"auth{i}", "").strip().upper(),
+                     bool(values.get(f"mgt{i}", "").strip())) for i in range(11)}
+        typed = {i: v for i, v in typed.items() if v[0] or v[1] or v[2]}
+        self.view = ("addautl", ea, {i: (u, a, m) for i, (u, a, m) in typed.items()})
+        for user, text, mgt in typed.values():
+            if not user or not text:
+                return self._draw_view("Type both a user and an authority on each row.")
+            try:
+                aut = autls.resolve_aut(text.split() + (["*AUTLMGT"] if mgt else []))
+            except ValueError:
+                return self._draw_view(f"Authority {text} is not valid.")
+            if isinstance(aut, messages.Message):
+                return self._draw_view(aut.text)
+            done = autls.add_entry(self.store, self.profile, ea.autl.name, [user], aut)
+            if not done.ok:
+                return self._draw_view(done.message.text)
+        self.view = self.parents.pop()
+        return self._draw_view("Authorities changed." if typed else "")
 
     def _in_edit(self, aid: str, values: dict[str, str]) -> Screen:
         ea: EditAuth = self.view[1]

@@ -546,7 +546,8 @@ def test_wrkautl_option_4_confirms_then_deletes(store):
     s = c.handle("ENTER", {"command": "wrkautl goner"})
     s = c.handle("ENTER", {"opt0": "4"})
     f = _field_map(s)
-    assert f[(0, 27)].text == "Confirm Delete of Objects" and (f[(6, 6)].text, f[(6, 18)].text) == ("GONER", "*AUTL")
+    assert f[(0, 21)].text == "Confirm Delete of Authorization Lists" and f[(6, 6)].text == "GONER"
+    assert f[(6, 18)].text == "about to go"
     s = c.handle("F12", {})
     assert "GONER" in store.autls and next(i for i in s.inputs() if i.name == "opt0").value == "4"
     c.handle("ENTER", {"opt0": "4"})
