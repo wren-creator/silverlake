@@ -26,7 +26,7 @@ from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
-from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, slscenario_screen, wrklib_screen
+from .objects import DSPLIBL_ROWS, DspObjAut, dsplibl_screen, dspautl_screen, slscenario_screen, wrklib_screen
 from .worklists import (DETAIL_VIEWS, EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
                         WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, dsppgmref_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen, writers_screen, printers_screen)
 from . import jobextra, pdm, pfm, prompt
@@ -360,8 +360,7 @@ class SignonController:
         if kind == "wrklib":
             return ("plist", spec[1], 0, wrklib_screen)
         if kind == "dspobjaut":
-            obj = spec[1]
-            return _plist(spec[2], lambda rows, page: dspobjaut_screen(obj, rows, page), DSPOBJAUT_ROWS)
+            return ("dspauth", DspObjAut(spec[1], spec[2]))
         if kind == "slslist":
             mode = spec[2]
             return ("plist", spec[1], 0, lambda rows, page: slscenario_screen(mode, rows, page))
@@ -429,7 +428,7 @@ class SignonController:
             return self.view[3](self.view[1], self.view[2])
         if self.view[0] == "work":
             return self.view[1].screen(message)
-        if self.view[0] == "edit":
+        if self.view[0] in ("edit", "dspauth"):
             return self.view[1].screen(message)
         if self.view[0] == "confirm":
             return confirm_delete_screen(self.view[2])
@@ -497,8 +496,7 @@ class SignonController:
                 step = 1 if aid == "ROLLUP" else -1
                 self.view = ("plist", rows, max(0, min(page + step, last)), renderer)
                 return self._draw_view()
-            if aid in ("F17", "F18") and getattr(renderer, "per_page", None) in (
-                    DSPLIBL_ROWS, DSPOBJAUT_ROWS):       # the displays that draw Top and Bottom
+            if aid in ("F17", "F18") and getattr(renderer, "per_page", None) == DSPLIBL_ROWS:
                 self.view = ("plist", rows, 0 if aid == "F17" else last, renderer)
                 return self._draw_view()
             return self._close_view()            # Enter, F3 and F12 all go back
@@ -506,6 +504,8 @@ class SignonController:
             return self._in_work(aid, values)
         if kind == "edit":
             return self._in_edit(aid, values)
+        if kind == "dspauth":
+            return self._in_dspauth(aid)
         if kind == "confirm":
             return self._in_confirm(aid)
         if kind == "dobjd":
@@ -1142,6 +1142,25 @@ class SignonController:
                 return self._draw_view(done.message.text)
         self.view = self.parents.pop()
         return self._draw_view("Authorities changed." if typed else "")
+
+    def _in_dspauth(self, aid: str) -> Screen:
+        da: DspObjAut = self.view[1]
+        if aid == "F3":
+            self.view = None
+            self.parents.clear()
+            return self._base()
+        if aid == "F12":
+            return self._close_view()
+        if aid in ("ROLLUP", "ROLLDOWN"):
+            da.page = max(0, min(da.page + (1 if aid == "ROLLUP" else -1), da.pages - 1))
+            return self._draw_view()
+        if aid in ("F17", "F18"):
+            da.page = 0 if aid == "F17" else da.pages - 1
+            return self._draw_view()
+        if aid == "F11":                                          # captured: plain, object rights, data rights, plain...
+            da.detail = (da.detail + 1) % len(DETAIL_VIEWS)
+            return self._draw_view()
+        return self._close_view()                                 # Enter and anything else: back
 
     def _in_edit(self, aid: str, values: dict[str, str]) -> Screen:
         ea: EditAuth = self.view[1]

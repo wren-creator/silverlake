@@ -1,8 +1,10 @@
 """Screens for the library and object authority commands. Layout and wording
 are ours; real screens for these have not been captured yet."""
 
+from dataclasses import dataclass
+
 from ..proto import datastream as ds
-from ..system.authority import name_auth
+from ..system.authority import name_auth, parse_auth
 from ..system.profiles import ProfileStore
 from .model import Input, Screen, Text
 from .usrprf import PAGE_SIZE, wrkusrprf_pages
@@ -93,35 +95,72 @@ def slscenario_screen(mode: str, lessons: list, page: int = 0) -> Screen:
     return Screen(rows)
 
 
-def dspobjaut_screen(obj, authority_rows: list[tuple[str, str]], page: int = 0) -> Screen:
-    """Laid out like the real Display Object Authority captured from PUB400: the header block,
-    the authorization list line, a User, Group and Authority table from row 10, and the keys
-    on rows 21 and 22. The real display also offers F11 for the detail authorities, which is
-    not built, so the key is not drawn. Group is left blank, and the capture only held
-    *PUBLIC rows, so the wording of user defined authorities is ours."""
-    page, count, shown = _page_of(authority_rows, page, DSPOBJAUT_ROWS)
-    g = ds.ATTR_GREEN
-    rows: list[Text | Input] = [
-        Text(0, 28, "Display Object Authority", ds.ATTR_WHITE),
-        Text(2, 1, "Object . . . . . . . :", g), Text(2, 26, obj.name, g),
-        Text(2, 42, "Owner  . . . . . . . :", g), Text(2, 67, obj.owner, g),
-        Text(3, 3, "Library  . . . . . :", g), Text(3, 28, obj.library, g),
-        Text(3, 42, "Primary group  . . . :", g), Text(3, 67, "*NONE", g),
-        Text(4, 1, "Object type  . . . . :", g), Text(4, 26, obj.type, g),
-        Text(4, 42, "ASP device . . . . . :", g), Text(4, 67, "*SYSBAS", g),
-        Text(6, 1, "Object secured by authorization list  . . . . . . . . . . . . :", g),
-        Text(6, 67, obj.autl or "*NONE", g),
-        Text(8, 26, "Object", ds.ATTR_WHITE),
-        Text(9, 1, "User", ds.ATTR_WHITE), Text(9, 13, "Group", ds.ATTR_WHITE), Text(9, 25, "Authority", ds.ATTR_WHITE),
-    ]
-    for i, (user, auth) in enumerate(shown):
-        r = 10 + i
-        rows += [Text(r, 1, user, g), Text(r, 25, auth[:54], g)]
-    rows.append(Text(18, 67, ("More..." if page < count - 1 else "Bottom").rjust(12), ds.ATTR_WHITE))
-    rows += [Text(19, 1, "Press Enter to continue.", ds.ATTR_BLUE),
-             Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F12=Cancel", ds.ATTR_BLUE),
-             Text(21, 24, "F17=Top", ds.ATTR_BLUE), Text(22, 1, "F18=Bottom", ds.ATTR_BLUE)]
-    return Screen(rows)
+# Keys for the three views F11 cycles on Display Object Authority (captured live, `auth-dspobjaut-f11`):
+# plain, object rights, data rights, plain again, in the same order and the same columns Edit Object
+# Authority uses (see DETAIL_VIEWS in worklists.py), but nothing here can be typed over.
+_DSPOBJAUT_KEYS = [
+    [(21, 1, "F3=Exit"), (21, 11, "F11=Display detail object authorities"), (21, 51, "F12=Cancel"),
+     (21, 64, "F17=Top"), (22, 1, "F18=Bottom")],
+    [(21, 1, "F3=Exit"), (21, 11, "F11=Display data authorities"), (21, 42, "F12=Cancel"),
+     (21, 55, "F17=Top"), (21, 65, "F18=Bottom")],
+    [(21, 1, "F3=Exit"), (21, 11, "F11=Nondisplay detail"), (21, 35, "F12=Cancel"),
+     (21, 48, "F17=Top"), (21, 58, "F18=Bottom")],
+]
+
+
+@dataclass
+class DspObjAut:
+    """State of one Display Object Authority display: which page of users it is showing, and
+    which of the three F11 views (plain, object rights, data rights) it has reached. Laid out
+    like the real display captured from PUB400 (`auth-dspobjaut-f11`): the header block, the
+    authorization list line, the User, Group and Authority table from row 10, F11's detail
+    columns in the same positions Edit Object Authority uses, and the keys on rows 21 and 22.
+    Group is left blank, and read-only: a row's X marks come from reparsing its own Authority
+    text (name_auth's own format, round tripped through parse_auth), not from typing over them."""
+    obj: object
+    authority_rows: list[tuple[str, str]]
+    page: int = 0
+    detail: int = 0
+
+    @property
+    def pages(self) -> int:
+        return max(1, -(-len(self.authority_rows) // DSPOBJAUT_ROWS))
+
+    def screen(self, message: str = "") -> Screen:
+        from .worklists import DETAIL_VIEWS
+
+        obj = self.obj
+        page, count, shown = _page_of(self.authority_rows, self.page, DSPOBJAUT_ROWS)
+        self.page = page
+        g = ds.ATTR_GREEN
+        rows: list[Text | Input] = [
+            Text(0, 28, "Display Object Authority", ds.ATTR_WHITE),
+            Text(2, 1, "Object . . . . . . . :", g), Text(2, 26, obj.name, g),
+            Text(2, 42, "Owner  . . . . . . . :", g), Text(2, 67, obj.owner, g),
+            Text(3, 3, "Library  . . . . . :", g), Text(3, 28, obj.library, g),
+            Text(3, 42, "Primary group  . . . :", g), Text(3, 67, "*NONE", g),
+            Text(4, 1, "Object type  . . . . :", g), Text(4, 26, obj.type, g),
+            Text(4, 42, "ASP device . . . . . :", g), Text(4, 67, "*SYSBAS", g),
+            Text(6, 1, "Object secured by authorization list  . . . . . . . . . . . . :", g),
+            Text(6, 67, obj.autl or "*NONE", g),
+            Text(8, 26, "Object", ds.ATTR_WHITE),
+            Text(9, 1, "User", ds.ATTR_WHITE), Text(9, 13, "Group", ds.ATTR_WHITE), Text(9, 25, "Authority", ds.ATTR_WHITE),
+        ]
+        view = DETAIL_VIEWS[self.detail]
+        if view:
+            rows.append(Text(8, 36, view["head"], ds.ATTR_WHITE))
+            rows += [Text(9, col, title, ds.ATTR_WHITE) for title, col, _, _ in view["cols"]]
+        for i, (user, auth) in enumerate(shown):
+            r = 10 + i
+            rows += [Text(r, 1, user, g), Text(r, 25, auth[:54], g)]
+            held = None if auth == "*AUTL" else parse_auth(auth)
+            for title, _, xcol, right in view.get("cols", []):
+                if held is not None and right in held:
+                    rows.append(Text(r, xcol, "X", g))
+        rows.append(Text(18, 67, ("More..." if page < count - 1 else "Bottom").rjust(12), ds.ATTR_WHITE))
+        rows.append(Text(19, 1, "Press Enter to continue.", ds.ATTR_BLUE))
+        rows += [Text(row, col, text, ds.ATTR_BLUE) for row, col, text in _DSPOBJAUT_KEYS[self.detail]]
+        return Screen(rows)
 
 
 def dspautl_screen(autl, entry_rows: list[tuple[str, str]], page: int = 0) -> Screen:
