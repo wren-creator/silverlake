@@ -773,7 +773,8 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
         changes = {k: b[k] for k in ("DLVRY", "SEV", "TEXT") if b[k] != SAME}
         if not changes:
             return Outcome(messages.syntax("Give at least one attribute to change."))
-        return Outcome(msgq.change(store, actor, session, b["MSGQ"], changes).message)
+        done = msgq.change(store, actor, session, b["MSGQ"], changes)
+        return Outcome(None if done.ok else done.message)        # captured: CHGMSGQ says nothing on success
     if name == "CRTDTAARA":
         return Outcome(dataareas.create_data_area(store, actor, session, b["DTAARA"], b["LEN"], b["VALUE"],
                                                    b["TEXT"], b["AUT"]).message)

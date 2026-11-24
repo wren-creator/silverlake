@@ -6,6 +6,7 @@ from silverlake.cl import commands
 from silverlake.screens.model import Text
 from silverlake.screens.signon import SignonController
 from silverlake.system import state
+from silverlake.system.authority import Auth
 
 
 @pytest.fixture
@@ -139,12 +140,16 @@ def test_new_commands_are_objects_and_msgq_is_a_known_object_type(store):
 
 
 def test_crtmsgq_makes_a_hold_queue_the_owner_can_use_and_a_second_try_is_refused(store):
-    assert _run(store, "QSECOFR", "CRTMSGQ MSGQ(QGPL/ALERTS) TEXT('Night shift')") == "Message queue ALERTS created in library QGPL."
+    assert _run(store, "QSECOFR", "CRTMSGQ MSGQ(QGPL/ALERTS) TEXT('Night shift')") == "Object ALERTS type *MSGQ created in library QGPL."
     q = store.objects[("QGPL", "ALERTS", "*MSGQ")]
     assert (q.owner, q.text, q.data["dlvry"], q.data["sev"]) == ("QSECOFR", "Night shift", "*HOLD", "00")
+    assert q.public == Auth.NONE   # QGPL's own CRTAUT (captured, auth-msgq), not its own, more open, public authority
     assert _run(store, "QSECOFR", "CRTMSGQ MSGQ(QGPL/ALERTS)") == "Object ALERTS in QGPL type *MSGQ already exists."
     assert _run(store, "QSECOFR", "CRTMSGQ MSGQ(NOLIB/X)") == "Library NOLIB not found."
-    assert "sent" in _run(store, "STUDENT", "SNDMSG MSG('hi') TOMSGQ(QGPL/ALERTS)")      # QGPL is public *CHANGE
+    # QGPL's own CRTAUT is *EXCLUDE (captured, auth-msgq), unlike its own, more open, public authority
+    assert _run(store, "STUDENT", "SNDMSG MSG('hi') TOMSGQ(QGPL/ALERTS)") == "Not authorized to message queue ALERTS."
+    _run(store, "QSECOFR", "GRTOBJAUT OBJ(QGPL/ALERTS) OBJTYPE(*MSGQ) USER(*PUBLIC) AUT(*CHANGE)")
+    assert "sent" in _run(store, "STUDENT", "SNDMSG MSG('hi') TOMSGQ(QGPL/ALERTS)")
 
 
 def test_crtmsgq_aut_sets_the_public_authority_and_a_library_without_add_refuses(store):
@@ -156,7 +161,7 @@ def test_crtmsgq_aut_sets_the_public_authority_and_a_library_without_add_refuses
 
 def test_chgmsgq_changes_delivery_severity_and_text_and_needs_use_and_dlt(store):
     _run(store, "QSECOFR", "CRTMSGQ MSGQ(QGPL/ALERTS)")
-    assert _run(store, "QSECOFR", "CHGMSGQ MSGQ(QGPL/ALERTS) DLVRY(*BREAK) SEV(40) TEXT('Pager')") == "Message queue ALERTS in QGPL changed."
+    assert _run(store, "QSECOFR", "CHGMSGQ MSGQ(QGPL/ALERTS) DLVRY(*BREAK) SEV(40) TEXT('Pager')") == ""  # captured: silent on success
     q = store.objects[("QGPL", "ALERTS", "*MSGQ")]
     assert (q.data["dlvry"], q.data["sev"], q.text) == ("*BREAK", "40", "Pager")
     assert _run(store, "QSECOFR", "CHGMSGQ MSGQ(QGPL/ALERTS)") == "Give at least one attribute to change."

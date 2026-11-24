@@ -228,6 +228,11 @@ name = "QGPL"
 owner = "QSYS"
 public = "*CHANGE"
 text = "General purpose library"
+# Its own CRTAUT, read off a real IBM i with DSPOBJAUT on a throwaway *MSGQ just created there
+# (auth-msgq): *EXCLUDE, not QGPL's own, more open, public authority above, which until now
+# stood in for it everywhere a new object's own public authority was worked out.
+[object.data]
+crtaut = "*EXCLUDE"
 
 [[object]]
 name = "QUSRSYS"

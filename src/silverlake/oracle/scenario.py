@@ -689,6 +689,28 @@ AUTHENTICATED["auth-wrkobjown-keys"] = [
     {"key": "F12", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# CRTMSGQ, CHGMSGQ and DLTMSGQ's real completion messages and the public/owner authority a new
+# queue gets, never captured: msgq.py's own wording so far is inferred, not seen.
+AUTHENTICATED["auth-msgq"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTMSGQ MSGQ(QGPL/{_TESTLIB}) TEXT('Silverlake oracle test, deleted at once')"},
+     "key": "ENTER", "proceed_if": _MADE},
+    {"fill": {"0": f"DSPOBJAUT OBJ(QGPL/{_TESTLIB}) OBJTYPE(*MSGQ)"}, "key": "ENTER", "proceed_if": [_TESTLIB]},
+    {"key": "F12", "always": True},
+    {"fill": {"0": f"CHGMSGQ MSGQ(QGPL/{_TESTLIB}) TEXT('changed')"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"DLTMSGQ MSGQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {**_SIGNOFF, "always": True},
+]
+# Retry of auth-msgq's own CHGMSGQ step, which came back with no message at all the first time;
+# isolated here with no DSPOBJAUT/F12 detour in between, to see whether that was the cause.
+AUTHENTICATED["auth-msgq-retry"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTMSGQ MSGQ(QGPL/{_TESTLIB}) TEXT('Silverlake oracle test, deleted at once')"},
+     "key": "ENTER", "proceed_if": _MADE},
+    {"fill": {"0": f"CHGMSGQ MSGQ(QGPL/{_TESTLIB}) TEXT('changed')"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"DLTMSGQ MSGQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

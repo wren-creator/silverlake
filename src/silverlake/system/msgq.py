@@ -29,7 +29,7 @@ from datetime import datetime
 
 from . import messages
 from .authority import Auth, SecuredObject, SpecialAuthority as SA, USE
-from .objects import NAME, Done, _no, _ok, authority_to_library, locate
+from .objects import NAME, Done, _no, _ok, authority_to_library, create_authority, locate
 from .profiles import Profile, ProfileStore
 
 USER_LIB = "QUSRSYS"
@@ -47,13 +47,6 @@ def not_authorized(q: SecuredObject) -> messages.Message:
     return _doc("CPF2408", f"Not authorized to message queue {q.name}.")
 
 
-def _create_authority(store: ProfileStore, lib_name: str) -> Auth:
-    """What AUT(*LIBCRTAUT) gives a new queue. The library's own public authority stands in for its
-    create authority (inferred)."""
-    lib = store.find_library(lib_name)
-    return lib.public if lib is not None and lib.public is not None else Auth.NONE
-
-
 def user_queue(store: ProfileStore, name: str) -> SecuredObject | None:
     """A profile's own queue, made on first use. None if there is no such profile."""
     name = name.upper()
@@ -62,7 +55,7 @@ def user_queue(store: ProfileStore, name: str) -> SecuredObject | None:
     key = (USER_LIB, name, "*MSGQ")
     if key not in store.objects:
         lib = store.find_library(USER_LIB)
-        public = _create_authority(store, USER_LIB)
+        public = create_authority(store, USER_LIB)
         store.objects[key] = SecuredObject(
             name, name, public=public, library=USER_LIB, type="*MSGQ", text="User message queue",
             data={"dlvry": "*BREAK", "sev": "00", "userq": True, "messages": []})
@@ -158,13 +151,13 @@ def create(store: ProfileStore, actor: Profile, session, spec: str, text: str, a
     if (lib_name, name, "*MSGQ") in store.objects:
         return _no(_doc("CPF2112", f"Object {name} in {lib_name} type *MSGQ already exists."))
     q = SecuredObject(
-        name, actor.name, public=_create_authority(store, lib_name) if aut is None else aut,
+        name, actor.name, public=create_authority(store, lib_name) if aut is None else aut,
         library=lib_name, type="*MSGQ", text=text,
         data={"dlvry": "*HOLD", "sev": "00", "messages": [],
               "created": datetime.now().isoformat(timespec="seconds")})
     store.objects[q.key] = q
     store.on_change()
-    return _ok(f"Message queue {name} created in library {lib_name}.")
+    return _ok(f"Object {name} type *MSGQ created in library {lib_name}.")  # captured: auth-msgq
 
 
 def change(store: ProfileStore, actor: Profile, session, spec: str, changes: dict) -> Done:

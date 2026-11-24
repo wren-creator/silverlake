@@ -34,7 +34,7 @@ from datetime import datetime
 from . import messages
 from .authority import Auth, SpecialAuthority
 from .authority import SecuredObject
-from .objects import NAME, Done, _no, _ok, authority_to_library, locate
+from .objects import NAME, Done, _no, _ok, authority_to_library, create_authority, locate
 from .profiles import Profile, ProfileStore
 
 SA = SpecialAuthority
@@ -185,7 +185,7 @@ def create_queue(store: ProfileStore, actor: Profile, session, spec: str, text: 
         return _no(messages.not_authorized_to_library(lib_name))
     if (lib_name, name, "*OUTQ") in store.objects:
         return _no(_msg("CPF3353", f"Output queue {name} in {lib_name} already exists."))
-    public = aut if aut is not None else (lib.public if lib.public is not None else Auth.NONE)
+    public = aut if aut is not None else create_authority(store, lib_name)
     q = SecuredObject(name, actor.name, public=public, library=lib_name, type="*OUTQ", text=text,
                       data={"dspdta": dspdta, "oprctl": oprctl, "autchk": autchk, "status": "RLS",
                             "created": datetime.now().isoformat(timespec="seconds")})
