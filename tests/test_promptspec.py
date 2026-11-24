@@ -62,6 +62,35 @@ def test_a_second_page_continues_the_keyword_it_started_in_the_middle_of():
     assert spec["bottom"] == "More..." and spec["pages"] == [([(4, "  Number . . . . . . . . . . . .", "DEV@", 49, 6, "*ALL")], "Bottom")]
 
 
+def test_a_gated_blank_prompt_pages_once_a_filled_occurrence_reveals_more():
+    """CHGOBJD: Roll Up on a blank prompt says "Bottom" outright (OBJ, OBJTYPE both required), so the
+    one page it has only shows once a run types a name first, as `auth-prompts-gaps` does. The filled
+    occurrence redraws the first page's own fields too; only what is new becomes the page."""
+    blank = _prompt()
+    filled = _screen([
+        *blank["runs"][:-3], _run(4, 49, "MYTHING", "0x24"),
+        _run(9, 1, "Colour . . . . . . . . . . . . ."), _run(9, 34, "COLOUR"), _run(9, 49, "*RED", "0x24"),
+        *blank["runs"][-3:],
+    ], [*blank["fields"], _field(9, 49, 10)])
+    spec = promptspec.extract_all([{"snapshots": [blank, filled]}])["DLTTHG"]
+    assert spec["rows"] == promptspec.extract(blank)[1]["rows"]           # unchanged: still the blank page
+    assert spec["pages"] == [([(9, "Colour . . . . . . . . . . . . .".ljust(33) + "COLOUR", "COLOUR", 49, 10, "*RED")], "Bottom")]
+
+
+def test_a_later_occurrence_with_no_keyword_column_is_not_mistaken_for_a_page():
+    """F11's choices view redraws every row with the keyword gone from column 34 (its hint goes at
+    column 50 instead), so extract() reads no field names at all ("", "@"): not a second page."""
+    blank = _prompt()
+    choices = _screen([
+        _run(0, 19, "      Delete Thing (DLTTHG)"), _run(2, 1, "Type choices, press Enter."),
+        _run(4, 1, "Thing  . . . . . . . . . . . . ."), _run(4, 36, "MYTHING", "0x24"), _run(4, 50, "Name, generic*, *ALL"),
+        _run(5, 1, "  Library  . . . . . . . . . . ."), _run(5, 38, "*LIBL", "0x24"),
+        _run(20, 66, "       Bottom"), _run(21, 1, "F3=Exit   F4=Prompt"), _run(22, 0, " F24=More keys"),
+    ], [_field(4, 36, 10), _field(5, 38, 10)])
+    spec = promptspec.extract_all([{"snapshots": [blank, choices]}])["DLTTHG"]
+    assert spec["pages"] == []
+
+
 def test_a_roll_up_that_was_refused_is_not_a_second_page():
     page1 = _prompt()
     page1["runs"][-3] = _run(20, 66, "      More...")

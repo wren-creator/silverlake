@@ -80,6 +80,7 @@ SPECS: dict[str, dict] = {
     "CHGOBJD": {"title": ('Change Object Description (CHGOBJD)', 23), "bottom": 'Bottom',
         "keys": ('F3=Exit   F4=Prompt   F5=Refresh   F12=Cancel   F13=How to use this display', 'F24=More keys'),
         "required": ('OBJ', 'OBJTYPE'),
+        "pages": [([(7, "Text 'description' . . . . . . . TEXT", 'TEXT', 49, 50, '*SAME'), (9, 'Days used count  . . . . . . . . USECOUNT', 'USECOUNT', 49, 8, '*NORESET')], 'Bottom')],
         "all": {"keys": ('F3=Exit   F4=Prompt   F5=Refresh   F12=Cancel   F13=How to use this display', 'F24=More keys'), "pages": [([(4, 'Object . . . . . . . . . . . . . OBJ', 'OBJ', 49, 10, ''), (5, '  Library  . . . . . . . . . . .', 'OBJ@', 51, 10, '*LIBL'), (6, 'Object type  . . . . . . . . . . OBJTYPE', 'OBJTYPE', 49, 7, ''), (7, "Text 'description' . . . . . . . TEXT", 'TEXT', 49, 50, '*SAME'), (9, 'Days used count  . . . . . . . . USECOUNT', 'USECOUNT', 49, 8, '*NORESET')], 'Bottom')]},
         "rows": [
             (4, 'Object . . . . . . . . . . . . . OBJ', 'OBJ', 49, 10, ''),

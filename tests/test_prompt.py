@@ -206,6 +206,18 @@ def test_roll_up_pages_a_long_prompt_and_roll_down_comes_back(store):
     assert "Already at top of area." in texts(c.handle("ROLLDOWN", {}))
 
 
+def test_chgobjd_only_pages_once_both_required_names_are_typed(store):
+    """Captured live (`auth-prompts-gaps`): a blank CHGOBJD refuses Roll Up outright (OBJ and
+    OBJTYPE both required), unlike OVRDBF above, which pages before FILE is ever filled."""
+    c = signed(store, "QSECOFR")
+    f4(c, "CHGOBJD")
+    assert "Parameter OBJ required." in texts(c.handle("ROLLUP", {}))
+    two = c.handle("ROLLUP", {"OBJ": "SLPLACE", "OBJTYPE": "*FILE"})
+    assert "Bottom" in texts(two) and "More..." not in texts(two)
+    assert (inputs(two)["TEXT"], inputs(two)["USECOUNT"]) == ("*SAME", "*NORESET")
+    assert "Already at bottom of area." in texts(c.handle("ROLLUP", {}))
+
+
 def test_what_was_typed_on_one_page_is_still_there_when_enter_is_pressed_on_another(store):
     c = signed(store, "QSECOFR")
     f4(c, "HLDSPLF")

@@ -17,6 +17,8 @@ import sys
 _TITLE = re.compile(r"\((\w+)\)\s*$")
 LABEL_COL, KEYWORD_COL = 1, 34
 REQUIRED_ATTR = "0x26"      # the host draws a required parameter brighter than the rest
+_FIELD_NAME = re.compile(r"[A-Z][A-Z0-9]*(\+)?(@\d*)?$")   # a real keyword, not F11's choices view (no
+                                                            # keyword column at all, so extract() reads "", "@", ">", ...)
 
 
 # A change command (CHGPRF, CHGJOB) shows the current values of the profile it was captured with, and those are
@@ -127,7 +129,16 @@ def extract(snapshot: dict, carry: tuple[str, int] = ("", 0)) -> tuple[str, dict
 
 
 def extract_all(captures: list[dict]) -> dict[str, dict]:
-    """The first prompt screen seen for each command, in the order the captures give them."""
+    """The first prompt screen seen for each command, in the order the captures give them. Roll Ups
+    that paged: the same command, other rows, no complaint about a missing parameter. The first
+    prompt seen for a command establishes its rows and title, read once.
+
+    Some commands (CHGOBJD) refuse to page at all from a blank prompt ("Bottom" on the very first
+    screen, required parameters empty) and only reveal a second page once a made-up name is typed
+    first, as `auth-prompts-pages` and `auth-prompts-gaps` do for exactly this. That later, filled
+    occurrence is not a second "first screen" (the established rows stay the blank ones), it is
+    the first real page: picked up here once, and chased onward the same way a command whose blank
+    prompt already said "More..." was."""
     found: dict[str, dict] = {}
     for cap in captures:
         snaps = cap["snapshots"]
@@ -138,20 +149,37 @@ def extract_all(captures: list[dict]) -> dict[str, dict]:
             name, spec = got
             if name not in found:
                 found[name] = {**spec, "pages": []}
-            elif found[name]["pages"] or found[name]["bottom"] != "More...":
+                if spec["bottom"] != "More...":
+                    continue
+                cur, end, j = spec, spec["end"], i
+            elif found[name]["pages"]:
                 continue
-            # Roll Ups that paged: the same command, other rows, no complaint about a missing parameter.
-            # The first prompt seen for a command is the one kept, so its pages are read once.
-            if found[name]["pages"] or spec["bottom"] != "More...":
+            elif found[name]["bottom"] == "More...":
+                if spec["bottom"] != "More...":
+                    continue
+                cur, end, j = spec, spec["end"], i
+            elif spec["rows"] != found[name]["rows"] and all(
+                    _FIELD_NAME.fullmatch(r[2]) for r in spec["rows"] if r[3]):
+                # a page a blank prompt could never reach: the host redraws the first page's own
+                # fields too (filled, since that is what unblocked it), so only what is new goes in.
+                seen = {r[2] for r in found[name]["rows"] if r[2]}
+                new_rows = [r for r in spec["rows"]
+                            if (r[2] and r[2] not in seen) or (not r[2] and r not in found[name]["rows"])]
+                if new_rows:
+                    found[name]["pages"].append((new_rows, spec["bottom"]))
+                    found[name]["required"] = list(dict.fromkeys(found[name]["required"] + spec["required"]))
+                if spec["bottom"] != "More...":
+                    continue
+                cur, end, j = spec, spec["end"], i
+            else:
                 continue
-            cur, end, j = spec, spec["end"], i
             while cur["bottom"] == "More..." and j + 1 < len(snaps):
                 nxt = extract(snaps[j + 1], end)
                 if (not nxt or nxt[0] != name or nxt[1]["rows"] == cur["rows"]
                         or any(r["row"] == 23 for r in snaps[j + 1]["runs"])):
                     break
                 found[name]["pages"].append((nxt[1]["rows"], nxt[1]["bottom"]))
-                found[name]["required"] += nxt[1]["required"]
+                found[name]["required"] = list(dict.fromkeys(found[name]["required"] + nxt[1]["required"]))
                 cur, end, j = nxt[1], nxt[1]["end"], j + 1
     return found
 
