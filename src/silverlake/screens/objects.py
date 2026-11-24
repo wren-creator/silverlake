@@ -63,21 +63,6 @@ def dsplibl_screen(store: ProfileStore, entries: list[tuple[str, str]], page: in
     return Screen(rows)
 
 
-def wrklib_screen(libs: list, page: int = 0) -> Screen:
-    page, shown = _clamp(libs, page)
-    rows: list[Text | Input] = [
-        Text(0, 28, "Work with Libraries", ds.ATTR_WHITE),
-        Text(2, 2, "Libraries you have some authority to.", ds.ATTR_BLUE),
-        Text(4, 2, "Library", ds.ATTR_WHITE), Text(4, 14, "Owner", ds.ATTR_WHITE), Text(4, 26, "Text", ds.ATTR_WHITE),
-    ]
-    for i, lib in enumerate(shown):
-        r = FIRST_ROW + i
-        rows += [Text(r, 2, lib.name, ds.ATTR_GREEN), Text(r, 14, lib.owner, ds.ATTR_GREEN),
-                 Text(r, 26, lib.text[:50], ds.ATTR_GREEN)]
-    _footer(rows, page, len(libs), "F3=Exit   F12=Cancel   Page Up/Down")
-    return Screen(rows)
-
-
 def slscenario_screen(mode: str, lessons: list, page: int = 0) -> Screen:
     """SLSCENARIO STATE(*LIST): every lesson and the state it is in. Ours, not a capture: a plain paged list."""
     page, shown = _clamp(lessons, page)

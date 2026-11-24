@@ -26,7 +26,7 @@ from ..system.profiles import Profile, ProfileStore
 from ..cl.session import Session
 from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
-from .objects import DSPLIBL_ROWS, DspObjAut, dsplibl_screen, dspautl_screen, slscenario_screen, wrklib_screen
+from .objects import DSPLIBL_ROWS, DspObjAut, dsplibl_screen, dspautl_screen, slscenario_screen
 from .worklists import (DETAIL_VIEWS, EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
                         WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, dsppgmref_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen, writers_screen, printers_screen)
 from . import jobextra, pdm, pfm, prompt
@@ -358,7 +358,7 @@ class SignonController:
             entries = spec[1].entries()
             return _plist(entries, lambda rows, page: dsplibl_screen(self.store, rows, page), DSPLIBL_ROWS)
         if kind == "wrklib":
-            return ("plist", spec[1], 0, wrklib_screen)
+            return ("work", WorkList("libs", spec[1], spec[2]))
         if kind == "dspobjaut":
             return ("dspauth", DspObjAut(spec[1], spec[2]))
         if kind == "slslist":
@@ -660,6 +660,12 @@ class SignonController:
                 if not allowed(self.store, self.profile, row):
                     return None, "Not authorized to spooled file."
                 return f"@SPOOL{opt} {self.store.spool.index(row)}", ""
+            return None, f"Option {opt} is not valid."
+        if wl.kind == "libs":
+            if opt == "12":
+                return f"WRKOBJ OBJ({row.name}/*ALL)", ""
+            if opt in ("1", "2", "3", "4", "5", "6", "8", "9", "10", "11", "14"):
+                return None, f"Option {opt} is not available in Silverlake yet."
             return None, f"Option {opt} is not valid."
         if wl.kind == "jobs":
             if row.type != "SBS":

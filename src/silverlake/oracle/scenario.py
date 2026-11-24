@@ -629,6 +629,17 @@ AUTHENTICATED["auth-qp2term-settle"] = [
 # got to F11 once and showed the object rights (Opr, Mgt, Exist, Alter, Ref) with the key line turning into
 # "F11=Display data authorities". This presses F11 four times to see where it goes from there and whether it cycles,
 # then backs out. Nothing is typed on the screen and Enter is never pressed on it, so no authority changes.
+AUTHENTICATED["auth-wrklib"] = [
+    _SIGNON,
+    {"fill": {"0": "WRKLIB LIB(*LIBL)"}, "key": "ENTER"},
+    {"key": "F12", "always": True},
+    {"fill": {"0": "WRKLIB LIB(*ALL)"}, "key": "ENTER"},
+    {"key": "ROLLUP"},
+    {"key": "F17"},
+    {"key": "F18"},
+    {"key": "F12", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 AUTHENTICATED["auth-dspobjaut-f11"] = [
     _SIGNON,
     {"fill": {"0": "DSPOBJAUT OBJ(QSYS) OBJTYPE(*LIB)"}, "key": "ENTER"},

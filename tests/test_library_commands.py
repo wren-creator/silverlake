@@ -348,7 +348,7 @@ def test_views_render_page_and_go_back(store):
     assert "Display Library List" in texts(c.handle("ENTER", {"command": "dsplibl"}))
     assert "Selection or command" in texts(c.handle("ENTER", {}))
     s = c.handle("ENTER", {"command": "wrklib lib(*all)"})
-    assert "Work with Libraries" in texts(s) and "APPLIB" in texts(s) and "Bottom" in texts(s)
+    assert "Work with Libraries" in texts(s) and "APPLIB" in texts(s) and "More..." in texts(s)
     assert "Selection or command" in texts(c.handle("F12", {}))
     s = c.handle("ENTER", {"command": "dspobjaut applib/customers *file"})
     t = texts(s)
@@ -363,11 +363,58 @@ def test_a_long_list_pages(store):
         run(store, "QSECOFR", f"CRTLIB LIB(LIB{i:02d})")
     c = signed_on(store, "QSECOFR")
     first = texts(c.handle("ENTER", {"command": "wrklib lib(LIB*)"}))
-    assert "More..." in first and "LIB00" in first and "LIB19" not in first
+    assert "More..." in first and "LIB00" in first and "LIB08" not in first        # 8 rows a page, as captured
     second = texts(c.handle("ROLLUP", {}))
-    assert "Bottom" in second and "LIB19" in second
+    assert "More..." in second and "LIB08" in second and "LIB19" not in second
+    third = texts(c.handle("ROLLUP", {}))
+    assert "Bottom" in third and "LIB19" in third
     assert "More..." in texts(c.handle("ROLLDOWN", {}))
     render(c.handle("ROLLUP", {}))
+
+
+def test_wrklib_option_12_opens_work_with_objects_on_that_library(store):
+    """Captured live (`auth-wrklib`): option 12's own legend text is "12=Work with objects", and
+    it is exactly that, the existing Work with Objects screen opened on the library's own name."""
+    c = signed_on(store, "QSECOFR")
+    s = c.handle("ENTER", {"command": "wrklib lib(*all)"})
+    s = c.handle("ENTER", {"opt0": "12"})
+    assert "Work with Objects" in texts(s) and "APPLIB" in texts(s)
+    assert "Work with Libraries" in texts(c.handle("F12", {}))
+
+
+def test_wrklib_other_options_say_plainly_they_are_not_modeled(store):
+    c = signed_on(store, "QSECOFR")
+    c.handle("ENTER", {"command": "wrklib lib(*all)"})
+    for opt in ("1", "2", "3", "4", "5", "6", "8", "9", "10", "11", "14"):
+        s = c.handle("ENTER", {"opt0": opt})
+        assert f"Option {opt} is not available in Silverlake yet." in texts(s)
+    s = c.handle("ENTER", {"opt0": "7"})
+    assert "Option 7 is not valid." in texts(s)
+
+
+def test_wrklib_f5_refreshes_the_list(store):
+    c = signed_on(store, "QSECOFR")
+    c.handle("ENTER", {"command": "wrklib lib(*all)"})
+    run(store, "QSECOFR", "CRTLIB LIB(FRESHLIB)")
+    assert "FRESHLIB" not in texts(c.handle("ROLLDOWN", {}))       # the snapshot taken when WRKLIB opened
+    assert "FRESHLIB" in texts(c.handle("F5", {}))
+
+
+def test_wrklib_matches_the_captured_layout(store):
+    """Captured live (`auth-wrklib`): the option legend at rows 2-5, the ASP header, and the
+    Opt, Library, Attribute, Device and Text columns from row 8, rows of data from row 10.
+    QTEMP's own Attribute is TEST, every other library PROD, both seen in the capture."""
+    c = signed_on(store, "QSECOFR")
+    r = {(f.row, f.col): f.text for f in c.handle("ENTER", {"command": "wrklib lib(*all)"}).fields
+         if isinstance(f, Text)}
+    assert r[(0, 30)] == "Work with Libraries"
+    assert r[(3, 3)] == "1=Create" and r[(5, 35)] == "12=Work with objects"
+    assert r[(7, 30)] == "ASP"
+    assert (r[(8, 1)], r[(8, 6)], r[(8, 18)], r[(8, 30)], r[(8, 42)]) == ("Opt", "Library", "Attribute", "Device", "Text")
+    assert r[(10, 6)] and (10, 18) in r                            # rows start at 10
+    names = {r[(row, 6)]: r[(row, 18)] for row in range(10, 18) if (row, 6) in r}
+    assert names["QTEMP"] == "TEST" and names["QGPL"] == "PROD"
+    assert r[(21, 1)] == "F3=Exit" and r[(22, 1)] == "F12=Cancel"
 
 
 def test_every_view_renders_for_every_profile(store):

@@ -31,7 +31,8 @@ class WorkList:
     first_row: int = field(init=False)
 
     def __post_init__(self) -> None:
-        self.per_page, self.first_row = {"objects": (11, 7), "owner": (8, 10), "autls": (10, 8), "jobs": (9, 9), "spool": (9, 9), "outq": (9, 9)}[self.kind]
+        self.per_page, self.first_row = {"objects": (11, 7), "owner": (8, 10), "autls": (10, 8), "jobs": (9, 9),
+                                          "spool": (9, 9), "outq": (9, 9), "libs": (8, 10)}[self.kind]
 
     @property
     def pages(self) -> int:
@@ -46,12 +47,13 @@ class WorkList:
         self.page = max(0, min(self.page, self.pages - 1))
 
     def screen(self, message: str = "") -> Screen:
-        return {"objects": _objects, "owner": _owner, "autls": _autls, "jobs": _jobs, "spool": _spool, "outq": _outq}[self.kind](self, message)
+        return {"objects": _objects, "owner": _owner, "autls": _autls, "jobs": _jobs, "spool": _spool,
+                "outq": _outq, "libs": _libs}[self.kind](self, message)
 
 
 def _tail(rows: list, wl: WorkList, prompt: str, keys1: list[tuple[int, str]], keys2: list[tuple[int, str]],
           message: str) -> Screen:
-    rows.append(Text(18, 67, "More..." if wl.page < wl.pages - 1 else "Bottom", ds.ATTR_WHITE))
+    rows.append(_more(18, wl.page >= wl.pages - 1))
     rows += [Text(19, 1, prompt, ds.ATTR_GREEN), Text(20, 1, "===>", ds.ATTR_GREEN),
              Input(COMMAND_ROW, COMMAND_COL, COMMAND_LEN, "command")]
     rows += [Text(21, c, t, ds.ATTR_BLUE) for c, t in keys1]
@@ -100,6 +102,40 @@ def _objects(wl: WorkList, message: str) -> Screen:
     return _tail(rows, wl, "Parameters for options 5, 7 and 13 or command",
                  [(1, "F3=Exit"), (11, "F4=Prompt"), (23, "F5=Refresh"), (36, "F9=Retrieve"),
                   (50, "F11=Display names and types")],
+                 [(1, "F12=Cancel"), (14, "F16=Repeat position to"), (39, "F17=Position to")], message)
+
+
+def _libs(wl: WorkList, message: str) -> Screen:
+    """Laid out like the real Work with Libraries captured from PUB400 (`auth-wrklib`): the option
+    legend at rows 2-5, an ASP header over the Opt/Library/Attribute/Device/Text columns from row 8,
+    rows from 10. Attribute is QTEMP's own real TEST, PROD for everything else, same as the capture
+    had it (and unlike Work with Objects' own *LIB rows above, which have always shown PROD alone,
+    since no capture for that one ever happened to list QTEMP). Device stays blank, ASP not modeled.
+    F4, F9, F11, F16 and F17 are real captured keys, not yet wired to anything, the same as Work with
+    Objects already draws its own unwired F4, F9, F16 and F17 above; only F3, F5 and F12 do anything."""
+    rows: list = [
+        Text(0, 30, "Work with Libraries", ds.ATTR_WHITE),
+        Text(2, 1, "Type options, press Enter.", ds.ATTR_BLUE),
+        Text(3, 3, "1=Create", ds.ATTR_BLUE), Text(3, 14, "2=Change", ds.ATTR_BLUE), Text(3, 25, "3=Copy", ds.ATTR_BLUE),
+        Text(3, 35, "4=Delete", ds.ATTR_BLUE), Text(3, 46, "5=Display", ds.ATTR_BLUE), Text(3, 58, "6=Print", ds.ATTR_BLUE),
+        Text(4, 3, "8=Display library description", ds.ATTR_BLUE), Text(4, 35, "9=Save", ds.ATTR_BLUE),
+        Text(4, 46, "10=Restore", ds.ATTR_BLUE),
+        Text(5, 3, "11=Save changed objects", ds.ATTR_BLUE), Text(5, 35, "12=Work with objects", ds.ATTR_BLUE),
+        Text(5, 58, "14=Clear", ds.ATTR_BLUE),
+        Text(7, 30, "ASP", ds.ATTR_WHITE),
+        Text(8, 1, "Opt", ds.ATTR_WHITE), Text(8, 6, "Library", ds.ATTR_WHITE), Text(8, 18, "Attribute", ds.ATTR_WHITE),
+        Text(8, 30, "Device", ds.ATTR_WHITE), Text(8, 42, "Text", ds.ATTR_WHITE),
+    ]
+    shown = wl.shown()
+    _opts(rows, wl, len(shown), wl.first_row)
+    for i, lib in enumerate(shown):
+        r = wl.first_row + i
+        rows += [Text(r, 6, lib.name, ds.ATTR_GREEN), Text(r, 18, "TEST" if lib.name == "QTEMP" else "PROD", ds.ATTR_GREEN)]
+        if lib.text:
+            rows.append(Text(r, 42, lib.text[:38], ds.ATTR_GREEN))
+    return _tail(rows, wl, "Parameters for options 1, 2, 3, 5, 8, 9, 10, 11 and 12 or command",
+                 [(1, "F3=Exit"), (14, "F4=Prompt"), (26, "F5=Refresh"), (39, "F9=Retrieve"),
+                  (53, "F11=Display names only")],
                  [(1, "F12=Cancel"), (14, "F16=Repeat position to"), (39, "F17=Position to")], message)
 
 

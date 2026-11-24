@@ -24,7 +24,7 @@ SAME = "*SAME"
 class Outcome:
     message: messages.Message | None = None
     # ("dspusrprf", Profile), ("wrkusrprf", [Profile]), ("dsplibl", Session),
-    # ("wrklib", [SecuredObject]), ("dspobjaut", SecuredObject, [(user, authority)])
+    # ("wrklib", [SecuredObject], requery), ("dspobjaut", SecuredObject, [(user, authority)])
     view: tuple | None = None
     signoff: bool = False
     go: tuple | None = None          # (menu object, RTNPNT) for the controller to put on the stack
@@ -893,7 +893,7 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
         libs = objects.visible_libraries(store, actor, b["LIB"], session)
         if not libs:
             return Outcome(messages.syntax("No libraries found, or you are not authorized to any."))
-        return Outcome(view=("wrklib", libs))
+        return Outcome(view=("wrklib", libs, lambda: objects.visible_libraries(store, actor, b["LIB"], session)))
     if name == "DSPOBJAUT":
         obj, err = objects.display_authority(store, actor, b["OBJ"], b["OBJTYPE"], session)
         if err:
