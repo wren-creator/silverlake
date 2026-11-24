@@ -711,6 +711,27 @@ AUTHENTICATED["auth-msgq-retry"] = [
     {"fill": {"0": f"DLTMSGQ MSGQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
     {**_SIGNOFF, "always": True},
 ]
+# A batch of small, single-profile-confirmable ROADMAP leftovers in one run: CRTDTAARA/CRTUSRSPC's
+# own completion wording, WRKOUTQ on a queue that does not exist, CHGJOB RUNPTY on our own job
+# (JOBCTL_ONLY, inferred CPF1337), DSPUSRPRF USRPRF(*CURRENT), and DSPPTF/CHGFTPA (no *IOSYSCFG).
+AUTHENTICATED["auth-confirm-batch"] = [
+    _SIGNON,
+    {"fill": {"0": f"CRTDTAARA DTAARA(QGPL/{_TESTLIB}) TYPE(*CHAR) LEN(10) "
+                    "TEXT('Silverlake oracle test, deleted at once')"}, "key": "ENTER", "proceed_if": _MADE},
+    {"fill": {"0": f"DLTDTAARA DTAARA(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"CRTUSRSPC USRSPC(QGPL/{_TESTLIB}) TEXT('Silverlake oracle test, deleted at once')"},
+     "key": "ENTER", "always": True},
+    {"fill": {"0": f"DLTUSRSPC USRSPC(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"fill": {"0": "WRKOUTQ OUTQ(QGPL/SLNOSUCHQ9)"}, "key": "ENTER", "always": True},
+    {"key": "F12", "always": True},
+    {"fill": {"0": "CHGJOB RUNPTY(10)"}, "key": "ENTER", "always": True},
+    {"fill": {"0": "DSPUSRPRF USRPRF(*CURRENT)"}, "key": "ENTER", "always": True},
+    {"key": "F12", "always": True},
+    {"fill": {"0": "DSPPTF LICPGM(5770SS1)"}, "key": "ENTER", "always": True},
+    {"key": "F12", "always": True},
+    {"fill": {"0": "CHGFTPA AUTOSTART(*YES)"}, "key": "ENTER", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

@@ -158,10 +158,10 @@ def test_display_only_knows_basic_and_screen_output(store):
     assert "OUTPUT" in run(store, "QSECOFR", "DSPUSRPRF STUDENT OUTPUT(*PRINT)")
 
 
-def test_dspusrprf_current_is_your_own_profile(store):
-    assert execute(store, store.get("STUDENT"), "DSPUSRPRF *CURRENT").view == (
-        "dspusrprf", store.get("STUDENT"))
-    assert execute(store, store.get("QSECOFR"), "DSPUSRPRF *CURRENT").view[1] is store.get("QSECOFR")
+def test_dspusrprf_refuses_current_unlike_chgusrprf(store):
+    # captured live (auth-confirm-batch): DSPUSRPRF's own USRPRF does not take *CURRENT, unlike
+    # CHGUSRPRF's; "Value '*CURRENT  ' for USRPRF not a name or generic name." on the real host
+    assert "not valid" in run(store, "STUDENT", "DSPUSRPRF *CURRENT")
 
 
 def test_chgusrprf_current_is_your_own_profile(store):

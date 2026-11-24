@@ -6,9 +6,12 @@ Rules, from IBM's 7.5 command pages (read, quoted from the pages themselves):
   CHGJOB                  the same, or the command is issued from the job being changed. Changing
                           RUNPTY, TIMESLICE, PURGE, DFTWAIT, TSEPOOL, WLCGRP, CPUTIME, MAXTMPSTG or
                           PRCRSCPTY needs *JOBCTL. Nothing on any of the four pages involves *SPLCTL.
-Inferred, not read on a page: which condition raises each message below (the IDs are listed there),
-that a refused JOBCTL-only change uses CPF1337 (that part of CHGJOB's page came through only as a
-summary), that a subsystem monitor is "not a valid job type" for these commands, and that ending a
+Confirmed live (auth-confirm-batch): CHGJOB RUNPTY(10) on our own current job, with no *JOBCTL,
+came back "680370/WREN01/QPADEV0034 not authorized to change parameters." exactly, matching this
+module's own CPF1337 and qualified-job wording, inferred before this run from only a summary of
+that part of CHGJOB's page.
+Inferred, not read on a page: which condition raises each other message below (the IDs are listed
+there), that a subsystem monitor is "not a valid job type" for these commands, and that ending a
 seeded system job just removes it until the next restart. Priorities and limits are stored and
 shown, and change nothing: there is no scheduler."""
 

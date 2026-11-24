@@ -92,12 +92,14 @@ def test_delete_from_work_with_objects_option_4(store):
 def test_hold_and_release_change_the_queues_own_status(store):
     run(store, "STUDENT", "CRTOUTQ OUTQ(SCRATCH/MYQ)")
     q = store.objects[("SCRATCH", "MYQ", "*OUTQ")]
-    assert run(store, "STUDENT", "HLDOUTQ OUTQ(SCRATCH/MYQ)") == "Output queue MYQ in SCRATCH held."
+    out = execute(store, store.get("STUDENT"), "HLDOUTQ OUTQ(SCRATCH/MYQ)", Session.for_profile("SCRATCH"))
+    assert out.message is None    # captured: silent on success, like CHGMSGQ
     assert q.data["status"] == "HLD"
-    assert run(store, "STUDENT", "RLSOUTQ OUTQ(SCRATCH/MYQ)") == "Output queue MYQ in SCRATCH released."
+    out = execute(store, store.get("STUDENT"), "RLSOUTQ OUTQ(SCRATCH/MYQ)", Session.for_profile("SCRATCH"))
+    assert out.message is None
     assert q.data["status"] == "RLS"
     run(store, "STUDENT", "HLDOUTQ OUTQ(SCRATCH/MYQ)")                      # holding a held queue is not an error
-    assert "held" in run(store, "STUDENT", "HLDOUTQ OUTQ(SCRATCH/MYQ)")
+    assert q.data["status"] == "HLD"
 
 
 def test_hold_and_release_need_the_same_authority_as_delete(store):

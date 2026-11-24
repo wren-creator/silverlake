@@ -57,7 +57,7 @@ CRT_PARAMS = [
 ]
 CHG_PARAMS = [Param(p.key, p.kind, SAME, p.maxn) for p in CRT_PARAMS]
 CHG_PARAMS[0] = Param("USRPRF", "name_or_current", "", required=True)
-DSP_PARAMS = [Param("USRPRF", "name_or_current", "", required=True), Param("TYPE", "dsptype", "*BASIC"), Param("OUTPUT", "output", "*")]
+DSP_PARAMS = [Param("USRPRF", "name", "", required=True), Param("TYPE", "dsptype", "*BASIC"), Param("OUTPUT", "output", "*")]
 DLT_PARAMS = [Param("USRPRF", "name", "", required=True), Param("OWNOBJOPT", "ownobj", "*NODLT", 2)]
 WRK_PARAMS = [Param("USRPRF", "wrkname", "*ALL"), Param("ASTLVL", "ignored", "*SYSVAL")]
 

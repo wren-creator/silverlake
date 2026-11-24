@@ -20,6 +20,14 @@ Rules read from the IBM i 7.5 command reference:
               INZVAL defaulting to blanks rather than IBM's hex zeros is ours, not IBM's: Silverlake
               has no binary object content anywhere else, and a user space is not read back through
               any command here, so the distinction has nothing to show against.
+              **CRTUSRSPC is not a real CL command** (confirmed live, auth-confirm-batch: "Command
+              CRTUSRSPC in library *LIBL not found."; IBM's own docs only ever name the QUSCRTUS API
+              or QSYS2.CREATE_USER_SPACE for creating one). DLTUSRSPC is real, and did resolve in the
+              same run ("Object X in QGPL type *USRSPC not found.", the ordinary missing-object
+              wording, not a command-not-found one). Kept here anyway as Silverlake's own teaching
+              shorthand for the create side of a real object type, a deliberate departure from a real
+              system rather than an unnoticed one; CRTDTAARA's own wording was captured in the same
+              run and needed no change ("Data area X created in library Y.").
   DLTUSRSPC   *OBJEXIST authority to the space and *EXECUTE to the library, same as any delete. There
               is no native CHGUSRSPC command on a real system (a user space changes through the
               QUSCUSAT/QUSPTRUS APIs, not CL), so none is modeled here either."""

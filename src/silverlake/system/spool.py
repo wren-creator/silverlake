@@ -217,8 +217,10 @@ def delete_queue(store: ProfileStore, actor: Profile, session, spec: str) -> Don
 
 
 def hold_queue(store: ProfileStore, actor: Profile, session, spec: str, hold: bool) -> Done:
-    """HLDOUTQ and RLSOUTQ, confirmed real on a live run (held status read back by a fresh WRKOUTQ,
-    "Status: HLD"): not on a page, so both the authority rule and the completion wording are ours.
+    """HLDOUTQ and RLSOUTQ, confirmed real on a live run (`auth-outq-keys`): held status read
+    back by a fresh WRKOUTQ, "Status: HLD", and **no completion message at all on success**
+    (row 23 stayed blank on every WRKOUTQ redraw between the two, the same silence CHGMSGQ's
+    own capture later confirmed for itself). Not on a page, so the authority rule is still ours.
     Real IBM i needs *CONTROL to the queue for both, a bit Silverlake does not model on its own;
     this reuses the general "may change it" rule (OBJEXIST, the same delete_queue already needs)
     as a stand-in, on the verification list. Holding a held queue or releasing a released one is
@@ -230,7 +232,7 @@ def hold_queue(store: ProfileStore, actor: Profile, session, spec: str, hold: bo
         return _no(messages.not_authorized_to_object_2189(q.name, q.library, "*OUTQ"))
     q.data["status"] = "HLD" if hold else "RLS"
     store.on_change()
-    return _ok(f"Output queue {q.name} in {q.library} {'held' if hold else 'released'}.")
+    return Done(True, None)
 
 
 def in_queue(store: ProfileStore, q) -> list[SpoolFile]:

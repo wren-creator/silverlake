@@ -326,8 +326,9 @@ def program_not_found(name: str) -> Message:
 
 
 def iosyscfg_required() -> Message:
-    """CHGFTPA's page (read) says the command needs *IOSYSCFG. No ID was listed with it."""
-    return Message("", "*IOSYSCFG special authority is required to change FTP attributes.", NO_ID)
+    """Confirmed live (auth-confirm-batch): CHGFTPA AUTOSTART(*YES) as a profile with no *IOSYSCFG
+    gave back this exact wording, no ID shown with it."""
+    return Message("", "*IOSYSCFG authority required to use CHGFTPA.", NO_ID)
 
 
 def program_in_restricted_library(pgm: str, lib: str) -> Message:
