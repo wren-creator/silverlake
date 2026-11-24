@@ -622,6 +622,11 @@ class SignonController:
             self.parents.append(self.view)
             self.view = ("writers" if aid == "F20" else "printers",)
             return self._draw_view()
+        if wl.kind == "owner" and aid == "F11":
+            wl.view2 = not wl.view2
+            return self._draw_view()
+        if wl.kind == "owner" and aid == "F22":              # captured: refused with no row's name field selected
+            return self._draw_view("Cursor not in valid position.")
         param = values.get("command", "").strip()
         picks = [(i, values.get(f"opt{i}", "").strip()) for i in range(wl.per_page)]
         picks = [(wl.page * wl.per_page + i, opt) for i, opt in picks if opt and wl.page * wl.per_page + i < len(wl.rows)]

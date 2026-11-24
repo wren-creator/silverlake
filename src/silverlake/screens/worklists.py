@@ -23,7 +23,7 @@ class WorkList:
     owner: str = ""                    # the profile named at the top of "owner"
     queue: tuple = ("", "")            # (queue, library) named at the top of "outq"
     status: str = "RLS"                 # "outq" only: a snapshot taken when WRKOUTQ opened, not live
-    view2: bool = False                 # "outq" only: F11's alternate column set
+    view2: bool = False                 # "outq" and "owner": F11's alternate column set
     alt_keys: bool = False              # "outq" only: F24's second key row
     retained: dict = field(default_factory=dict)   # options typed before a confirm screen was cancelled
     page: int = 0
@@ -140,6 +140,9 @@ def _libs(wl: WorkList, message: str) -> Screen:
 
 
 def _owner(wl: WorkList, message: str) -> Screen:
+    """F11 toggles the Attribute/Device columns (captured) for the object's own Text (also
+    captured, `auth-wrkobjown-keys`), flipping its own key label between "F11=Display
+    descriptions" and "F11=Display attributes" same as the screen itself does."""
     rows: list = [
         Text(0, 27, "Work with Objects by Owner", ds.ATTR_WHITE),
         Text(2, 1, "User profile . . . . . . . :", ds.ATTR_GREEN), Text(2, 32, wl.owner, ds.ATTR_GREEN),
@@ -147,23 +150,32 @@ def _owner(wl: WorkList, message: str) -> Screen:
         Text(5, 3, "2=Edit authority", ds.ATTR_BLUE), Text(5, 27, "4=Delete", ds.ATTR_BLUE),
         Text(5, 38, "5=Display authority", ds.ATTR_BLUE), Text(5, 60, "7=Rename", ds.ATTR_BLUE),
         Text(6, 3, "8=Display description", ds.ATTR_BLUE), Text(6, 27, "9=Change owner", ds.ATTR_BLUE),
-        Text(8, 64, "ASP", ds.ATTR_WHITE),
-        Text(9, 1, "Opt", ds.ATTR_WHITE), Text(9, 6, "Object", ds.ATTR_WHITE), Text(9, 28, "Library", ds.ATTR_WHITE),
-        Text(9, 42, "Type", ds.ATTR_WHITE), Text(9, 52, "Attribute", ds.ATTR_WHITE),
-        Text(9, 64, "Device", ds.ATTR_WHITE),
     ]
+    if not wl.view2:
+        rows.append(Text(8, 64, "ASP", ds.ATTR_WHITE))
+    rows += [
+        Text(9, 1, "Opt", ds.ATTR_WHITE), Text(9, 6, "Object", ds.ATTR_WHITE), Text(9, 28, "Library", ds.ATTR_WHITE),
+        Text(9, 42, "Type", ds.ATTR_WHITE),
+        Text(9, 52, "Text" if wl.view2 else "Attribute", ds.ATTR_WHITE),
+    ]
+    if not wl.view2:
+        rows.append(Text(9, 64, "Device", ds.ATTR_WHITE))
     shown = wl.shown()
     _opts(rows, wl, len(shown), 10)
     for i, o in enumerate(shown):
         r = 10 + i
         rows += [Text(r, 6, o.name, ds.ATTR_GREEN), Text(r, 28, o.library, ds.ATTR_GREEN),
                  Text(r, 42, o.type, ds.ATTR_GREEN)]
-        if o.type == "*LIB":
-            rows.append(Text(r, 52, "PROD", ds.ATTR_GREEN))
-        rows.append(Text(r, 64, "*SYSBAS", ds.ATTR_GREEN))
+        if wl.view2:
+            if o.text:
+                rows.append(Text(r, 52, o.text[:27], ds.ATTR_GREEN))
+        else:
+            if o.type == "*LIB":
+                rows.append(Text(r, 52, "PROD", ds.ATTR_GREEN))
+            rows.append(Text(r, 64, "*SYSBAS", ds.ATTR_GREEN))
+    f11 = "F11=Display attributes" if wl.view2 else "F11=Display descriptions"
     return _tail(rows, wl, "Parameters or command",
-                 [(1, "F3=Exit"), (14, "F4=Prompt"), (26, "F5=Refresh"), (39, "F9=Retrieve"),
-                  (53, "F11=Display descriptions")],
+                 [(1, "F3=Exit"), (14, "F4=Prompt"), (26, "F5=Refresh"), (39, "F9=Retrieve"), (53, f11)],
                  [(1, "F12=Cancel"), (14, "F17=Top"), (26, "F18=Bottom"), (39, "F22=Display entire name")], message)
 
 

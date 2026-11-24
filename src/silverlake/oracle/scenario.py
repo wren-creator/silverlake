@@ -678,6 +678,17 @@ AUTHENTICATED["auth-edtauth-view"] = [
     *[{"key": "F3", "always": True}] * 3,
     {**_SIGNOFF, "always": True},
 ]
+# Work with Objects by Owner's own F11=Display descriptions and F22=Display entire name, never
+# pressed before (auth-libs only ever read the plain list to build _owner's own layout).
+AUTHENTICATED["auth-wrkobjown-keys"] = [
+    _SIGNON,
+    {"fill": {"0": "WRKOBJOWN USRPRF(*CURRENT) OBJTYPE(*LIB)"}, "key": "ENTER"},
+    {"key": "F11", "always": True},
+    {"key": "F11", "always": True},
+    {"key": "F22", "always": True},
+    {"key": "F12", "always": True},
+    {**_SIGNOFF, "always": True},
+]
 SCENARIOS.update(AUTHENTICATED)
 
 MIN_REMOTE_INTERVAL = 10.0  # seconds between connections to the same remote host

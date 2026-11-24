@@ -211,6 +211,29 @@ def test_wrkobjown_layout_follows_the_capture(store):
     assert (10, 2) in ins and ins[(10, 2)].length == 1 and ins[(10, 2)].monocase and (20, 6) in ins
 
 
+def test_wrkobjown_f11_toggles_attributes_and_text(store):
+    """Captured live (`auth-wrkobjown-keys`): F11 swaps Attribute/Device for Text, no ASP
+    header, and flips its own label between "Display descriptions" and "Display attributes"."""
+    c = _signed(store)
+    s = c.handle("ENTER", {"command": "wrkobjown usrprf(qsecofr) objtype(*lib)"})
+    f = _field_map(s)
+    assert f[(9, 52)].text == "Attribute" and f[(21, 53)].text == "F11=Display descriptions"
+    s = c.handle("F11", {})
+    f = _field_map(s)
+    assert f[(9, 52)].text == "Text" and f[(21, 53)].text == "F11=Display attributes"
+    assert f[(10, 52)].text == "Application library" and (10, 64) not in f and (8, 64) not in f
+    s = c.handle("F11", {})
+    f = _field_map(s)
+    assert f[(9, 52)].text == "Attribute" and f[(10, 64)].text == "*SYSBAS"
+
+
+def test_wrkobjown_f22_is_refused_with_no_cursor_on_a_name(store):
+    c = _signed(store)
+    c.handle("ENTER", {"command": "wrkobjown usrprf(qsecofr) objtype(*lib)"})
+    s = c.handle("F22", {})
+    assert "Cursor not in valid position." in " | ".join(f.text for f in s.fields if isinstance(f, Text))
+
+
 def test_wrkautl_layout_has_the_create_row(store):
     c = _signed(store)
     s = c.handle("ENTER", {"command": "wrkautl"})
