@@ -154,27 +154,60 @@ Taken from PUB400 on 2026-10-27, read only, the test profile's own job and two o
 - **Work with Output Queue** is a list with a status line (queue, library, status), options 1 to 9 on two rows, columns File, User, User Data, Sts, Pages, Copies, Form Type and Pty, a parameter line, and keys F3, F11 (view 2), F12, F20 (writers), F22 (printers), F24. A queue that does not exist answers `Output queue NOQUEUE in library SLNOSUCH not found.` on the menu's message line.
 - **The recon point.** A basic profile listing the job log queue sees every file in it, with the user and the job name of each, not only its own. The queue's display rule hides the contents, not the list. WRKOUTQ in Silverlake has to show the same thing.
 
-## WRKOUTQ leftovers: the key line, and what still needs a real run
+## WRKOUTQ leftovers: the key line, and what a real run against it taught us
 
 The `auth-outq` capture above already had the real key line sitting in it unused: `F3=Exit F11=View 2
-F12=Cancel F20=Writers F22=Printers` on row 21, `F24=More keys` on row 22. `worklists._outq` now draws
-it, matching the real columns exactly, no new capture needed for the labels themselves. Pressing any of
-F11, F20, F22 or F24 is still a no-op, the same as F10/F11/F22/F24 already are on Work with All Spooled
-Files above them: the label is real, the destination screen is not built.
+F12=Cancel F20=Writers F22=Printers` on row 21, `F24=More keys` on row 22. `worklists._outq` drew it
+from the start, matching the real columns exactly, but pressing any of F11, F20, F22 or F24 was a
+no-op, same as F10/F11/F22/F24 already were on Work with All Spooled Files above them.
 
-What those keys actually show, and whether a held queue's Status reads `HLD` (there is no HLDOUTQ or
-RLSOUTQ modeled here to produce one, confirmed by grep, so this is genuinely unknown rather than an
-oversight), needs a real PUB400 run. `auth-outq-keys` does that: it makes a throwaway library and queue
-(CRTOUTQ refuses QTEMP, CPF3352, so QTEMP is not an option the way it is for a data area), presses each
-of the four keys once and backs out with F12, tries HLDOUTQ and RLSOUTQ to see if they exist on the real
-host at all, and deletes the library at the end regardless of what happened. Run it with:
+`auth-outq-keys` (2026-11-24) tried this against PUB400 for real, and the first attempt failed before it
+got anywhere: it made a throwaway library with `CRTLIB`, which the test profile has no `*USE` to at all
+("Not authorized to command CRTLIB in library \*LIBL.", the same wording `commandobjs.py`'s own docstring
+already carries). The scenario now skips CRTLIB entirely and makes its throwaway queue straight in QGPL
+(CRTOUTQ still refuses QTEMP, confirmed, CPF3352), cleaning up with DLTOUTQ alone since there is no
+library to drop with it. Run it with:
 
 ```
-python -m silverlake.oracle capture pub400.com 23 auth-outq-keys --settle 3
+python -m silverlake.oracle capture pub400.com:992 auth-outq-keys --tls --out captures/pub400/auth-outq-keys.json --settle 3
 ```
 
-The bare `WRKOUTQ` form (no OUTQ named, lists every queue on the host) is the other open item on that
-roadmap line. It did not answer in 15 seconds on the 2026-10-27 run; the scenario harness now has a
+A second real run, with each key given its own fresh `WRKOUTQ` (F12 turned out to close the whole list,
+not undo one view in place, so reusing the same screen for all four keys skipped most of them the first
+time), answered everything that bullet asked:
+
+- **F11** flips the file columns in place to a second set: `File File Nbr Job User Number Date Time`,
+  captured exactly (`row 8`: File col 6, File Nbr col 18, Job col 28, User col 40, Number col 52, Date
+  col 60, Time col 70). The queue stayed empty the whole run, so no actual row's date/time format was
+  ever seen; what `worklists._outq` draws for one is ours.
+- **F20** opens Work with All Writers (no writers, matching options, columns and key line captured
+  exactly) and **F22** opens Work with All Printers — except a real run's Printers screen listed other
+  users' real printer device names on the shared host (ABCDEFG, ADRIANO, and so on), which has no place
+  in a seed meant to hold its own data, so Silverlake's own Printers list is always empty, same reasoning
+  as Writers.
+- **F24** swaps the key line to a second row: `F4=Prompt F5=Refresh F9=Retrieve F21=Description
+  F24=More keys`, all on row 21 (the default row spans rows 21 and 22; the alternate row is one line).
+- **F12 closes the whole list**, confirmed directly: pressing it right after F11 landed back on the
+  command line, not back on the default view. Typing a bare function key into the wrong screen answers
+  "Function key not allowed.", also captured. Typing another `WRKOUTQ` on the list's own command line
+  opens a second, nested copy instead of replacing the first (confirmed indirectly: a `WRKOUTQ` right
+  after `HLDOUTQ` on the same command line showed `HLD`, where one typed later on a *different* already
+  open WRKOUTQ screen still showed the old value) — Silverlake's `parents` stack already does this for
+  every work list, so nothing extra was needed to match it.
+- **HLDOUTQ and RLSOUTQ are real, working commands**, not found on any command reference page read
+  here: a held queue's Status read back `HLD` on a fresh `WRKOUTQ`. Both are now built
+  (`spool.hold_queue`), with the authority rule and completion wording marked ours (not captured; see
+  docs/jobs-spool-messages.md).
+- **Status does not refresh live.** Typing `HLDOUTQ` or `RLSOUTQ` on an already-open WRKOUTQ's own
+  command line left the Status field showing the old value; only a fresh `WRKOUTQ` picked up the
+  change. `WorkList.status` is a snapshot for the same reason.
+- **CRTOUTQ's real completion message** turned up as a side effect: "Object NAME type \*OUTQ created in
+  library LIB.", not the guessed "Output queue NAME created in library LIB." this file's own docstring
+  used to carry. Fixed. DLTOUTQ's message was already right: it already used the same generic "Object
+  NAME in LIB type TYPE deleted." every other delete already gives, confirmed live too.
+
+The bare `WRKOUTQ` form (no OUTQ named, lists every queue on the host) is the one item from that roadmap
+line still open. It did not answer in 15 seconds on the 2026-10-27 run; the scenario harness now has a
 longer `--timeout` and the `--settle` drain added for the QP2TERM capture, neither of which existed
 then, so it may be worth one retry with a generous timeout before writing it off as unusable on a
 shared host.

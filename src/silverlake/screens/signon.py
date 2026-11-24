@@ -28,7 +28,7 @@ from .menu import command_entry_screen, menu_screen
 from .model import Input, Screen, Text
 from .objects import DSPLIBL_ROWS, DSPOBJAUT_ROWS, dsplibl_screen, dspobjaut_screen, dspautl_screen, slscenario_screen, wrklib_screen
 from .worklists import (DETAIL_VIEWS, EditAuth, WorkList, add_users_screen, confirm_delete_screen, dspobjd_basic_screen,
-                        WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, dsppgmref_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen)
+                        WRKJOB_OPTIONS, WRKJOB_PAGE2, WRKJOB_PAGE3, dsppgm_screen, dsppgmref_screen, DSPJOB_PAGE2, dspjob_screen, dspjoblog_screen, jobdef_screen, jobrun_screen, jobstatus_screen, chgsplfa_screen, sndnetsplf_screen, printstatus_screen, callstack_screen, joblocks_screen, openfiles_screen, overrides_screen, commit_screen, dspmsg_screen, message_lines as dspmsg_lines, wrkjob_screen, dspobjd_screen, dspsplf_screen, objects_in_list_screen, spoolattr_screen, writers_screen, printers_screen)
 from . import jobextra, pdm, pfm, prompt
 from . import pase as paseui
 from .usrprf import PAGE_SIZE, dspusrprf_screen, wrkusrprf_pages, wrkusrprf_screen
@@ -375,7 +375,8 @@ class SignonController:
         if kind == "wrksplf":
             return ("work", WorkList("spool", spec[1], spec[2]))
         if kind == "wrkoutq":
-            return ("work", WorkList("outq", spec[2], spec[3], queue=(spec[1].name, spec[1].library)))
+            return ("work", WorkList("outq", spec[2], spec[3], queue=(spec[1].name, spec[1].library),
+                                     status=spec[1].data.get("status", "RLS")))
         if kind == "dspsplf":
             return ("spoolview", spec[1], 0)
         if kind == "dspmsg":
@@ -483,6 +484,8 @@ class SignonController:
             return sndnetsplf_screen(f, message) if which == "send" else printstatus_screen(f, SYSTEM_NAME, message)
         if self.view[0] == "add":
             return add_users_screen(self.view[1].obj, self.view[2], message)
+        if self.view[0] in ("writers", "printers"):
+            return (writers_screen if self.view[0] == "writers" else printers_screen)(message)
         return wrkusrprf_screen(self.view[1], self.view[2], message)
 
     def _in_view(self, aid: str, values: dict[str, str]) -> Screen:
@@ -531,6 +534,12 @@ class SignonController:
                 self.parents.clear()
                 return self._base()
             return self._close_view()
+        if kind in ("writers", "printers"):
+            if aid == "F3":
+                self.view = None
+                self.parents.clear()
+                return self._base()
+            return self._close_view()          # F12, or anything else: back to the output queue
         if aid == "F3" or (kind == "wrk" and aid == "F12"):
             self.view = None
             return self._base()
@@ -587,6 +596,20 @@ class SignonController:
             return self._draw_view()
         if aid == "F5":
             wl.refresh()
+            if wl.kind == "outq":
+                q = self.store.objects.get((wl.queue[1], wl.queue[0], "*OUTQ"))
+                if q is not None:
+                    wl.status = q.data.get("status", "RLS")
+            return self._draw_view()
+        if wl.kind == "outq" and aid in ("F11", "F20", "F22", "F24"):
+            if aid == "F11":
+                wl.view2 = not wl.view2
+                return self._draw_view()
+            if aid == "F24":
+                wl.alt_keys = not wl.alt_keys
+                return self._draw_view()
+            self.parents.append(self.view)
+            self.view = ("writers" if aid == "F20" else "printers",)
             return self._draw_view()
         param = values.get("command", "").strip()
         picks = [(i, values.get(f"opt{i}", "").strip()) for i in range(wl.per_page)]

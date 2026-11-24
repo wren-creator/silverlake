@@ -187,11 +187,11 @@ def create_queue(store: ProfileStore, actor: Profile, session, spec: str, text: 
         return _no(_msg("CPF3353", f"Output queue {name} in {lib_name} already exists."))
     public = aut if aut is not None else (lib.public if lib.public is not None else Auth.NONE)
     q = SecuredObject(name, actor.name, public=public, library=lib_name, type="*OUTQ", text=text,
-                      data={"dspdta": dspdta, "oprctl": oprctl, "autchk": autchk,
+                      data={"dspdta": dspdta, "oprctl": oprctl, "autchk": autchk, "status": "RLS",
                             "created": datetime.now().isoformat(timespec="seconds")})
     store.objects[q.key] = q
     store.on_change()
-    return _ok(f"Output queue {name} created in library {lib_name}.")
+    return _ok(f"Object {name} type *OUTQ created in library {lib_name}.")
 
 
 SYSTEM_QUEUES = {("QGPL", "QPRINT"), ("QUSRSYS", "QEZJOBLOG")}
@@ -214,6 +214,23 @@ def delete_queue(store: ProfileStore, actor: Profile, session, spec: str) -> Don
     if Auth.OBJEXIST in store.authority_to_object(actor, q) and in_queue(store, q):
         return _no(_msg("CPF3360", f"Output queue {q.name} in {q.library} not deleted. Output queue in use."))
     return delete_object(store, actor, spec, "*OUTQ", session.search_order())
+
+
+def hold_queue(store: ProfileStore, actor: Profile, session, spec: str, hold: bool) -> Done:
+    """HLDOUTQ and RLSOUTQ, confirmed real on a live run (held status read back by a fresh WRKOUTQ,
+    "Status: HLD"): not on a page, so both the authority rule and the completion wording are ours.
+    Real IBM i needs *CONTROL to the queue for both, a bit Silverlake does not model on its own;
+    this reuses the general "may change it" rule (OBJEXIST, the same delete_queue already needs)
+    as a stand-in, on the verification list. Holding a held queue or releasing a released one is
+    not an error, the same as HLDSPLF/RLSSPLF on a spool file already in that state."""
+    q, err = queue(store, actor, spec, session.search_order())
+    if err:
+        return _no(err)
+    if Auth.OBJEXIST not in store.authority_to_object(actor, q):
+        return _no(messages.not_authorized_to_object_2189(q.name, q.library, "*OUTQ"))
+    q.data["status"] = "HLD" if hold else "RLS"
+    store.on_change()
+    return _ok(f"Output queue {q.name} in {q.library} {'held' if hold else 'released'}.")
 
 
 def in_queue(store: ProfileStore, q) -> list[SpoolFile]:

@@ -374,23 +374,25 @@ def test_the_crtlib_scenario_touches_only_its_own_library():
     assert actions[create]["proceed_if"] and create < delete                  # delete is gated on the create
 
 
-def test_the_outq_keys_scenario_touches_only_its_own_library_and_queue():
+def test_the_outq_keys_scenario_touches_only_its_own_queue_in_qgpl():
+    """No CRTLIB: a real run against PUB400 showed the test profile has no *USE to the CRTLIB command
+    at all, so this scenario never had a throwaway library to use in the first place."""
     cmds = _fills("auth-outq-keys")
-    changing = [c for c in cmds if c.split()[0] in ("CRTLIB", "CRTOUTQ", "DLTLIB")]
-    assert [c.split()[0] for c in changing] == ["CRTLIB", "CRTOUTQ", "DLTLIB"]
+    changing = [c for c in cmds if c.split()[0] in ("CRTOUTQ", "DLTOUTQ")]
+    assert [c.split()[0] for c in changing] == ["CRTOUTQ", "DLTOUTQ"]
     assert all("${SILVERLAKE_ORACLE_TESTLIB}" in c for c in cmds if c.split()[0] != "SIGNOFF")
-    assert all(c.split()[0] in ("CRTLIB", "CRTOUTQ", "WRKOUTQ", "HLDOUTQ", "RLSOUTQ", "DLTLIB", "SIGNOFF")
+    assert all("QGPL/" in c for c in cmds if c.split()[0] != "SIGNOFF")
+    assert all(c.split()[0] in ("CRTOUTQ", "WRKOUTQ", "HLDOUTQ", "RLSOUTQ", "DLTOUTQ", "SIGNOFF")
               for c in cmds)
     actions = scenario.SCENARIOS["auth-outq-keys"]
-    create_lib = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("CRTLIB"))
     create_outq = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("CRTOUTQ"))
-    delete = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("DLTLIB"))
-    assert actions[create_lib]["proceed_if"] and actions[create_outq]["proceed_if"]
-    assert create_lib < create_outq < delete                                  # delete is gated on both creates
+    delete = next(i for i, a in enumerate(actions) if a.get("fill", {}).get("0", "").startswith("DLTOUTQ"))
+    assert actions[create_outq]["proceed_if"]
+    assert create_outq < delete                                              # delete is gated on the create
     keys = [a["key"] for a in actions[create_outq + 1:-1] if "fill" not in a]
-    assert keys == ["F11", "F12", "F20", "F12", "F22", "F12", "F24", "F12"]
-    assert all(a.get("always") for a in actions[create_outq + 1:-1] if a["key"] == "F12")
-    assert all(a.get("always") for a in actions[delete:])                     # the cleanup always runs
+    assert keys == ["F11", "F12", "F20", "F12", "F22", "F12", "F24", "F12", "F12"]
+    assert actions[create_outq + 1]["proceed_if"]                            # the first WRKOUTQ is gated
+    assert all(a.get("always") for a in actions[create_outq + 2:])            # a fresh WRKOUTQ per key, no cascade
 
 
 def test_the_option_scenario_only_ever_touches_its_own_job_local_data_area():
@@ -559,10 +561,10 @@ def test_auth_outq_keys_creates_looks_deletes_and_signs_off_locally(monkeypatch)
     from silverlake.system import profiles
     store = profiles.load()
     cap = _run_shared("auth-outq-keys", monkeypatch, store)
-    lib = cap["testlib"]
-    assert lib.startswith("SLT") and len(lib) == 8
+    name = cap["testlib"]
+    assert name.startswith("SLT") and len(name) == 8
     assert cap["stopped"] is None
-    assert store.find_library(lib) is None                                   # created, then deleted with the queue
+    assert ("QGPL", name, "*OUTQ") not in store.objects                      # created, then deleted
 
 
 def test_the_test_library_name_cannot_be_chosen_from_outside(monkeypatch):

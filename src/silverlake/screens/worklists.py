@@ -22,6 +22,9 @@ class WorkList:
     requery: Callable[[], list]
     owner: str = ""                    # the profile named at the top of "owner"
     queue: tuple = ("", "")            # (queue, library) named at the top of "outq"
+    status: str = "RLS"                 # "outq" only: a snapshot taken when WRKOUTQ opened, not live
+    view2: bool = False                 # "outq" only: F11's alternate column set
+    alt_keys: bool = False              # "outq" only: F24's second key row
     retained: dict = field(default_factory=dict)   # options typed before a confirm screen was cancelled
     page: int = 0
     per_page: int = field(init=False)
@@ -193,39 +196,120 @@ def _spool(wl: WorkList, message: str) -> Screen:
 
 
 def _outq(wl: WorkList, message: str) -> Screen:
-    """Work with Output Queue, laid out like the real display (captured twice): the queue, library
-    and status on row 2, the same nine options as Work with All Spooled Files, nine files from row 9,
-    and a parameter line. The key line (captured) is drawn in full, but F11's view 2, F20's Writers
-    screen, F22's Printers screen and F24's more-keys swap are not built, same as F10/F11/F22/F24
-    on Work with All Spooled Files above: pressing one is a no-op rather than a drawn screen."""
+    """Work with Output Queue, laid out like the real display (captured three times, the third
+    after a real HLDOUTQ/RLSOUTQ/F11/F20/F22/F24 run): the queue, library and status on row 2, the
+    same nine options as Work with All Spooled Files, nine files from row 9, and a parameter line.
+    Status is a snapshot taken when WRKOUTQ opened, not live: the real host did not refresh it just
+    from running HLDOUTQ or RLSOUTQ on this same command line, only a fresh WRKOUTQ showed the
+    change, confirmed live. F11 flips the file columns to a second set (File, File Nbr, Job, User,
+    Number, Date, Time), captured exactly; the queue was empty every run, so no row was ever seen
+    in it, and the date/time format drawn here (`%y-%m-%d`/`%H:%M:%S`, matching the rest of this
+    file) is ours, not captured. F24 swaps the key line to a second row (F4=Prompt, F5=Refresh,
+    F9=Retrieve, F21=Description), also captured; F12 on either view just closes the
+    whole list, not a one-step undo of the view or key row (captured: F12 after F11 landed back on
+    the command line, not on the default view). F20 and F22 open Work with All Writers and Work
+    with All Printers (see `_writers` and `_printers`); real IBM i nests each command typed on a
+    list's own command line rather than replacing it, so repeated F12s there pop one level, not
+    straight to the command line. Silverlake does not model that stack, the same simplification as
+    DSPJOB's own call stack: F12 out of Writers or Printers always returns to this screen."""
     g = lambda r, c, t: Text(r, c, t, ds.ATTR_GREEN)
     rows: list = [
         Text(0, 29, "Work with Output Queue", ds.ATTR_WHITE),
         g(2, 1, "Queue:"), g(2, 10, wl.queue[0]), g(2, 25, "Library:"), g(2, 36, wl.queue[1]),
-        g(2, 51, "Status:"), g(2, 61, "RLS"),
+        g(2, 51, "Status:"), g(2, 61, wl.status),
         Text(4, 1, "Type options, press Enter.", ds.ATTR_BLUE),
         Text(5, 3, "1=Send", ds.ATTR_BLUE), Text(5, 12, "2=Change", ds.ATTR_BLUE), Text(5, 23, "3=Hold", ds.ATTR_BLUE),
         Text(5, 32, "4=Delete", ds.ATTR_BLUE), Text(5, 43, "5=Display", ds.ATTR_BLUE),
         Text(5, 55, "6=Release", ds.ATTR_BLUE), Text(5, 67, "7=Messages", ds.ATTR_BLUE),
         Text(6, 3, "8=Attributes", ds.ATTR_BLUE), Text(6, 23, "9=Work with printing status", ds.ATTR_BLUE),
-        Text(8, 1, "Opt", ds.ATTR_WHITE), Text(8, 6, "File", ds.ATTR_WHITE), Text(8, 18, "User", ds.ATTR_WHITE),
-        Text(8, 30, "User Data", ds.ATTR_WHITE), Text(8, 42, "Sts", ds.ATTR_WHITE), Text(8, 48, "Pages", ds.ATTR_WHITE),
-        Text(8, 56, "Copies", ds.ATTR_WHITE), Text(8, 64, "Form Type", ds.ATTR_WHITE), Text(8, 76, "Pty", ds.ATTR_WHITE),
     ]
+    if wl.view2:
+        rows += [Text(8, 1, "Opt", ds.ATTR_WHITE), Text(8, 6, "File", ds.ATTR_WHITE), Text(8, 18, "File Nbr", ds.ATTR_WHITE),
+                 Text(8, 28, "Job", ds.ATTR_WHITE), Text(8, 40, "User", ds.ATTR_WHITE), Text(8, 52, "Number", ds.ATTR_WHITE),
+                 Text(8, 60, "Date", ds.ATTR_WHITE), Text(8, 70, "Time", ds.ATTR_WHITE)]
+    else:
+        rows += [Text(8, 1, "Opt", ds.ATTR_WHITE), Text(8, 6, "File", ds.ATTR_WHITE), Text(8, 18, "User", ds.ATTR_WHITE),
+                 Text(8, 30, "User Data", ds.ATTR_WHITE), Text(8, 42, "Sts", ds.ATTR_WHITE), Text(8, 48, "Pages", ds.ATTR_WHITE),
+                 Text(8, 56, "Copies", ds.ATTR_WHITE), Text(8, 64, "Form Type", ds.ATTR_WHITE), Text(8, 76, "Pty", ds.ATTR_WHITE)]
     for i, f in enumerate(wl.shown()):
         r = wl.first_row + i
         rows.append(Input(r, 2, 1, f"opt{i}", monocase=True))
-        rows += [g(r, 6, f.name), g(r, 18, f.user), g(r, 30, f.user_data[:10]), g(r, 42, f.status),
-                 g(r, 48, f"{f.pages:>5}"), g(r, 60, str(f.copies)), g(r, 64, f.form_type), g(r, 77, str(f.priority))]
+        if wl.view2:
+            rows += [g(r, 6, f.name), g(r, 18, str(f.file_no)), g(r, 28, f.job_name), g(r, 40, f.user),
+                     g(r, 52, f.job_number), g(r, 60, f.stamp().strftime("%y-%m-%d")),
+                     g(r, 70, f.stamp().strftime("%H:%M:%S"))]
+        else:
+            rows += [g(r, 6, f.name), g(r, 18, f.user), g(r, 30, f.user_data[:10]), g(r, 42, f.status),
+                     g(r, 48, f"{f.pages:>5}"), g(r, 60, str(f.copies)), g(r, 64, f.form_type), g(r, 77, str(f.priority))]
     rows.append(_more(18, wl.page >= wl.pages - 1))
     rows += [g(19, 1, "Parameters for options 1, 2, 3 or command"), g(20, 1, "===>"),
-             Input(COMMAND_ROW, COMMAND_COL, COMMAND_LEN, "command"),
-             Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F11=View 2", ds.ATTR_BLUE),
-             Text(21, 24, "F12=Cancel", ds.ATTR_BLUE), Text(21, 37, "F20=Writers", ds.ATTR_BLUE),
-             Text(21, 51, "F22=Printers", ds.ATTR_BLUE), Text(22, 1, "F24=More keys", ds.ATTR_BLUE)]
+             Input(COMMAND_ROW, COMMAND_COL, COMMAND_LEN, "command")]
+    if wl.alt_keys:
+        rows += [Text(21, 1, "F4=Prompt", ds.ATTR_BLUE), Text(21, 13, "F5=Refresh", ds.ATTR_BLUE),
+                 Text(21, 26, "F9=Retrieve", ds.ATTR_BLUE), Text(21, 40, "F21=Description", ds.ATTR_BLUE),
+                 Text(21, 58, "F24=More keys", ds.ATTR_BLUE)]
+    else:
+        rows += [Text(21, 1, "F3=Exit", ds.ATTR_BLUE),
+                 Text(21, 11, "F11=View 1" if wl.view2 else "F11=View 2", ds.ATTR_BLUE),
+                 Text(21, 24, "F12=Cancel", ds.ATTR_BLUE), Text(21, 37, "F20=Writers", ds.ATTR_BLUE),
+                 Text(21, 51, "F22=Printers", ds.ATTR_BLUE), Text(22, 1, "F24=More keys", ds.ATTR_BLUE)]
     if message:
         rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
     return Screen(rows, cursor="opt0" if wl.shown() else "command")
+
+
+def writers_screen(message: str = "") -> Screen:
+    """Work with All Writers, captured from F20 on Work with Output Queue above: no writers are
+    modeled, so the list is always empty, the same as a quiet training range's own would likely
+    be. F12 or F3 returns to the output queue that opened it (see `_outq`'s own docstring on the
+    display stack this does not model)."""
+    rows: list = [
+        Text(0, 29, "Work with All Writers", ds.ATTR_WHITE),
+        Text(2, 1, "Type options, press Enter.", ds.ATTR_BLUE),
+        Text(3, 3, "2=Change", ds.ATTR_BLUE), Text(3, 14, "3=Hold", ds.ATTR_BLUE), Text(3, 23, "4=End", ds.ATTR_BLUE),
+        Text(3, 31, "5=Work with", ds.ATTR_BLUE), Text(3, 45, "6=Release", ds.ATTR_BLUE), Text(3, 57, "7=Display messages", ds.ATTR_BLUE),
+        Text(4, 3, "8=Work with output queue", ds.ATTR_BLUE),
+        Text(6, 1, "Opt", ds.ATTR_WHITE), Text(6, 6, "Writer", ds.ATTR_WHITE), Text(6, 18, "Type", ds.ATTR_WHITE),
+        Text(6, 24, "Device", ds.ATTR_WHITE), Text(6, 36, "Queue", ds.ATTR_WHITE), Text(6, 48, "Library", ds.ATTR_WHITE),
+        Text(6, 60, "Status", ds.ATTR_WHITE), Text(6, 68, "Form Type", ds.ATTR_WHITE),
+        Text(8, 3, "(No writers)", ds.ATTR_WHITE),
+        _more(18, True),
+        Text(19, 1, "Parameters for options 2, 3, 4, 6 or command", ds.ATTR_GREEN), Text(20, 1, "===>", ds.ATTR_GREEN),
+        Input(COMMAND_ROW, COMMAND_COL, COMMAND_LEN, "command"),
+        Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F4=Prompt", ds.ATTR_BLUE),
+        Text(21, 23, "F12=Cancel", ds.ATTR_BLUE), Text(21, 36, "F22=Start printer writer", ds.ATTR_BLUE),
+        Text(21, 63, "F24=More keys", ds.ATTR_BLUE),
+    ]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows, cursor="command")
+
+
+def printers_screen(message: str = "") -> Screen:
+    """Work with All Printers, captured from F22 on Work with Output Queue above: a real run on a
+    shared host listed other people's printer devices, which stays out of a seed meant to hold its
+    own data, so this is always empty, same reasoning as `_writers`. F12 or F3 returns to the
+    output queue that opened it."""
+    rows: list = [
+        Text(0, 29, "Work with All Printers", ds.ATTR_WHITE),
+        Text(2, 1, "Type options, press Enter.", ds.ATTR_BLUE),
+        Text(3, 3, "1=Start", ds.ATTR_BLUE), Text(3, 13, "2=Change", ds.ATTR_BLUE), Text(3, 24, "3=Hold", ds.ATTR_BLUE),
+        Text(3, 33, "4=End", ds.ATTR_BLUE), Text(3, 41, "5=Work with", ds.ATTR_BLUE), Text(3, 55, "6=Release", ds.ATTR_BLUE),
+        Text(4, 3, "7=Display messages", ds.ATTR_BLUE), Text(4, 24, "8=Work with output queue", ds.ATTR_BLUE),
+        Text(6, 1, "Opt", ds.ATTR_WHITE), Text(6, 6, "Device", ds.ATTR_WHITE), Text(6, 18, "Sts", ds.ATTR_WHITE),
+        Text(6, 24, "Sep", ds.ATTR_WHITE), Text(6, 31, "Form Type", ds.ATTR_WHITE), Text(6, 43, "File", ds.ATTR_WHITE),
+        Text(6, 55, "User", ds.ATTR_WHITE), Text(6, 67, "User Data", ds.ATTR_WHITE),
+        Text(8, 3, "(No printers)", ds.ATTR_WHITE),
+        _more(18, True),
+        Text(19, 1, "Parameters for options 1, 2, 3, 4, 6 or command", ds.ATTR_GREEN), Text(20, 1, "===>", ds.ATTR_GREEN),
+        Input(COMMAND_ROW, COMMAND_COL, COMMAND_LEN, "command"),
+        Text(21, 1, "F3=Exit", ds.ATTR_BLUE), Text(21, 11, "F11=View 2", ds.ATTR_BLUE),
+        Text(21, 24, "F12=Cancel", ds.ATTR_BLUE), Text(21, 37, "F17=Top", ds.ATTR_BLUE), Text(21, 47, "F18=Bottom", ds.ATTR_BLUE),
+        Text(21, 60, "F24=More keys", ds.ATTR_BLUE),
+    ]
+    if message:
+        rows.append(Text(23, 1, message[:77], ds.ATTR_WHITE))
+    return Screen(rows, cursor="command")
 
 
 def _file_block(rows: list, f, first: int, with_keywords: bool = True) -> None:

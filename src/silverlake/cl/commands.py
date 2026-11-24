@@ -120,6 +120,8 @@ CRTOUTQ_PARAMS = [Param("OUTQ", "qname", "", required=True), Param("MAXPAGES", "
                   Param("JOBSEP", "ignored", "0"), Param("OPRCTL", "oprctl", "*YES"), Param("DTAQ", "ignored", "*NONE", 2),
                   Param("AUTCHK", "autchk", "*OWNER"), Param("AUT", "libaut", "*USE")]
 DLTOUTQ_PARAMS = [Param("OUTQ", "qname", "", required=True)]
+HLDOUTQ_PARAMS = [Param("OUTQ", "qname", "", required=True)]
+RLSOUTQ_PARAMS = [Param("OUTQ", "qname", "", required=True)]
 WRKOUTQ_PARAMS = [Param("OUTQ", "outqname", "*ALL"), Param("OUTPUT", "output", "*")]
 DSPSPLF_PARAMS = [Param("FILE", "name", "", required=True), Param("JOB", "jobq", "*", 3),
                   Param("SPLNBR", "splnbr", "*ONLY"), Param("JOBSYSNAME", "ignored", "*ONLY"),
@@ -301,7 +303,8 @@ COMMANDS = {
     "WRKACTJOB": WRKACTJOB_PARAMS, "DSPMSG": DSPMSG_PARAMS, "SNDMSG": SNDMSG_PARAMS, "CLRMSGQ": CLRMSGQ_PARAMS, "CRTMSGQ": CRTMSGQ_PARAMS, "CHGMSGQ": CHGMSGQ_PARAMS,
     "DLTMSGQ": DLTMSGQ_PARAMS, "CRTDTAARA": CRTDTAARA_PARAMS, "CHGDTAARA": CHGDTAARA_PARAMS, "DLTDTAARA": DLTDTAARA_PARAMS,
     "CRTUSRSPC": CRTUSRSPC_PARAMS, "DLTUSRSPC": DLTUSRSPC_PARAMS,
-    "WRKSPLF": WRKSPLF_PARAMS, "WRKOUTQ": WRKOUTQ_PARAMS, "CHGSPLFA": CHGSPLFA_PARAMS, "CRTOUTQ": CRTOUTQ_PARAMS, "DLTOUTQ": DLTOUTQ_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
+    "WRKSPLF": WRKSPLF_PARAMS, "WRKOUTQ": WRKOUTQ_PARAMS, "CHGSPLFA": CHGSPLFA_PARAMS, "CRTOUTQ": CRTOUTQ_PARAMS, "DLTOUTQ": DLTOUTQ_PARAMS,
+    "HLDOUTQ": HLDOUTQ_PARAMS, "RLSOUTQ": RLSOUTQ_PARAMS, "DSPSPLF": DSPSPLF_PARAMS,
     "DLTSPLF": DLTSPLF_PARAMS, "HLDSPLF": HLDSPLF_PARAMS, "HLDJOB": HLDJOB_PARAMS, "DSPJOBLOG": DSPJOBLOG_PARAMS, "WRKJOB": WRKJOB_PARAMS, "DSPJOB": DSPJOB_PARAMS, "RLSJOB": RLSJOB_PARAMS,
     "ENDJOB": ENDJOB_PARAMS, "CHGJOB": CHGJOB_PARAMS, "RLSSPLF": RLSSPLF_PARAMS, "CHGOBJOWN": CHGOBJOWN_PARAMS, "RNMOBJ": RNMOBJ_PARAMS, "CHGOBJD": CHGOBJD_PARAMS,
     "DLTF": DLTF_PARAMS, "DLTCMD": DLTCMD_PARAMS, "DLTMNU": DLTMNU_PARAMS, "DLTPGM": DLTPGM_PARAMS,
@@ -761,6 +764,8 @@ def execute(store: ProfileStore, actor: Profile, line: str, session: Session | N
                                           b["AUTCHK"], b["AUT"]).message)
     if name == "DLTOUTQ":
         return Outcome(spool.delete_queue(store, actor, session, b["OUTQ"]).message)
+    if name in ("HLDOUTQ", "RLSOUTQ"):
+        return Outcome(spool.hold_queue(store, actor, session, b["OUTQ"], name == "HLDOUTQ").message)
     if name == "CRTMSGQ":
         return Outcome(msgq.create(store, actor, session, b["MSGQ"], b["TEXT"], b["AUT"]).message)
     if name == "CHGMSGQ":

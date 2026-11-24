@@ -100,6 +100,68 @@ def test_option_5_displays_a_file_and_f12_comes_back_to_the_queue(store):
     assert "Work with Output Queue" in text(c.handle("F12", {}))
 
 
+def test_f11_toggles_the_columns_in_place_captured_exactly(store):
+    c = signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "crtoutq outq(scratch/myq)"})
+    c.handle("ENTER", {"command": "wrkoutq outq(scratch/myq)"})
+    s = c.handle("F11", {})
+    f = at(s)
+    assert [f[(8, col)] for col in (1, 6, 18, 28, 40, 52, 60, 70)] == [
+        "Opt", "File", "File Nbr", "Job", "User", "Number", "Date", "Time"]
+    assert f[(21, 11)] == "F11=View 1"
+    s = c.handle("F11", {})
+    assert at(s)[(8, 18)] == "User" and at(s)[(21, 11)] == "F11=View 2"      # flips back
+
+
+def test_f24_swaps_the_key_line_captured_exactly(store):
+    c = signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "crtoutq outq(scratch/myq)"})
+    c.handle("ENTER", {"command": "wrkoutq outq(scratch/myq)"})
+    s = c.handle("F24", {})
+    f = at(s)
+    assert (f[(21, 1)], f[(21, 13)], f[(21, 26)], f[(21, 40)], f[(21, 58)]) == (
+        "F4=Prompt", "F5=Refresh", "F9=Retrieve", "F21=Description", "F24=More keys")
+    s = c.handle("F24", {})
+    assert at(s)[(21, 1)] == "F3=Exit"                                       # flips back
+
+
+def test_f12_always_closes_the_whole_list_not_just_the_view_or_key_row(store):
+    """Captured live: F12 after F11 landed back on the command line, not on the default view."""
+    c = signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "crtoutq outq(scratch/myq)"})
+    c.handle("ENTER", {"command": "wrkoutq outq(scratch/myq)"})
+    c.handle("F11", {})
+    s = c.handle("F12", {})
+    assert "Work with Output Queue" not in text(s)
+
+
+def test_f20_opens_writers_and_f22_opens_printers_both_empty_and_f12_returns(store):
+    c = signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "crtoutq outq(scratch/myq)"})
+    c.handle("ENTER", {"command": "wrkoutq outq(scratch/myq)"})
+    s = c.handle("F20", {})
+    assert "Work with All Writers" in text(s) and "(No writers)" in text(s)
+    s = c.handle("F12", {})
+    assert "Work with Output Queue" in text(s)
+    s = c.handle("F22", {})
+    assert "Work with All Printers" in text(s) and "(No printers)" in text(s)
+    s = c.handle("F12", {})
+    assert "Work with Output Queue" in text(s)
+
+
+def test_holdoutq_and_rlsoutq_leave_status_stale_until_a_fresh_wrkoutq(store):
+    """Captured live: typing HLDOUTQ on WRKOUTQ's own command line did not update the Status
+    field already drawn; only invoking WRKOUTQ again showed the change."""
+    c = signed(store, "QSECOFR")
+    c.handle("ENTER", {"command": "crtoutq outq(scratch/myq)"})
+    s = c.handle("ENTER", {"command": "wrkoutq outq(scratch/myq)"})
+    assert at(s)[(2, 61)] == "RLS"
+    s = c.handle("ENTER", {"command": "hldoutq outq(scratch/myq)"})
+    assert at(s)[(2, 61)] == "RLS"                                           # stale: still the old snapshot
+    s = c.handle("ENTER", {"command": "wrkoutq outq(scratch/myq)"})
+    assert at(s)[(2, 61)] == "HLD"                                           # a fresh open re-reads it
+
+
 def test_all_queues_is_not_built_and_says_so(store):
     c = signed(store)
     assert "not available in Silverlake yet" in text(c.handle("ENTER", {"command": "wrkoutq"}))

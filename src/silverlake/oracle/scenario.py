@@ -269,25 +269,36 @@ AUTHENTICATED["auth-outq"] = [
     *_cmd("WRKOUTQ OUTQ(QUSRSYS/QEZJOBLOG)"), _SIGNOFF,
 ]
 # The WRKOUTQ key line (captured in auth-outq above) names F11=View 2, F20=Writers and F22=Printers,
-# none of which are built (see worklists._outq). This presses each once and backs out with F12, on a
-# throwaway queue in a throwaway library since CRTOUTQ refuses QTEMP (confirmed, CPF3352). It also
-# tries HLDOUTQ/RLSOUTQ, which are not modeled commands here at all, to see whether they exist on the
-# real host and what a held queue's Status then reads. DLTLIB cleans up the queue with the library.
+# none of which are built (see worklists._outq). A first real run found F12 does not undo F11's view
+# in place, it exits the whole list back to the command line (confirmed: "Function key not allowed."
+# came back from pressing F20 on the MAIN menu that F12 had actually returned to), so each key gets its
+# own fresh WRKOUTQ instead of one opened once. The queue lives in QGPL since CRTOUTQ refuses QTEMP
+# (confirmed, CPF3352) and the test profile has no *USE to CRTLIB at all (confirmed on a real run, "Not
+# authorized to command CRTLIB in library *LIBL.", the same wording commandobjs.py's own docstring
+# already carries), so a throwaway library is not an option here the way it is for auth-objopts2's data
+# area. It also tries HLDOUTQ/RLSOUTQ, not modeled commands here at all, to see whether they exist on
+# the real host and what a held queue's Status then reads: the same first run found both are typed on
+# WRKOUTQ's own command line and take effect (the panel's Status field just does not re-read itself
+# without a fresh WRKOUTQ, confirmed by HLDOUTQ's own result screen showing no change until the next
+# WRKOUTQ shows HLD). DLTOUTQ cleans the queue up on its own, since there is no library to drop with it.
 AUTHENTICATED["auth-outq-keys"] = [
     _SIGNON,
-    {"fill": {"0": f"CRTLIB LIB({_TESTLIB}) TEXT('Silverlake oracle test, deleted at once')"}, "key": "ENTER",
+    {"fill": {"0": f"CRTOUTQ OUTQ(QGPL/{_TESTLIB}) TEXT('Silverlake oracle test')"}, "key": "ENTER",
      "proceed_if": _MADE},
-    {"fill": {"0": f"CRTOUTQ OUTQ({_TESTLIB}/TESTQ) TEXT('Silverlake oracle test')"}, "key": "ENTER",
-     "proceed_if": [_TESTLIB, "created"]},
-    {"fill": {"0": f"WRKOUTQ OUTQ({_TESTLIB}/TESTQ)"}, "key": "ENTER", **_LIST},
-    {"key": "F11", **_LIST}, {"key": "F12", "always": True},
-    {"key": "F20", **_LIST}, {"key": "F12", "always": True},
-    {"key": "F22", **_LIST}, {"key": "F12", "always": True},
-    {"key": "F24", **_LIST}, {"key": "F12", "always": True},
-    {"fill": {"0": f"HLDOUTQ OUTQ({_TESTLIB}/TESTQ)"}, "key": "ENTER", "always": True},
-    {"fill": {"0": f"WRKOUTQ OUTQ({_TESTLIB}/TESTQ)"}, "key": "ENTER", "always": True},
-    {"fill": {"0": f"RLSOUTQ OUTQ({_TESTLIB}/TESTQ)"}, "key": "ENTER", "always": True},
-    {"fill": {"0": f"DLTLIB LIB({_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"WRKOUTQ OUTQ(QGPL/{_TESTLIB})"}, "key": "ENTER", **_LIST},
+    {"key": "F11", "always": True}, {"key": "F12", "always": True},
+    {"fill": {"0": f"WRKOUTQ OUTQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"key": "F20", "always": True}, {"key": "F12", "always": True},
+    {"fill": {"0": f"WRKOUTQ OUTQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"key": "F22", "always": True}, {"key": "F12", "always": True},
+    {"fill": {"0": f"WRKOUTQ OUTQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"key": "F24", "always": True}, {"key": "F12", "always": True},
+    {"fill": {"0": f"HLDOUTQ OUTQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"WRKOUTQ OUTQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"RLSOUTQ OUTQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"fill": {"0": f"WRKOUTQ OUTQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
+    {"key": "F12", "always": True},
+    {"fill": {"0": f"DLTOUTQ OUTQ(QGPL/{_TESTLIB})"}, "key": "ENTER", "always": True},
     {**_SIGNOFF, "always": True},
 ]
 # Looks at the keys and option the edit screen and the work list offer beyond what is built, on the

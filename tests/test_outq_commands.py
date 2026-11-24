@@ -1,4 +1,5 @@
-"""CRTOUTQ and DLTOUTQ, built from IBM's two command pages."""
+"""CRTOUTQ and DLTOUTQ, built from IBM's two command pages. HLDOUTQ and RLSOUTQ, confirmed real
+and their effect on Status live-checked, on a run against PUB400 (see docs/oracle.md)."""
 
 import pytest
 
@@ -22,10 +23,12 @@ def run(store, user, line, lib="SCRATCH"):
 
 
 def test_create_makes_a_queue_the_creator_owns_with_use_for_everyone(store):
-    assert "created in library SCRATCH" in run(store, "STUDENT", "CRTOUTQ OUTQ(SCRATCH/MYQ) TEXT('mine')")
+    assert run(store, "STUDENT", "CRTOUTQ OUTQ(SCRATCH/MYQ) TEXT('mine')") == \
+        "Object MYQ type *OUTQ created in library SCRATCH."                 # exact wording, captured live
     q = store.objects[("SCRATCH", "MYQ", "*OUTQ")]
     assert q.owner == "STUDENT" and name_auth(q.public) == "*USE"            # the page's default, not the library's
     assert q.text == "mine" and q.data["dspdta"] == "*NO" and q.data["oprctl"] == "*YES" and q.data["autchk"] == "*OWNER"
+    assert q.data["status"] == "RLS"
 
 
 def test_the_pages_parameters_are_stored(store):
@@ -86,5 +89,23 @@ def test_delete_from_work_with_objects_option_4(store):
     assert ("SCRATCH", "MYQ", "*OUTQ") not in store.objects
 
 
+def test_hold_and_release_change_the_queues_own_status(store):
+    run(store, "STUDENT", "CRTOUTQ OUTQ(SCRATCH/MYQ)")
+    q = store.objects[("SCRATCH", "MYQ", "*OUTQ")]
+    assert run(store, "STUDENT", "HLDOUTQ OUTQ(SCRATCH/MYQ)") == "Output queue MYQ in SCRATCH held."
+    assert q.data["status"] == "HLD"
+    assert run(store, "STUDENT", "RLSOUTQ OUTQ(SCRATCH/MYQ)") == "Output queue MYQ in SCRATCH released."
+    assert q.data["status"] == "RLS"
+    run(store, "STUDENT", "HLDOUTQ OUTQ(SCRATCH/MYQ)")                      # holding a held queue is not an error
+    assert "held" in run(store, "STUDENT", "HLDOUTQ OUTQ(SCRATCH/MYQ)")
+
+
+def test_hold_and_release_need_the_same_authority_as_delete(store):
+    run(store, "QSECOFR", "CRTOUTQ OUTQ(SCRATCH/THEIRS) AUT(*USE)")
+    assert "Not authorized to object THEIRS in SCRATCH type *OUTQ." in run(store, "STUDENT", "HLDOUTQ OUTQ(SCRATCH/THEIRS)")
+    assert store.objects[("SCRATCH", "THEIRS", "*OUTQ")].data["status"] == "RLS"
+
+
 def test_both_are_command_objects(store):
-    assert all(("QSYS", n, "*CMD") in store.objects for n in ("CRTOUTQ", "DLTOUTQ"))
+    assert all(("QSYS", n, "*CMD") in store.objects
+              for n in ("CRTOUTQ", "DLTOUTQ", "HLDOUTQ", "RLSOUTQ"))
