@@ -263,10 +263,13 @@ WRKOBJPDM_PARAMS = [Param("LIB", "name*", "*CURLIB"), Param("OBJ", "wrkname", "*
 STRSEU_PARAMS = [Param("SRCFILE", "qname", "QTXTSRC"), Param("SRCMBR", "name", "", required=True),
                  Param("TYPE", "name*", "*SAME"), Param("OPTION", "number", "2")]
 CRTPF_PARAMS = [Param("FILE", "qname", "", required=True), Param("SRCFILE", "qname*", "QDDSSRC"),
-                Param("SRCMBR", "name*", "*FILE"), Param("RCDLEN", "ignored", "*NONE"),
+                Param("SRCMBR", "name*", "*FILE"), Param("RCDLEN", "number", ""),
                 Param("GENLVL", "ignored", "20"), Param("FLAG", "ignored", "0"),
                 Param("FILETYPE", "ignored", "*DATA"), Param("MBR", "ignored", "*FILE"),
                 Param("TEXT", "text", "*SRCMBRTXT")]
+ADDPFM_PARAMS = [Param("FILE", "qname", "", required=True), Param("MBR", "name", "", required=True),
+                 Param("SRCTYPE", "name*", "*NONE"), Param("TEXT", "text", "*BLANK")]
+RMVM_PARAMS = [Param("FILE", "qname", "", required=True), Param("MBR", "name", "", required=True)]
 CRTDSPF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*REQUESTER"))
 CRTPRTF_PARAMS = _crt_dds_params("QDDSSRC", Param("DEV", "ignored", "*JOB"), Param("DEVTYPE", "ignored", "*SCS"),
                                  Param("PAGESIZE", "pagesize", "*DFT"), Param("COPIES", "copies", "1"))
@@ -281,7 +284,8 @@ COMMANDS = {
     "CHGPF": CHGPF_PARAMS, "RGZPFM": RGZPFM_PARAMS, "CLRPFM": CLRPFM_PARAMS, "CHGPRTF": CHGPRTF_PARAMS,
     "CPYSRCF": CPYSRCF_PARAMS, "CPYTOIMPF": CPYTOIMPF_PARAMS,
     "STRPDM": STRPDM_PARAMS, "WRKMBRPDM": WRKMBRPDM_PARAMS, "WRKOBJPDM": WRKOBJPDM_PARAMS, "STRSEU": STRSEU_PARAMS,
-    "CRTSRCPF": CRTSRCPF_PARAMS, "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTRPGMOD": CRTRPGMOD_PARAMS,
+    "CRTSRCPF": CRTSRCPF_PARAMS, "ADDPFM": ADDPFM_PARAMS, "RMVM": RMVM_PARAMS,
+    "CRTBNDRPG": CRTBNDRPG_PARAMS, "CRTRPGMOD": CRTRPGMOD_PARAMS,
     "CRTPGM": CRTPGM_PARAMS, "CRTPF": CRTPF_PARAMS,
     "CRTDSPF": CRTDSPF_PARAMS, "CRTPRTF": CRTPRTF_PARAMS, "CRTLF": CRTLF_PARAMS,
     "CRTUSRPRF": CRT_PARAMS, "CHGUSRPRF": CHG_PARAMS, "DSPUSRPRF": DSP_PARAMS,
@@ -1006,6 +1010,11 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
     if name == "CRTSRCPF":
         return Outcome(source.create_source_file(store, actor, session, b["FILE"], b["RCDLEN"], b["MBR"],
                                                  b["TEXT"]).message)
+    if name == "ADDPFM":
+        return Outcome(source.add_pf_member(store, actor, session, b["FILE"], b["MBR"], b["SRCTYPE"],
+                                            b["TEXT"]).message)
+    if name == "RMVM":
+        return Outcome(source.remove_member(store, actor, session, b["FILE"], b["MBR"]).message)
     if name == "CRTBNDRPG":
         return Outcome(source.compile_rpg(store, actor, session, b["PGM"], b["SRCFILE"], b["SRCMBR"], b["TEXT"],
                                           b["USRPRF"], b["USEADPAUT"]).message)
@@ -1017,6 +1026,8 @@ def _run_library_command(store: ProfileStore, actor: Profile, session: Session, 
                                              b["USEADPAUT"], b["TEXT"]).message)
     if name in ("CRTPF", "CRTDSPF", "CRTPRTF", "CRTLF"):
         extra = {"page_length": b["PAGESIZE"], "copies": b["COPIES"]} if name == "CRTPRTF" else {}
+        if name == "CRTPF":
+            extra["rcdlen"] = b.get("RCDLEN")
         return Outcome(source.compile_dds(store, actor, session, name[3:], b["FILE"], b["SRCFILE"], b["SRCMBR"],
                                           b["TEXT"], **extra).message)
     if name == "DSPPGM":

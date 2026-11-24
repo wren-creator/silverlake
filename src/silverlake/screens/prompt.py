@@ -14,8 +14,8 @@ the host will not page it without a spooled file that exists.
 
 Where this differs from the captured host on purpose: its CRTDSPF and CRTPRTF offered SRCFILE *NONE with a blank
 library, which looks like a local setting. Here the field holds QDDSSRC and *LIBL, the real IBM default, so
-pressing Enter works (OVERRIDES). A file with no source (RCDLEN) and a source stream file (SRCSTMF) are laid out and
-refused, because compiling them is not built (NOT_BUILT)."""
+pressing Enter works (OVERRIDES). A source stream file (SRCSTMF) is laid out and refused, because compiling one
+is not built (NOT_BUILT); a file with no source (RCDLEN) is laid out and now built (`source.compile_dds`)."""
 
 from __future__ import annotations
 
@@ -31,8 +31,7 @@ from .promptspecs import HELP, SPECS as CAPTURED
 
 OVERRIDES = {("CRTDSPF", "SRCFILE"): "QDDSSRC", ("CRTDSPF", "SRCFILE@"): "*LIBL",
              ("CRTPRTF", "SRCFILE"): "QDDSSRC", ("CRTPRTF", "SRCFILE@"): "*LIBL"}
-NOT_BUILT = {("CRTPF", "RCDLEN"): "A file with no source is not built here. Name a source member.",
-             ("CRTBNDRPG", "SRCSTMF"): "Source stream files are not built here. Name a source member."}
+NOT_BUILT = {("CRTBNDRPG", "SRCSTMF"): "Source stream files are not built here. Name a source member."}
 _BARE = re.compile(r"^[A-Z0-9@#$_*./]+$")
 DONE = (" placed in library ", " created in library ")
 # A command that ran and finished says so in a sentence with no message ID (the wording is ours). One that

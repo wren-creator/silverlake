@@ -77,12 +77,16 @@ def test_enter_with_no_name_says_parameter_required(store):
     assert "Parameter FILE required." in texts(enter(c))
 
 
-def test_a_file_with_no_source_and_a_stream_file_are_laid_out_and_refused(store):
+def test_a_source_stream_file_is_laid_out_and_refused(store):
     c = signed(store)
-    f4(c, "CRTPF")
-    assert "not built" in " ".join(texts(enter(c, FILE="X", RCDLEN="80")))
     f4(c, "CRTBNDRPG")
     assert "not built" in " ".join(texts(enter(c, PGM="X", SRCSTMF="/home/x.rpgle")))
+
+
+def test_a_file_with_no_source_prompts_through_to_a_real_create(store):
+    c = signed(store)
+    f4(c, "CRTPF")
+    assert "created in library" in " ".join(texts(enter(c, FILE="X", SRCFILE="*NONE", RCDLEN="80")))
 
 
 def test_roll_up_checks_the_required_name_first_and_then_says_already_at_bottom(store):

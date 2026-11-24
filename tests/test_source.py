@@ -59,6 +59,40 @@ def test_crtsrcpf_needs_authority_to_the_library(store):
     assert "not found" in said(run(store, "STUDENT", "CRTSRCPF FILE(NOSUCH/QRPGLESRC)"))
 
 
+def test_addpfm_adds_a_blank_member_directly_no_editor(store):
+    f, s = src_file(store)
+    out = run(store, "STUDENT", "ADDPFM FILE(SCRATCH/QRPGLESRC) MBR(NEW) SRCTYPE(RPGLE) TEXT('a new one')", s)
+    assert "Member NEW added to file SCRATCH/QRPGLESRC." in said(out)
+    m = f.data["members"]["NEW"]
+    assert m["lines"] == [] and m["type"] == "RPGLE" and m["text"] == "a new one"
+
+
+def test_addpfm_refuses_a_member_that_exists_and_a_file_with_no_members(store):
+    f, s = src_file(store)
+    source.put_member(store, f, "FIRST", ["one line"])
+    assert "already exists" in said(run(store, "STUDENT", "ADDPFM FILE(SCRATCH/QRPGLESRC) MBR(FIRST)", s))
+    run(store, "STUDENT", "CRTPF FILE(SCRATCH/NOSRC) SRCFILE(*NONE) RCDLEN(80)", s)
+    assert "not a source file" in said(run(store, "STUDENT", "ADDPFM FILE(SCRATCH/NOSRC) MBR(X)", s))
+
+
+def test_rmvm_removes_a_member_and_refuses_one_that_is_not_there(store):
+    f, s = src_file(store)
+    source.put_member(store, f, "GONE", ["one line"])
+    assert "Member GONE removed." in said(run(store, "STUDENT", "RMVM FILE(SCRATCH/QRPGLESRC) MBR(GONE)", s))
+    assert "GONE" not in f.data["members"]
+    out = run(store, "STUDENT", "RMVM FILE(SCRATCH/QRPGLESRC) MBR(GONE)", s)
+    assert "Member GONE for file QRPGLESRC in library SCRATCH not found." in said(out)
+
+
+def test_rmvm_needs_write_authority_to_the_file(store):
+    f, s = src_file(store)
+    source.put_member(store, f, "ONE", ["x"])
+    f.public = USE
+    out = run(store, "GUEST", "RMVM FILE(SCRATCH/QRPGLESRC) MBR(ONE)", sess(store, "GUEST", "SCRATCH"))
+    assert "You do not have authority to file QRPGLESRC in SCRATCH." in said(out)
+    assert "ONE" in f.data["members"]
+
+
 def test_a_member_compiles_to_a_program_that_belongs_to_the_compiler(store):
     f, s = src_file(store)
     source.put_member(store, f, "HELLO", HELLO, "RPGLE", "Say hello")
@@ -83,6 +117,31 @@ def test_the_default_member_is_the_program_name_and_pgm_defaults_to_the_member(s
     assert "placed" in said(run(store, "STUDENT", "CRTBNDRPG PGM(SCRATCH/HELLO) SRCFILE(SCRATCH/QRPGLESRC)", s))
     assert "placed" in said(run(store, "STUDENT", "CRTBNDRPG SRCFILE(SCRATCH/QRPGLESRC) SRCMBR(HELLO) PGM(SCRATCH/AGAIN)", s))
     assert "Parameter PGM required." in said(run(store, "STUDENT", "CRTBNDRPG SRCFILE(SCRATCH/QRPGLESRC)", s))
+
+
+def test_ctlspec_names_the_program_from_the_h_specs_own_pgm_keyword(store):
+    f, s = src_file(store)
+    s.current_library = "SCRATCH"
+    source.put_member(store, f, "HELLO", ["     H                   PGM(NAMEDPGM)", *HELLO])
+    out = run(store, "STUDENT", "CRTBNDRPG SRCFILE(SCRATCH/QRPGLESRC) SRCMBR(HELLO)", s)
+    assert "Program NAMEDPGM placed in library SCRATCH." in said(out)
+    assert ("SCRATCH", "NAMEDPGM", "*PGM") in store.objects
+    assert ("SCRATCH", "HELLO", "*PGM") not in store.objects
+
+
+def test_ctlspec_falls_back_to_the_member_name_with_no_pgm_keyword(store):
+    f, s = src_file(store)
+    s.current_library = "SCRATCH"
+    source.put_member(store, f, "HELLO", HELLO)
+    out = run(store, "STUDENT", "CRTBNDRPG SRCFILE(SCRATCH/QRPGLESRC) SRCMBR(HELLO)", s)
+    assert "Program HELLO placed in library SCRATCH." in said(out)
+
+
+def test_an_explicit_pgm_wins_over_the_h_specs_own_keyword(store):
+    f, s = src_file(store)
+    source.put_member(store, f, "HELLO", ["     H                   PGM(NAMEDPGM)", *HELLO])
+    out = run(store, "STUDENT", "CRTBNDRPG PGM(SCRATCH/EXPLICIT) SRCFILE(SCRATCH/QRPGLESRC) SRCMBR(HELLO)", s)
+    assert "Program EXPLICIT placed in library SCRATCH." in said(out)
 
 
 def test_a_member_that_cannot_be_opened_says_what_the_real_compiler_said(store):
@@ -181,8 +240,21 @@ def test_a_dds_member_with_a_broken_key_is_not_built_and_lists_the_error(store):
     assert "MISSING" in "\n".join(next(x for x in store.spool if x.name == "QSYSPRT").lines)
 
 
-def test_a_file_without_source_is_not_built(store):
-    assert "without DDS" in said(run(store, "STUDENT", "CRTPF FILE(SCRATCH/X) SRCFILE(*NONE)"))
+def test_a_file_without_source_needs_a_valid_rcdlen(store):
+    assert "RCDLEN" in said(run(store, "STUDENT", "CRTPF FILE(SCRATCH/X) SRCFILE(*NONE)"))
+    assert "RCDLEN" in said(run(store, "STUDENT", "CRTPF FILE(SCRATCH/X) SRCFILE(*NONE) RCDLEN(10)"))
+
+
+def test_a_file_without_source_is_built_from_rcdlen(store):
+    out = run(store, "STUDENT", "CRTPF FILE(SCRATCH/X) SRCFILE(*NONE) RCDLEN(80)")
+    assert "created in library SCRATCH" in said(out)
+    f = store.objects[("SCRATCH", "X", "*FILE")]
+    assert f.data["attr"] == "PF" and f.data["rcdlen"] == 80 and f.data["records"] == []
+    assert "dds" not in f.data
+
+
+def test_other_dds_commands_still_refuse_no_source(store):
+    assert "without DDS" in said(run(store, "STUDENT", "CRTDSPF FILE(SCRATCH/X) SRCFILE(*NONE)"))
 
 
 def test_the_seeded_members_compile_and_the_program_runs(store):

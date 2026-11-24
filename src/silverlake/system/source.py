@@ -20,6 +20,7 @@ authorities are kept, from memory of IBM's REPLACE(*YES) behavior, not read on a
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from . import messages, spool as spoolmod
@@ -141,6 +142,36 @@ def delete_member(store: ProfileStore, obj: SecuredObject, name: str) -> bool:
     if gone:
         store.on_change()
     return gone
+
+
+def add_pf_member(store: ProfileStore, actor: Profile, session, spec: str, mbr: str, srctype: str,
+                  text: str) -> Done:
+    """ADDPFM FILE(lib/file) MBR(name) SRCTYPE(type) TEXT('text'): the same immediate add Work with
+    Members' own F6=Create stages into the editor instead, here done directly with no editor and no
+    lines. `find_file` already refuses a file that is not a source file ("is not a source file."), so
+    this never reaches a data physical file, which has no second member to add: a data file's own
+    "records" is its one implicit member, and nothing here models more than that."""
+    f, err = find_file(store, actor, session, spec, WRITE)
+    if err:
+        return _no(err)
+    name = mbr.upper()
+    if member(f, name) is not None:
+        return _no(messages.info(f"Member {name} already exists in file {f.name}."))
+    type_ = None if srctype == "*NONE" else srctype.upper()
+    put_member(store, f, name, [], type_, "" if text == "*BLANK" else text)
+    return _ok(f"Member {name} added to file {f.library}/{f.name}.")
+
+
+def remove_member(store: ProfileStore, actor: Profile, session, spec: str, mbr: str) -> Done:
+    """RMVM FILE(lib/file) MBR(name): the same delete Work with Members' own option 4 already does,
+    reachable directly from a command line. "not found" wording is captured live against PUB400."""
+    f, err = find_file(store, actor, session, spec, WRITE)
+    if err:
+        return _no(err)
+    name = mbr.upper()
+    if not delete_member(store, f, name):
+        return _no(messages.info(f"Member {name} for file {f.name} in library {f.library} not found."))
+    return _ok(f"Member {name} removed.")
 
 
 def copy_members(store: ProfileStore, actor: Profile, session, frm: str, to: str, frommbr: str, tombr: str,
@@ -303,25 +334,45 @@ def _place(store: ProfileStore, actor: Profile, session, lib_name: str, name: st
 
 # -- CRTBNDRPG --------------------------------------------------------------------------------------------
 
+_PGM_KEYWORD = re.compile(r"PGM\(\s*([A-Za-z0-9$#@_]{1,10})\s*\)", re.I)
+
+
+def _pgm_from_ctlspec(lines: list[str]) -> str | None:
+    """The name a PGM keyword on the source's own H-spec (or free-form ctl-opt) gives it, read directly
+    off the text rather than through the RPG parser, which does not model control specs at all. Fixed
+    form: the first line with H in column 6; free form: the first ctl-opt statement. Not captured, so a
+    guess at where IBM's real *CTLSPEC default actually looks; on the verification list."""
+    for line in lines:
+        is_ctlspec = (len(line) >= 6 and line[5].upper() == "H") or line.strip().lower().startswith("ctl-opt")
+        if not is_ctlspec:
+            continue
+        m = _PGM_KEYWORD.search(line)
+        if m:
+            return m.group(1).upper()
+    return None
+
+
 def compile_rpg(store: ProfileStore, actor: Profile, session, pgm: str, srcfile: str, srcmbr: str, text: str,
                 usrprf: str, useadpaut: bool) -> Done:
-    """CRTBNDRPG. The program is named by PGM, or by the member when PGM is *CTLSPEC (which would be the H-spec
-    name on a real system, not read here), and the member by SRCMBR, or by the program when SRCMBR is *PGM."""
+    """CRTBNDRPG. The program is named by PGM, or by its own H-spec's PGM keyword when PGM is *CTLSPEC and
+    the source has one (`_pgm_from_ctlspec`), or by the member when it does not. The member is named by
+    SRCMBR, or by the program (meaning PGM, never a name taken from the H-spec) when SRCMBR is *PGM."""
     from .rpg import AVAILABLE
     if not AVAILABLE:
         return _no(messages.info("The RPG runtime (rpgle_library) is not installed, so RPG programs cannot be compiled."))
     pgm_name = pgm.split("/")[-1].upper()
-    if pgm_name == "*CTLSPEC":
-        if srcmbr == "*PGM":
-            return _no(messages.syntax("Parameter PGM required."))
-        pgm_name = srcmbr.upper()
-        pgm = pgm_name if "/" not in pgm else pgm.split("/")[0] + "/" + pgm_name
+    ctlspec = pgm_name == "*CTLSPEC"
+    if ctlspec and srcmbr == "*PGM":
+        return _no(messages.syntax("Parameter PGM required."))
     if srcmbr == "*PGM":
         srcmbr = pgm_name
     srcmbr = srcmbr.upper()
     src, mem, cannot = _open_for_compile(store, actor, session, srcfile, srcmbr)
     if cannot:
         return _no(cannot)
+    if ctlspec:
+        pgm_name = _pgm_from_ctlspec(mem["lines"]) or srcmbr
+        pgm = pgm_name if "/" not in pgm else pgm.split("/")[0] + "/" + pgm_name
     lib_arg = pgm.split("/")[0] if "/" in pgm else "*CURLIB"
     lib_name, name, _, err = _target(store, actor, session, f"{lib_arg}/{pgm_name}")
     if err:
@@ -448,18 +499,33 @@ KINDS = {"PF": "Physical file", "DSPF": "Display file", "PRTF": "Printer file", 
 
 
 def compile_dds(store: ProfileStore, actor: Profile, session, kind: str, file: str, srcfile: str, srcmbr: str,
-                text: str, page_length: int | None = None, copies: int = 1) -> Done:
-    """CRTPF, CRTDSPF, CRTPRTF and CRTLF, all from a DDS member. A file with no source (SRCFILE(*NONE) and a
-    record length) is not built; CRTLF never takes that path, since a logical file is DDS described or not
-    built at all. A logical file's DDS carries no records of its own (data["based_on"] names the physical
-    file it reads through, and data["joined"] names every secondary of a join logical file); its PFILE (or
-    JFILE, for a join) must name physical files already on the library list, found and checked for *USE the
-    same way a program's own F-specs are. page_length and copies are CRTPRTF-only (PAGESIZE and COPIES);
-    every other kind ignores them."""
+                text: str, page_length: int | None = None, copies: int = 1, rcdlen: int | None = None) -> Done:
+    """CRTPF, CRTDSPF, CRTPRTF and CRTLF, all from a DDS member. CRTPF alone can also take a file with no
+    source at all (SRCFILE(*NONE) and a record length instead): no fields, no compile listing, nothing an
+    RPG F-spec or DSPFFD-style lookup can read a layout from (`dbfiles.is_db_file` and the RPG runtime's own
+    checks already refuse a `*FILE` with no `dds`, which this one deliberately has none of). CRTDSPF,
+    CRTPRTF and CRTLF never take that path: a logical file is DDS described or not built at all. A logical
+    file's DDS carries no records of its own (data["based_on"] names the physical file it reads through,
+    and data["joined"] names every secondary of a join logical file); its PFILE (or JFILE, for a join) must
+    name physical files already on the library list, found and checked for *USE the same way a program's
+    own F-specs are. page_length and copies are CRTPRTF-only (PAGESIZE and COPIES); rcdlen is CRTPF-only;
+    every other kind ignores the ones that are not its own."""
     from rpgle import RpgleError, find_pfiles, parse_dds, parse_lf, parse_pf, parse_prtf
     name = file.split("/")[-1].upper()
     if srcfile == "*NONE":
-        return _no(messages.info("A file without DDS source is not built. Name a SRCFILE."))
+        if kind != "PF":
+            return _no(messages.info("A file without DDS source is not built. Name a SRCFILE."))
+        if rcdlen is None or not 28 <= rcdlen <= 32766:
+            return _no(messages.syntax("Value for parameter RCDLEN not valid. Use 28 to 32766."))
+        lib_arg = file.split("/")[0] if "/" in file else "*CURLIB"
+        lib_name, name, _, err = _target(store, actor, session, f"{lib_arg}/{name}")
+        if err:
+            return _no(err)
+        data = {"attr": "PF", "rcdlen": rcdlen, "records": [], "created": datetime.now().isoformat(timespec="seconds")}
+        obj, err = _place(store, actor, session, lib_name, name, "*FILE", _text_for(text, {}), data, replace_ok=False)
+        if err:
+            return _no(err)
+        return Done(True, _doc("CPC7301", f"File {name} created in library {lib_name}."))
     mbr = (name if srcmbr == "*FILE" else srcmbr).upper()
     src, mem, cannot = _open_for_compile(store, actor, session, srcfile, mbr)
     if cannot:
